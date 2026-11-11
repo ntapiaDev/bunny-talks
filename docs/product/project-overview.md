@@ -593,8 +593,8 @@ Trois concepts ont été distingués :
 
 **DeviceIdentity**
 
-- Identité cryptographique propre à chaque appareil.
-- Chaque appareil possède ses propres clés.
+- Représentation d'un appareil autorisé du compte.
+- Chaque appareil possède ses propres identifiants d'enregistrement, sessions, préclés et clés locales de stockage lorsque le protocole l'exige ; l'identité cryptographique durable du compte est commune aux appareils de confiance.
 - Les appareils peuvent être ajoutés ou révoqués indépendamment.
 
 **CryptoSession**
@@ -608,8 +608,8 @@ Le modèle exact des clés de signature, de délégation et de certification res
 
 Décisions :
 
-- Nombre d'appareils non limité artificiellement.
-- Chaque appareil possède ses propres clés.
+- Maximum cinq appareils de confiance par compte.
+- Chaque appareil conserve ses propres éléments cryptographiques locaux lorsque le protocole l'exige.
 - Ajout d'un appareil approuvé depuis un appareil existant.
 - Approbation cryptographique par QR code.
 - Notifications de sécurité lors de l'ajout ou de la révocation.
@@ -669,7 +669,7 @@ Le mécanisme de récupération doit permettre :
 
 - La restauration du coffre cryptographique.
 - La récupération de l'identité durable.
-- La création de nouvelles identités d'appareil.
+- La création de nouveaux éléments cryptographiques locaux pour l'appareil.
 - La révocation des anciens appareils.
 - L'information des contacts lorsque la sécurité de l'identité l'exige.
 
@@ -695,7 +695,7 @@ Pistes étudiées :
 - Bibliothèque officielle Signal `libsignal`.
 - Éventuellement OpenMLS pour les besoins futurs de communication de groupe.
 
-OpenE2EE est un candidat de laboratoire, pas une dépendance de production validée.
+OpenE2EE Signal Protocol SDK 14.4.0 est un candidat en évaluation, pas un choix de production définitif.
 
 Points de vigilance :
 

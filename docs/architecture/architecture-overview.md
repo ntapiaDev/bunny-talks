@@ -252,7 +252,11 @@ Une boîte de réception globale pourra agréger leurs événements sans fusionn
 
 ### 6.2. Distribution multi-appareils
 
-Chaque appareil possède ses propres identités cryptographiques.
+Les appareils de confiance d'un même compte partagent une identité cryptographique durable. Chaque appareil conserve ses propres identifiants d'enregistrement, sessions, préclés et clés locales de stockage lorsque le protocole l'exige.
+
+Un compte peut disposer au maximum de cinq appareils de confiance.
+
+Un nouvel appareil autorisé accède à l'historique par l'archive chiffrée, indépendante des sessions de transport. La récupération sans ancien appareil utilise un mécanisme distinct du transfert entre appareils.
 
 La distribution des messages doit tenir compte :
 
@@ -326,6 +330,8 @@ Responsabilité :
 - Encapsulation du SDK choisi.
 
 Le moteur doit être accessible au travers d'interfaces définies par le cœur cryptographique.
+
+OpenE2EE Signal Protocol SDK 14.4.0 est un candidat en évaluation ; son utilisation en production n'est pas encore validée.
 
 ### `crypto/storage`
 

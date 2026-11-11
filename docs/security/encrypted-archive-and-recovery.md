@@ -96,9 +96,11 @@ La récupération doit être testée avant de considérer un compte comme correc
 
 ## 7. Gestion des appareils
 
-Un compte peut posséder jusqu'à cinq appareils autorisés.
+Un compte peut posséder au maximum cinq appareils de confiance autorisés.
 
-Tous les appareils appartiennent à une même identité de compte du point de vue de l'utilisateur, mais conservent leurs propres éléments cryptographiques locaux lorsque le protocole l'exige.
+Les appareils de confiance partagent une identité cryptographique durable du compte. Ils conservent leurs propres identifiants d'enregistrement, sessions, préclés et clés locales de stockage lorsque le protocole l'exige. L'accès à l'historique passe par l'archive chiffrée indépendante ; la récupération sans ancien appareil est distincte du transfert entre appareils.
+
+OpenE2EE Signal Protocol SDK 14.4.0 demeure un candidat en évaluation, sans choix de production définitif.
 
 Fonctionnalités prévues :
 

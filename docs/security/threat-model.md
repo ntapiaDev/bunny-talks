@@ -375,7 +375,8 @@ Menaces :
 
 Protections attendues :
 
-- Identité cryptographique indépendante par appareil.
+- Identité cryptographique durable commune aux appareils de confiance du compte.
+- Identifiants d'enregistrement, sessions, préclés et clés locales de stockage propres à chaque appareil lorsque le protocole l'exige.
 - Approbation depuis un appareil existant.
 - Association authentifiée.
 - QR code temporaire ne contenant aucune clé privée.
