@@ -28,6 +28,8 @@ importers:
 
   packages/contracts: {}
 
+  packages/crypto/core: {}
+
   packages/validation:
     dependencies:
       zod:
