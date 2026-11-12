@@ -30,6 +30,18 @@ importers:
 
   packages/crypto/core: {}
 
+  packages/crypto/engine:
+    dependencies:
+      '@bunny-talks/crypto-core':
+        specifier: workspace:*
+        version: link:../core
+      '@noble/curves':
+        specifier: 2.4.0
+        version: 2.4.0
+      '@open-e2ee/signal-protocol-sdk':
+        specifier: 14.4.0
+        version: 14.4.0
+
   packages/validation:
     dependencies:
       zod:
@@ -180,6 +192,82 @@ packages:
       {
         integrity: sha512-dXn3FZhPv0US+7dtJsIi2R+c7qWYiReoEh5zUntWCf4oSpMNib8FDhSoed6m3QyZdx5hK7iLFkYk3rNxwt8vTA==,
       }
+
+  '@noble/ciphers@2.4.0':
+    resolution:
+      {
+        integrity: sha512-AnjFn0Jv92laAkvMrghlFZq4qQCIN/4DxFV/eooqtC2YTjB7kBeLMS2T9KJX4Dn+ZVXLOwK0lSgqDtx9gvxtiw==,
+      }
+    engines: { node: '>= 20.19.0' }
+
+  '@noble/curves@2.4.0':
+    resolution:
+      {
+        integrity: sha512-P4/62zrgfH33CneE3Dn4WhJVA22YUU0eR51wKIan4NVRvwsA0YnPTwWGpNbpuacSujmSFLvyzpyuR30+fbq2Ew==,
+      }
+    engines: { node: '>= 20.19.0' }
+
+  '@noble/hashes@2.4.0':
+    resolution:
+      {
+        integrity: sha512-X5XaVWZIBCT7HHZGm5I7ZQXDwLG+bGXuSrMQAW+7Zvl87h1kmc1ZB1VSRJcpUfoUrGQp4Fkoxm5kZ+Ms+aW+eA==,
+      }
+    engines: { node: '>= 20.19.0' }
+
+  '@noble/post-quantum@0.7.1':
+    resolution:
+      {
+        integrity: sha512-+P9981IiAnVh+rmcubozzVwrEy3XsN/tMhTnvsjV9VDaYpOnNCqWqKo2FLWxbu92YHfjGIlE5XnW175UK+ln+Q==,
+      }
+    engines: { node: '>= 20.19.0' }
+
+  '@open-e2ee/signal-protocol-sdk@14.4.0':
+    resolution:
+      {
+        integrity: sha512-+ioVRkY6T18+z5ZnvJU+EwlTUZ3H5+uETqUfeR1pRrbnsfUk8zrhz/gPfDRV3LfjfAJSx+gqiBs1yvguSZ25XA==,
+      }
+    engines: { node: '>=22.12.0' }
+    peerDependencies:
+      '@op-engineering/op-sqlite': '>=18.2.5'
+      better-sqlite3-multiple-ciphers: '>=13.0.3'
+      convex: '>=1.42.1'
+      expo: '>=55.0.27'
+      expo-constants: '>=55.0.7'
+      expo-device: '>=55.0.15'
+      expo-secure-store: '>=55.0.15'
+      expo-sqlite: '>=55.0.17'
+      idb: '>=8.0.3'
+      react: '>=19.0.0'
+      react-native: '>=0.83.6'
+      react-native-device-info: '>=15.0.1'
+      react-native-keychain: '>=10.0.0'
+    peerDependenciesMeta:
+      '@op-engineering/op-sqlite':
+        optional: true
+      better-sqlite3-multiple-ciphers:
+        optional: true
+      convex:
+        optional: true
+      expo:
+        optional: true
+      expo-constants:
+        optional: true
+      expo-device:
+        optional: true
+      expo-secure-store:
+        optional: true
+      expo-sqlite:
+        optional: true
+      idb:
+        optional: true
+      react:
+        optional: true
+      react-native:
+        optional: true
+      react-native-device-info:
+        optional: true
+      react-native-keychain:
+        optional: true
 
   '@oxc-project/types@0.156.0':
     resolution:
@@ -501,6 +589,12 @@ packages:
         integrity: sha512-Izi8RQcffqCeNVgFigKli1ssklIbpHnCYc6AknXGYoB6grJqyeby7jv12JUQgmTAnIDnbck1uxksT4dzN3PWBA==,
       }
     engines: { node: '>=12' }
+
+  async-lock@1.5.0:
+    resolution:
+      {
+        integrity: sha512-JgULma1mWaHlyJ67lvicyel5Cq+k55bXafE0gyvJBdHkH0vdE/IGGDF1glNyRInisNS6pZL2oho96S6Hw68kfQ==,
+      }
 
   balanced-match@4.0.4:
     resolution:
@@ -1150,6 +1244,13 @@ packages:
     engines: { node: '>=14.17' }
     hasBin: true
 
+  unique-names-generator@4.7.1:
+    resolution:
+      {
+        integrity: sha512-lMx9dX+KRmG8sq6gulYYpKWZc9RlGsgBR6aoO8Qsm3qvkSJ+3rAymr+TnV8EDMrIrwuFJ4kruzMWM/OpYzPoow==,
+      }
+    engines: { node: '>=8' }
+
   uri-js@4.4.1:
     resolution:
       {
@@ -1362,6 +1463,29 @@ snapshots:
 
   '@keyv/serialize@1.1.1': {}
 
+  '@noble/ciphers@2.4.0': {}
+
+  '@noble/curves@2.4.0':
+    dependencies:
+      '@noble/hashes': 2.4.0
+
+  '@noble/hashes@2.4.0': {}
+
+  '@noble/post-quantum@0.7.1':
+    dependencies:
+      '@noble/ciphers': 2.4.0
+      '@noble/curves': 2.4.0
+      '@noble/hashes': 2.4.0
+
+  '@open-e2ee/signal-protocol-sdk@14.4.0':
+    dependencies:
+      '@noble/ciphers': 2.4.0
+      '@noble/curves': 2.4.0
+      '@noble/hashes': 2.4.0
+      '@noble/post-quantum': 0.7.1
+      async-lock: 1.5.0
+      unique-names-generator: 4.7.1
+
   '@oxc-project/types@0.156.0': {}
 
   '@rolldown/binding-android-arm-eabi@1.2.18':
@@ -1540,6 +1664,8 @@ snapshots:
       uri-js: 4.4.1
 
   assertion-error@2.0.1: {}
+
+  async-lock@1.5.0: {}
 
   balanced-match@4.0.4: {}
 
@@ -1886,6 +2012,8 @@ snapshots:
       - supports-color
 
   typescript@6.0.3: {}
+
+  unique-names-generator@4.7.1: {}
 
   uri-js@4.4.1:
     dependencies:

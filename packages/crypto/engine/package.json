@@ -1,0 +1,22 @@
+{
+  "name": "@bunny-talks/crypto-engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@bunny-talks/crypto-core": "workspace:*",
+    "@noble/curves": "2.4.0",
+    "@open-e2ee/signal-protocol-sdk": "14.4.0"
+  }
+}
