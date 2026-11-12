@@ -1,6 +1,5 @@
-import type { AccountIdentityDescriptor, DeviceIdentityDescriptor } from './identity.js';
-
 import type { AccountId, DeviceId, IdentityId } from './identifiers.js';
+import type { AccountIdentityDescriptor, DeviceIdentityDescriptor } from './identity.js';
 
 /** Creates the logical identity descriptor for an account. */
 export function createAccountIdentityDescriptor(

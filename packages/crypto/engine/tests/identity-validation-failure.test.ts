@@ -1,11 +1,12 @@
+import type * as NobleEd25519 from '@noble/curves/ed25519.js';
+import { generateIdentityKeyPair } from '@open-e2ee/signal-protocol-sdk/keys';
 import { expect, it, vi } from 'vitest';
 import { CryptoError } from '@bunny-talks/crypto-core';
-import { generateIdentityKeyPair } from '@open-e2ee/signal-protocol-sdk/keys';
 
 const state = vi.hoisted(() => ({ failDerivation: false }));
 
 vi.mock('@noble/curves/ed25519.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@noble/curves/ed25519.js')>();
+  const actual = await importOriginal<typeof NobleEd25519>();
   return {
     ...actual,
     x25519: {

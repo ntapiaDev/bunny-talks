@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-
 import { emailSchema } from '../src/schemas/email.schema.js';
 
 describe('emailSchema', () => {

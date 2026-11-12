@@ -19,11 +19,7 @@ export default defineConfig([
     extends: [js.configs.recommended, tseslint.configs.recommended],
   },
   {
-    files: [
-      'packages/crypto/engine/src/identity-import.ts',
-      'packages/crypto/engine/tests/identity-import.test.ts',
-      'packages/crypto/engine/tests/node-store-persistence.test.ts',
-    ],
+    files: ['**/*.{ts,tsx}'],
     plugins: { 'simple-import-sort': simpleImportSort },
     rules: {
       '@typescript-eslint/consistent-type-imports': 'error',

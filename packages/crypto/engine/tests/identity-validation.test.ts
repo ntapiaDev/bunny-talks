@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest';
-import { CryptoError } from '@bunny-talks/crypto-core';
 import { base64ToBytes, bytesToBase64 } from '@open-e2ee/signal-protocol-sdk/encoding';
 import { generateIdentityKeyPair } from '@open-e2ee/signal-protocol-sdk/keys';
+import { describe, expect, it } from 'vitest';
+import { CryptoError } from '@bunny-talks/crypto-core';
 import { validateExportedIdentity } from '../src/index.js';
 
 describe('validateExportedIdentity', () => {

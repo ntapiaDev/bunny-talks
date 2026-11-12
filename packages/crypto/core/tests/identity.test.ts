@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest';
-
 import { createAccountId, createDeviceId, createIdentityId } from '../src/identifiers.js';
-
 import {
   createAccountIdentityDescriptor,
   createDeviceIdentityDescriptor,
