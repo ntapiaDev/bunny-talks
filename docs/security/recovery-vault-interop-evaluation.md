@@ -1,0 +1,40 @@
+# CRYPTO-007 — Choix expérimental et interopérabilité
+
+**Statut : recommandation pour les prochaines expérimentations, non validée pour la production.** Aucun format d'enveloppe, fournisseur ou API publique de coffre n'est adopté ici. La spécification CRYPTO-006 reste un document de conception à deux clés, non implémenté ; sa composition et ses champs ne constituent pas le format du scénario direct ci-dessous.
+
+## Besoins et recommandation
+
+Le besoin actuellement documenté est un secret aléatoire de récupération pour restaurer les secrets durables d'un compte et accéder à une archive indépendante. La rotation du secret doit préserver le contenu et gérer les interruptions ; aucun besoin validé n'exige plusieurs destinataires, plusieurs secrets simultanés ni l'ajout d'un destinataire sans déchiffrer la charge. La taille du contenu et la hiérarchie de l'archive restent à spécifier.
+
+**Recommandation : expérimenter en priorité A, chiffrement direct avec une clé dérivée du secret, HKDF-SHA-256 et XChaCha20-Poly1305.** Elle utilise une clé AEAD, un nonce et un tag, et réduit les étapes à examiner. Lier le compte et l'usage à un contexte authentifié, borner les données, gérer fraîcheur et publication restent nécessaires dans les deux approches. Ces garanties ne sont pas supposées équivalentes sans spécification ni revue de la composition complète.
+
+Dans la proposition B de CRYPTO-006, la clé de contenu indépendante permettrait potentiellement d'examiner plusieurs formes d'enveloppement à l'avenir, mais le format actuel authentifie le même en-tête dans les deux couches : la rotation du secret modifie l'en-tête et impose aussi de rechiffrer le contenu. B ajoute une clé, un nonce, un tag et une opération AEAD par création, ainsi que les vérifications correspondantes, sans avantage concret démontré pour les besoins actuels. Une future fonctionnalité de destinataires multiples ou de rotation d'enveloppe seule justifierait une nouvelle comparaison, une modification du format et une analyse de sécurité ; aucune de ces fonctionnalités n'est décidée.
+
+[JWE, RFC 7516](https://www.rfc-editor.org/rfc/rfc7516.html) décrit à la fois des modes directs et des clés de contenu protégées ; [age v1](https://c2sp.org/age@v1.1.0) utilise une clé de fichier et des stanzas de destinataires. Ces formats fournissent des constructions à comparer, pas une preuve que leurs profils disponibles correspondent au couple HKDF/XChaCha, à l'AAD souhaitée ou aux environnements mobiles Bunny Talks. Avant de définir un format définitif, examiner leurs algorithmes, liaison du compte, extensions, ergonomie et implémentations maintenues Node et Expo ; ne pas qualifier l'expérience ci-dessous de JWE ou d'age.
+
+## Vecteur et vérification indépendante
+
+Les fichiers `packages/crypto/engine/tests/fixtures/recovery-direct-vector.json` et `verify-recovery-direct-vector.py` contiennent un vecteur **public, fixe et exclusivement expérimental**, ainsi que sa vérification indépendante. Il porte sur la composition `HKDF-SHA-256(secret, sel, info, 32)`, puis `XChaCha20-Poly1305(clé, nonce, plaintext, AAD)` et compare exactement les octets de clé, ciphertext et tag. Les libellés `info` et AAD sont propres au test : ils ne sont ni un en-tête canonique ni une sérialisation de coffre et ne définissent pas de format de production.
+
+- Vitest compare les résultats de Noble 2.4.0 aux constantes de ce vecteur, vérifie l'ouverture et le rejet d'une AAD modifiée ; l'API publique `node:crypto` vérifie aussi HKDF.
+- Le script Python vérifie le même vecteur avec l'API HKDF de `cryptography` **46.0.5** et l'API C publique `crypto_aead_xchacha20poly1305_ietf_encrypt` de **libsodium système 1.0.18**, chargée par `ctypes`. Il ne charge ni Noble ni OpenE2EE. Sur cet environnement, les deux sorties correspondent exactement. Les versions indiquées sont celles observées, pas des dépendances du projet ni une matrice de compatibilité.
+- Reproduction optionnelle sur une machine disposant de ces outils : `python3 packages/crypto/engine/tests/fixtures/verify-recovery-direct-vector.py`. Le script échoue si Python `cryptography` ou libsodium n'est pas disponible ; il n'est pas intégré silencieusement à Vitest. Les tests Node réutilisent les constantes et ne prétendent pas exécuter libsodium sur chaque machine.
+
+Les deux implémentations HKDF indépendantes de Noble peuvent reposer sur OpenSSL ; elles ne doivent pas être comptées comme deux familles cryptographiques distinctes. La correspondance d'un vecteur ne démontre ni l'absence de défaut, ni la sécurité de l'intégration, ni le respect des contraintes d'un futur format ; aucune enveloppe complète, publication, rotation ou compatibilité mobile n'a été testée. Les autres tests CRYPTO-005 couvrent notamment vecteurs standards, rejets de modifications et tailles pour les primitives isolées.
+
+## Fournisseurs et plateformes
+
+Dans `crypto-engine`, `@noble/ciphers` et `@noble/hashes` sont des **dépendances directes de développement** en version exacte **2.4.0**, licence MIT, modules ESM, avec `engines.node >= 20.19.0`. Les API publiques utilisées sont `@noble/ciphers/chacha.js`, `@noble/hashes/hkdf.js` et `@noble/hashes/sha2.js` ; les manifests installés ne déclarent aucune dépendance d'exécution pour ces deux packages. `@noble/curves` 2.4.0 est déjà une dépendance de production du moteur pour une autre responsabilité, pas une preuve de validation du coffre. Les dépendances transitives d'OpenE2EE ne sont pas utilisées comme API interne.
+
+Noble reste candidat pour une future implémentation ; son ajout comme dépendance directe de production demanderait une décision séparée. Les projets décrivent des audits de versions antérieures, pas un audit de notre composition ou de la version installée entière. JavaScript, JIT et ramasse-miettes ne permettent pas de promettre effacement complet ou temps constant. Les auteurs signalent qu'un fournisseur `crypto.getRandomValues` peut nécessiter un polyfill React Native. Ce point ne vérifie ni sa qualité ni son initialisation sur nos appareils. Voir [Noble Ciphers](https://github.com/paulmillr/noble-ciphers) et [Noble Hashes](https://github.com/paulmillr/noble-hashes).
+
+Libsodium natif, sous licence ISC, reste un candidat indépendant : son intégration future exige un binding public maintenu, ses licences, les API réellement exposées, les versions et builds à contrôler. Le libsodium système utilisé ici n'est pas un binding Node ou React Native du projet. Un module natif éventuel nécessitera une Expo Development Build et une évaluation propre iOS/Android ; ni Noble ni libsodium n'est validé sur Hermes par ces tests Node. Vérifier sur appareils ou simulateurs les imports ESM/Metro, le CSPRNG et son initialisation, les vecteurs croisés, performances, mémoire, interruptions et stockage sécurisé.
+
+## Conditions avant production
+
+1. Revue indépendante du choix A et comparaison effective avec les formats standards, puis spécification et validation du format, de son parsing canonique et des contextes de compte et d'usage ; produire des vecteurs couvrant l'ensemble du format et des tests croisés dans les deux sens.
+2. Confirmer l'entropie et la saisie du secret, les nonces, les limites, les erreurs, la mémoire et les fournisseurs sur toutes les plateformes réellement ciblées ; obtenir une revue cryptographique et des tests sur Expo/Hermes, iOS et Android.
+3. Spécifier et tester stockage, contrôle de concurrence, publication, rotation, interruptions et ancre de fraîcheur indépendante ; l'authentification AEAD et une génération dans l'enveloppe ne suffisent pas contre le retour arrière.
+4. Conserver **SEC-CRYPTO-002** et **SEC-CRYPTO-003** ouverts et bloquants avant toute association ou récupération en production. Le déchiffrement du coffre ne remplace ni l'import atomique de l'identité ni l'autorisation individuelle de l'appareil.
+
+Aucun résultat ici ne constitue un audit de sécurité. Une décision finale sur la bibliothèque, la composition et le format reste soumise à revue ; ne pas commencer CRYPTO-008 automatiquement.

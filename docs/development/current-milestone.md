@@ -1,28 +1,18 @@
-# Jalon CRYPTO-006 — Spécification candidate du coffre de récupération
+# Jalon CRYPTO-007 — Profil candidat et interopérabilité
 
-**Statut :** proposition documentaire pour revue ; aucun format, fournisseur ou profil cryptographique n'est validé pour la production.
+**Statut :** recommandation expérimentale pour revue ; aucune composition, bibliothèque ou enveloppe n'est validée pour la production.
 
-## Objectif et résultat
+## Résultats
 
-La [spécification candidate](../security/recovery-vault-specification.md) sépare un coffre générique et une couche d'identité Bunny Talks ; elle propose une enveloppe versionnée, un profil HKDF-SHA-256 et XChaCha20-Poly1305, des contrats TypeScript illustratifs, des conditions de validation, une stratégie de reprise et un plan de tests. Aucun package ni code de production n'est créé.
+L'[évaluation CRYPTO-007](../security/recovery-vault-interop-evaluation.md) recommande d'expérimenter en priorité le chiffrement direct HKDF-SHA-256/XChaCha20-Poly1305 : le besoin documenté ne justifie pas encore la complexité d'une clé de contenu indépendante. La [spécification CRYPTO-006](../security/recovery-vault-specification.md) décrit toujours la composition B historique ; elle ne devient pas le format du scénario direct.
 
-La revue finale compare chiffrement direct et enveloppement d'une clé indépendante : ce dernier reste le candidat décrit, avec ses coûts et sans avantage de rotation du seul emballage dans la proposition actuelle. Les contrats d'erreur, le parseur canonique, les limites candidates, la génération du coffre, la révision de stockage et la référence indépendante de fraîcheur sont explicités.
+Un vecteur de composition avec données publiques fixes est vérifié par Noble et par des implémentations indépendantes HKDF et libsodium sur l'environnement Node/Linux. Le vecteur caractérise les primitives et leur enchaînement, pas un format canonique de coffre. Aucun contrat public ni code de production n'est ajouté.
 
-Les résultats expérimentaux de CRYPTO-005 restent documentés dans l'[architecture du coffre](../security/recovery-vault-architecture.md) : ils caractérisent des primitives sous Node et ne démontrent ni la composition proposée ni la compatibilité mobile.
+## Exigences et décisions ouvertes
 
-## Critères de revue
+- Faire examiner le choix A et les formats existants, puis définir le format, les limites, l'authentification du contexte et des vecteurs complets avant adoption.
+- Vérifier les fournisseurs et l'interopérabilité sur Expo Development Builds et Hermes, iOS et Android ; les tests Node ne prouvent pas la compatibilité mobile et ne sont pas un audit.
+- Concevoir et tester la fraîcheur, la publication concurrente, la rotation, les interruptions et la récupération après perte de tous les appareils.
+- **SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts et bloquants** avant toute association ou récupération en production.
 
-- Examiner la composition à deux clés, les données authentifiées, les limites et les encodages ; comparer un format standard existant et obtenir une revue cryptographique indépendante avant adoption.
-- Valider les frontières des packages et les contrats proposés, la charge métier et les secrets d'archive sans changer les API existantes pendant ce jalon.
-- Définir la source fiable du compte attendu, l'ancre de fraîcheur, la publication conditionnelle, la rotation et la reprise ; examiner la perte de tous les appareils.
-- Préparer des vecteurs de composition et des tests indépendants, de robustesse, de concurrence et des tests Expo Development Builds réels avant production.
-
-## Blocages et décisions ouvertes
-
-**SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts et bloquants** pour l'association ou la récupération en production. La possession d'une identité ou d'un coffre ne vaut pas autorisation individuelle. Une génération dans l'enveloppe n'empêche pas seule le retour arrière.
-
-Le profil, la bibliothèque, les limites finales, la représentation humaine du secret, le format, les références de compte et de fraîcheur, le contenu de l'archive et les modalités de publication restent à valider. Les résultats CRYPTO-005 ne constituent pas un audit ni une validation Hermes/iOS/Android.
-
-## Suite
-
-Attendre la revue de cette spécification et une décision explicite avant implémentation. Ne pas démarrer CRYPTO-007 automatiquement.
+Attendre la revue avant toute décision définitive et ne pas commencer CRYPTO-008 automatiquement.

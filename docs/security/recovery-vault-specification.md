@@ -2,6 +2,8 @@
 
 **Statut : proposition pour revue, non implémentée et non validée pour la production.** Les noms, limites, contrats et octets ci-dessous constituent un profil candidat cohérent à examiner, pas un format déployé ni un choix définitif de fournisseur. Les primitives standard ne rendent pas automatiquement sûre leur composition ; une revue cryptographique indépendante et des tests d'interopérabilité sont préalables à son adoption. CRYPTO-005 a seulement caractérisé des primitives sous Node.
 
+**Actualisation CRYPTO-007 :** l'[évaluation d'interopérabilité](recovery-vault-interop-evaluation.md) recommande de poursuivre les expérimentations avec la composition directe A. Les sections ci-dessous conservent la proposition B et ses contrats comme référence de comparaison ; elles ne définissent pas le format de A et ne constituent pas une décision de production.
+
 ## 1. Frontières et responsabilités
 
 La séparation suivante précise [ADR-001](../architecture/decisions/001-crypto-packages.md) sans créer ni modifier de package :

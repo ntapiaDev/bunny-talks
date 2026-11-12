@@ -1,4 +1,5 @@
-import { createCipheriv, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createCipheriv, hkdfSync, randomBytes, timingSafeEqual } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { gcm } from '@noble/ciphers/aes.js';
 import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
 import { hkdf } from '@noble/hashes/hkdf.js';
@@ -9,6 +10,37 @@ const utf8 = (value: string) => new TextEncoder().encode(value);
 const fromHex = (value: string) => new Uint8Array(Buffer.from(value, 'hex'));
 
 describe('recovery primitive candidates under Node', () => {
+  it('matches an independently verified direct HKDF and XChaCha20-Poly1305 vector', () => {
+    const vector = JSON.parse(
+      readFileSync(new URL('./fixtures/recovery-direct-vector.json', import.meta.url), 'utf8'),
+    ) as Record<string, string>;
+    const secret = fromHex(vector.secret!);
+    const salt = fromHex(vector.salt!);
+    const nonce = fromHex(vector.nonce!);
+    const info = fromHex(vector.info!);
+    const aad = fromHex(vector.aad!);
+    const plaintext = fromHex(vector.plaintext!);
+    const expectedKey = fromHex(vector.key!);
+    const expectedCiphertext = fromHex(vector.ciphertextAndTag!);
+    const key = hkdf(sha256, secret, salt, info, 32);
+    const nodeKey = new Uint8Array(hkdfSync('sha256', secret, salt, info, 32));
+    try {
+      expect(key).toEqual(expectedKey);
+      expect(nodeKey).toEqual(expectedKey);
+      expect(xchacha20poly1305(key, nonce, aad).encrypt(plaintext)).toEqual(expectedCiphertext);
+      expect(xchacha20poly1305(key, nonce, aad).decrypt(expectedCiphertext)).toEqual(plaintext);
+      const modifiedAad = aad.slice();
+      modifiedAad[0] = modifiedAad[0]! ^ 1;
+      expect(() =>
+        xchacha20poly1305(key, nonce, modifiedAad).decrypt(expectedCiphertext),
+      ).toThrow();
+    } finally {
+      secret.fill(0);
+      key.fill(0);
+      nodeKey.fill(0);
+    }
+  });
+
   it('matches RFC 5869 HKDF-SHA-256 test case 1', () => {
     const ikm = new Uint8Array(22).fill(0x0b);
     const salt = fromHex('000102030405060708090a0b0c');
