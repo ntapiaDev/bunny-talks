@@ -1,17 +1,18 @@
-# Jalon CRYPTO-008 — Coffre direct V1 candidat
+# Jalon CRYPTO-009 — Prérequis du coffre direct V1
 
-**Statut :** spécification et vecteur expérimental pour revue ; aucune API de coffre n'est implémentée ou validée pour la production.
+**Statut :** caractérisation Node et comparaison documentaire pour revue ; aucune API de coffre ni dépendance de production ajoutée.
 
-## Résultat
+## Résultats
 
-La [spécification directe V1](../security/recovery-vault-direct-v1.md) définit une proposition d'enveloppe, les domaines HKDF et AEAD, les contrôles préalables et les frontières entre coffre générique, charge d'identité et orchestration. Un vecteur complet public de l'enveloppe candidate est vérifié sous Node et par Python/libsodium. Aucun package, contrat public ou fournisseur de production n'est ajouté.
+L'[investigation des prérequis](../security/recovery-vault-technical-prerequisites.md) compare des parseurs et sérialiseurs JCS candidats, précise les contrôles à combiner et caractérise les comportements JSON/UTF-8 et aléa Noble disponibles sous Node. Elle documente les replis `Math.random` identifiés dans certains chemins de développement Expo et React Native, incompatibles avec les exigences de sécurité.
 
-## Critères et limites
+Le vecteur de l'[enveloppe directe V1](../security/recovery-vault-direct-v1.md) reste expérimental. Les candidats de parsing et JCS ne sont pas installés ni testés ; aucun résultat ne démontre Hermes ou Expo et aucun audit n'a été effectué.
 
-- Faire examiner les choix du format, son parseur canonique et ses limites ; le vecteur ne valide pas une implémentation générale de JCS ni de coffre.
-- Définir et tester les vraies API de création, validation et ouverture ; la matrice de rejets et de tailles est détaillée dans la spécification et n'est pas encore couverte au niveau de l'enveloppe.
-- Établir le CSPRNG et l'interopérabilité sur Expo Development Builds/Hermes, iOS et Android ; les tests Node ne sont pas une preuve mobile ni un audit.
-- Définir publication conditionnelle, fraîcheur, reprise et rotation sans perte ; la génération authentifiée ne suffit pas contre le retour arrière.
-- **SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouvertes et bloquantes** pour l'association ou la récupération en production.
+## Conditions ouvertes
 
-Le choix du fournisseur de production, du parseur, des limites finales, du stockage et de la source fiable du compte reste ouvert. Attendre la revue avant une API de production ; ne pas commencer CRYPTO-009 automatiquement.
+- Choisir et évaluer un parseur et un sérialiseur, leurs versions et licences ; exécuter les vecteurs RFC 8785, les tests d'entrées hostiles, de limites et les tests différentiels sur Node et mobiles.
+- Sélectionner et vérifier la source d'aléa et ses chemins de débogage sur Expo Development Builds iOS et Android ; absence ou erreur doit provoquer un échec fermé, sans repli prévisible.
+- Décider les frontières et dépendances du futur `crypto/backup` avant sa création ; ne pas promouvoir Noble automatiquement en dépendance de production.
+- Définir stockage, fraîcheur, concurrence, reprise et charge durable ; **SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts et bloquants avant production**.
+
+Attendre la revue ; ne pas commencer CRYPTO-010 automatiquement.

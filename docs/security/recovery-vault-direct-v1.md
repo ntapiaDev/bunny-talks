@@ -2,6 +2,8 @@
 
 **Statut : proposition expérimentale pour revue ; aucun coffre n'est implémenté ni validé pour la production.** Le format ci-dessous remplace, pour les prochaines expériences, l'enveloppe à deux clés de CRYPTO-006, conservée comme comparaison. Les limites, identifiants, contrats et octets restent candidats ; les modifier exige de régénérer les vecteurs. Les tests des primitives ne valident pas le protocole complet.
 
+L'[investigation CRYPTO-009](recovery-vault-technical-prerequisites.md) précise les candidats de parsing et d'aléa ainsi que les chemins de débogage à repli prévisible à exclure.
+
 ## Frontières
 
 Le coffre générique protège des octets opaques et ne connaît pas OpenE2EE. Une couche Bunny Talks distincte construira et validera la charge d'identité et les clés d'archive. Un orchestrateur séparé gérera compte, stockage, autorisation, activation, récupération et reprise. Aucun package n'est créé ; l'emplacement et les dépendances de production nécessitent une décision d'architecture. La possession du secret ou le déchiffrement ne prouvent pas l'autorisation individuelle.
