@@ -610,15 +610,16 @@ Décisions :
 
 - Maximum cinq appareils de confiance par compte.
 - Chaque appareil conserve ses propres éléments cryptographiques locaux lorsque le protocole l'exige.
-- Ajout d'un appareil approuvé depuis un appareil existant.
-- Approbation cryptographique par QR code.
+- Ajout principal d'un appareil par connexion au compte, secret de récupération et coffre déchiffré localement, sans ancien appareil.
+- Autorisation individuelle du nouvel appareil ; association par QR code facultative et reportée.
 - Notifications de sécurité lors de l'ajout ou de la révocation.
+- Changement de mot de passe : invalidation des sessions des autres appareils, avec maintien de la session de l'appareil demandeur ; les connexions simultanées ordinaires restent autorisées.
 - Révocation empêchant les accès futurs.
 - Reconnaissance du fait que la révocation ne peut pas effacer les données déjà déchiffrées ou copiées.
 
 Le QR code ne doit jamais contenir de clé privée en clair.
 
-Il sert à établir un processus d'association sécurisé entre appareils.
+Son éventuel usage pour une association sécurisée reste à concevoir et à valider.
 
 ## 10.4. Sauvegarde cryptographique
 

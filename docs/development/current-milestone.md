@@ -1,28 +1,24 @@
-# Jalon CRYPTO-003 — Évaluation du transfert d'identité
+# Jalon CRYPTO-004 — Architecture du coffre de récupération
 
-**Statut :** caractérisation expérimentale en revue ; association sécurisée non validée.
+**Statut :** proposition documentaire en revue ; aucun format, algorithme, fournisseur ou protocole d'autorisation n'est définitivement validé.
 
-## Objectif
+## Objectif et décision fonctionnelle
 
-Évaluer les API publiques de transfert d'OpenE2EE 14.4.0 sans construire de protocole d'association ni d'interface mobile. L'identité durable est partagée entre appareils autorisés ; les sessions, préclés et identifiants d'enregistrement restent propres à chaque appareil.
+L'ajout principal d'un appareil utilise la connexion au compte, le secret de récupération et le déchiffrement local du coffre, sans ancien appareil. Il restaure l'identité durable, exige l'autorisation individuelle et synchronise l'archive chiffrée. Le QR est facultatif et reporté.
 
-## Résultats observés
+## Livrable et critères de revue
 
-Le test de caractérisation utilise deux stores SQLCipher Node et des clés générées à l'exécution. Il vérifie le transfert chiffré des deux paires d'identité, leur import expérimental avec un nouvel identifiant, l'absence de copie des préclés et sessions, et le rejet d'une altération du ciphertext ou d'une mauvaise clé. Ce test ne démontre ni un échange authentifié ni la sûreté du protocole complet.
+La [proposition de coffre](../security/recovery-vault-architecture.md) décrit les actifs et menaces, la hiérarchie et le format candidats, les secrets inclus et exclus, les alternatives, le parcours, la rotation, les interruptions et les tests nécessaires. Les décisions cryptographiques, la compatibilité mobile et le mécanisme d'autorisation restent à valider. CRYPTO-003 reste une caractérisation expérimentale, pas une association validée.
 
-Le même QR est accepté plusieurs fois dans sa fenêtre et un même paquet peut être déchiffré plusieurs fois. Un tiers connaissant le QR public peut générer sa propre paire éphémère et construire un bundle que le destinataire peut déchiffrer avec la clé publique de ce tiers : les primitives testées n'authentifient pas l'ancien appareil. Les métadonnées extérieures du bundle chiffré ne sont pas vérifiées par `decryptBackup`. Ces tests caractérisent les primitives ; ils ne prouvent pas que toutes les intégrations possibles sont vulnérables.
+La proposition compare l'autorisation avant ou après accès au coffre, trois choix de secret et de dérivation, ainsi que les garanties de fraîcheur selon la disponibilité d'un appareil de confiance et le comportement du serveur. Aucun choix technique n'est arrêté. Le changement de mot de passe révoque les sessions des autres appareils tout en conservant celle de l'appareil demandeur ; sa mise en œuvre et la révocation cryptographique distincte restent à concevoir et tester.
 
-Le déchiffrement répété démontre uniquement que `decryptBackup` ne maintient pas d'état anti-rejeu ; il ne démontre pas l'acceptation répétée d'une autorisation ou l'enregistrement d'un appareil, qui ne sont pas testés. Le SDK dérive avec HKDF une `authenticationKey` distincte de l'`encryptionKey` et la retourne à l'appelant. Aucun usage de cette clé dans une opération publique de transfert, ni protocole de messages de contrôle associé, n'a été trouvé dans la version distribuée. Sa dérivation seule n'authentifie pas les appareils ni les messages ; AES-GCM assure l'intégrité de la charge chiffrée via l'`encryptionKey`, tandis que l'application reste responsable de l'authentification, des autorisations, du contexte et de l'anti-rejeu.
+## Exigences bloquantes
 
-`createDeviceBackup` recopie l'objet renvoyé par l'adaptateur. Si celui-ci retourne l'identité SDK complète, le registration ID source est également exporté et `validateBackup` l'accepte dans l'objet d'identité. L'adaptateur de test sélectionne explicitement les deux paires ; un futur export devra faire de même et vérifier les champs transmis.
+- **SEC-CRYPTO-002 — ouvert et bloquant :** création conditionnelle ou équivalent, protection des chemins d'écriture, reprise après panne, états partiels et tests sur les backends réels.
+- **SEC-CRYPTO-003 — ouvert et bloquant :** autorisation individuelle, authentification et protection contre substitution et rejeu pour tout ajout ou récupération ; les risques propres au transfert QR restent distincts et devront être traités avant tout usage de cette option reportée.
+- Coffre : choix audité du format et des composants, protection hors ligne, intégrité du contexte, procédure de reprise et tests Node et mobiles. La détection d'un coffre ancien après perte de tous les appareils exige une ancre de fraîcheur fiable ; sans elle, un serveur malveillant peut présenter une ancienne version valide.
+- La possession de l'identité durable ou du secret ne suffit pas à autoriser un appareil. Le modèle de confiance du serveur, la rotation après compromission et la récupération en cas de perte ou d'attaque restent à résoudre.
 
-## Exigences ouvertes avant production
+## Suite
 
-- **SEC-CRYPTO-002 reste ouvert et bloquant** : création conditionnelle ou équivalent, protection de tous les chemins d'écriture, reprise après panne, états partiels et tests sur les backends réels.
-- **SEC-CRYPTO-003 — transfert et autorisation : ouvert et bloquant.** Définir et valider un parcours qui authentifie et lie les deux appareils et leur compte à la même tentative, protège l'intégrité du contexte, vérifie l'autorisation explicite et la limite d'appareils, empêche les substitutions et rejeux, impose une expiration et assure l'annulation et la reprise sûres. Tester également le relais hostile, les interruptions, les erreurs d'horloge et la révocation. Aucun mécanisme propre n'est retenu à ce stade.
-- L'identité cohérente ne prouve ni son origine ni l'autorisation de l'appareil. Un coffre de récupération indépendant et l'archive chiffrée restent distincts du transfert entre appareils.
-- Le nettoyage des secrets en mémoire JavaScript est limité ; les chaînes et copies ne peuvent pas être effacées de façon garantie. Les intégrations Expo, SQLCipher et coffre natif restent à tester sur appareils.
-
-## Suite recommandée
-
-Examiner d'abord les garanties publiques d'une solution d'association authentifiée et soumettre sa conception et son modèle de menace à revue avant toute intégration. Ne pas utiliser directement les primitives caractérisées comme parcours de production.
+Revue du modèle de menace et des options, puis décision technique explicite avant toute implémentation. Ne pas engager CRYPTO-005 sans validation.

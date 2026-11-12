@@ -8,7 +8,7 @@ Le compte doit survivre à la perte d'appareils et permettre leur révocation in
 
 ## Décision
 
-Les appareils de confiance partagent une identité cryptographique durable. Les identifiants d'enregistrement, préclés, sessions et clés locales de stockage sont propres aux appareils lorsque le protocole l'exige. L'historique utilise une archive indépendante ; la récupération sans ancien appareil est distincte de l'association.
+Les appareils de confiance partagent une identité cryptographique durable. Les identifiants d'enregistrement, préclés, sessions et clés locales de stockage sont propres aux appareils lorsque le protocole l'exige. L'historique utilise une archive indépendante. Le parcours principal d'ajout ou de récupération utilise le coffre et le secret de récupération sans ancien appareil ; le transfert par QR code est facultatif et reporté.
 
 La possession de l'identité cryptographique commune ne suffit pas à autoriser un appareil. L'autorisation et la révocation individuelles doivent être garanties indépendamment ; leur mécanisme reste à concevoir et à valider.
 

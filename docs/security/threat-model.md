@@ -299,6 +299,12 @@ Protections attendues :
 
 Le MFA n'est pas prévu dans la V1, mais l'architecture doit permettre de l'ajouter.
 
+**Changement de mot de passe — décision fonctionnelle :** invalider les sessions de tous les autres appareils tout en conservant la session de l'appareil demandeur. Les connexions simultanées ordinaires restent autorisées. Dès que la révocation est effective, le serveur doit refuser les autres sessions, même si leurs jetons restent stockés localement.
+
+Cette exigence concerne les jetons d'accès et de renouvellement ainsi que les connexions persistantes. Un jeton signé vérifié uniquement jusqu'à son expiration ne suffit pas à garantir un refus immédiat : la conception doit prévoir un contrôle d'état serveur cohérent sur tous les points d'accès. Les connexions déjà ouvertes doivent être fermées ou leurs opérations refusées après révocation. Les appareils hors ligne ne reçoivent pas immédiatement l'événement, mais doivent être refusés à leur prochaine tentative serveur. Il faut définir la frontière de révocation effective, traiter les courses et la propagation entre composants, et tester les canaux persistants ; aucune implémentation n'est encore validée.
+
+La révocation des sessions d'authentification ne garantit ni l'effacement des données locales ni la révocation cryptographique des futurs échanges. Celle-ci reste une exigence distincte à concevoir et à tester. Voir [RFC 7009](https://www.rfc-editor.org/rfc/rfc7009.html) pour les considérations de révocation et de propagation des jetons, sans présumer du protocole d'authentification retenu.
+
 ### 6.2. Communications privées
 
 Menaces :
@@ -377,9 +383,9 @@ Protections attendues :
 
 - Identité cryptographique durable commune aux appareils de confiance du compte.
 - Identifiants d'enregistrement, sessions, préclés et clés locales de stockage propres à chaque appareil lorsque le protocole l'exige.
-- Approbation depuis un appareil existant.
+- Autorisation individuelle authentifiée, y compris sans appareil existant ; son mécanisme reste à valider.
 - Association authentifiée.
-- QR code temporaire ne contenant aucune clé privée.
+- Si l'association facultative par QR code est mise en œuvre : QR temporaire ne contenant aucune clé privée, et échange authentifié.
 - Notification des associations.
 - Révocation.
 - Journalisation des événements de sécurité.
@@ -405,7 +411,7 @@ Menaces :
 Protections attendues :
 
 - Phrase secrète distincte du mot de passe du compte.
-- Dérivation avec Argon2id.
+- Dérivation adaptée au secret ; Argon2id est un candidat à évaluer, notamment pour les secrets humains de faible entropie.
 - Sel unique.
 - Clé de chiffrement aléatoire.
 - Chiffrement authentifié.

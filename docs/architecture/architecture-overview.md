@@ -256,7 +256,7 @@ Les appareils de confiance d'un même compte partagent une identité cryptograph
 
 Un compte peut disposer au maximum de cinq appareils de confiance.
 
-Un nouvel appareil autorisé accède à l'historique par l'archive chiffrée, indépendante des sessions de transport. La récupération sans ancien appareil utilise un mécanisme distinct du transfert entre appareils.
+Un nouvel appareil restaure principalement l'identité à partir du coffre et du secret de récupération, sans ancien appareil. Il doit obtenir une autorisation individuelle et accède à l'historique par l'archive chiffrée indépendante des sessions de transport. L'ordre entre autorisation et accès au coffre reste à valider. Le transfert par QR code est facultatif et reporté ; sa conception est distincte.
 
 La distribution des messages doit tenir compte :
 

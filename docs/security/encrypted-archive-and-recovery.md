@@ -64,16 +64,17 @@ La conception exacte de la hiérarchie de clés devra être validée avec le SDK
 
 ## 5. Ajout d'un nouvel appareil
 
-Lorsqu'un utilisateur possède encore un appareil autorisé :
+Le parcours principal ne nécessite pas d'ancien appareil. L'enchaînement ci-dessous illustre l'option dans laquelle l'autorisation suit l'accès au coffre ; cet ordre n'est pas encore retenu définitivement :
 
 1. Il installe Bunny Talks sur son nouvel appareil.
-2. Le nouvel appareil génère une demande d'association.
-3. L'ancien appareil autorise l'association par QR code.
-4. Un transfert cryptographique sécurisé établit les autorisations nécessaires.
-5. Le nouvel appareil télécharge l'archive chiffrée.
-6. Il restaure localement les données et crée ses propres sessions cryptographiques.
+2. Il se connecte au compte et saisit localement son secret de récupération.
+3. Il télécharge et déchiffre localement le coffre cryptographique.
+4. Il restaure l'identité durable et obtient une autorisation individuelle, selon un mécanisme à valider.
+5. Il synchronise l'archive chiffrée et crée ses propres sessions et préclés.
 
-Le QR code ne doit jamais contenir directement de clé privée durable.
+L'ordre entre l'autorisation individuelle et l'accès au coffre reste à décider : la proposition CRYPTO-004 compare une autorisation avant ou après téléchargement et déchiffrement. L'activation finale reste conditionnée à toutes les vérifications et autorisations requises.
+
+L'association par QR code est facultative et reportée. Si elle est mise en œuvre, le QR code ne doit jamais contenir directement de clé privée durable et son parcours devra être évalué séparément.
 
 ## 6. Récupération après perte de tous les appareils
 
@@ -117,6 +118,8 @@ Fonctionnalités prévues :
 - Notification de sécurité lors d'un ajout, d'une révocation ou d'une récupération.
 
 La révocation empêche les accès futurs, mais ne peut pas effacer les données déjà copiées ou déchiffrées sur un appareil compromis.
+
+Lors d'un changement de mot de passe, les sessions d'authentification de tous les autres appareils sont invalidées, tandis que l'appareil demandeur conserve sa session. Les connexions simultanées ordinaires restent autorisées. Dès la révocation effective, le serveur refuse les sessions révoquées même si leurs jetons subsistent localement ; les appareils hors ligne sont refusés lors de leur prochaine tentative. Cela n'efface pas leurs données locales et ne remplace pas la révocation cryptographique nécessaire pour les échanges futurs.
 
 ## 8. Stockage et résilience
 
@@ -196,4 +199,4 @@ L'exigence bloquante **SEC-CRYPTO-002**, définie dans ADR-003 et suivie dans le
 
 ## 14. Transfert entre appareils : authentification à valider
 
-Le QR et le chiffrement du bundle ne suffisent pas à établir à eux seuls l'identité et l'autorisation des deux appareils. Le parcours d'association doit satisfaire **SEC-CRYPTO-003**, exigence ouverte et bloquante avant production décrite dans ADR-003 : authentification des appareils et du compte, liaison à une tentative unique, protection contre substitution et rejeu, expiration et reprise sûre. La récupération indépendante après perte des appareils reste un parcours distinct. **SEC-CRYPTO-002 reste bloquant.**
+La possession du coffre et de l'identité commune ne suffit pas à établir l'autorisation individuelle d'un appareil. Tout parcours d'ajout ou de récupération doit satisfaire le volet général de **SEC-CRYPTO-003**, ouvert et bloquant avant production : authentification, autorisation, protection contre les substitutions et rejeux, expiration et reprise sûre. Le volet spécifique au transfert QR reste ouvert et devra être satisfait avant tout usage de cette option reportée. **SEC-CRYPTO-002 reste bloquant.**
