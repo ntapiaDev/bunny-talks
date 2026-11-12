@@ -57,6 +57,15 @@ importers:
       better-sqlite3-multiple-ciphers:
         specifier: 13.0.3
         version: 13.0.3
+      canonicalize:
+        specifier: 5.0.0
+        version: 5.0.0
+      json-canonicalize:
+        specifier: 3.0.1
+        version: 3.0.1
+      jsonc-parser:
+        specifier: 3.3.1
+        version: 3.3.1
 
   packages/validation:
     dependencies:
@@ -645,6 +654,14 @@ packages:
         integrity: sha512-60cyAOytib/OzBw1JNSoSV/boK1AtHryDIjvVBk7XbN4ugfkM3+Sry7fEjNgPMGgOjuaZPAp8ruZ0Cxafwyq9g==,
       }
 
+  canonicalize@5.0.0:
+    resolution:
+      {
+        integrity: sha512-O/NCg79G0/TWoD3Fo6scOMfP4p7/TsxRXVmRo9mEfD6h/5y5o1wtVbKyBO0E2i7FEcqe5tRijyAH/IWHIHMH4w==,
+      }
+    engines: { node: '>=22' }
+    hasBin: true
+
   chai@6.3.0:
     resolution:
       {
@@ -917,6 +934,13 @@ packages:
         integrity: sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw==,
       }
 
+  json-canonicalize@3.0.1:
+    resolution:
+      {
+        integrity: sha512-xEzkTucfHhDooWOSMOvrlll9oTk6/mXZIerF2DFWA2chHZsnc2zrmAKjVOyDbSYHr0e3Djx9F89nZ3U2Bn+lSw==,
+      }
+    engines: { node: '>=8.5' }
+
   json-schema-traverse@0.4.1:
     resolution:
       {
@@ -927,6 +951,12 @@ packages:
     resolution:
       {
         integrity: sha512-Bdboy+l7tA3OGW6FjyFHWkP5LuByj1Tk33Ljyq0axyzdk9//JSi2u3fP1QSmd1KNwq6VOKYGlAu87CisVir6Pw==,
+      }
+
+  jsonc-parser@3.3.1:
+    resolution:
+      {
+        integrity: sha512-HUgH65KyejrUFPvHFPbqOY0rsFip3Bo5wb4ngvdi1EpCYWUQDC5V+Y7mZws+DLkr4M//zQJoanu1SP+87Dv1oQ==,
       }
 
   keyv@5.6.0:
@@ -1741,6 +1771,8 @@ snapshots:
       keyv: 5.6.0
       qified: 0.10.1
 
+  canonicalize@5.0.0: {}
+
   chai@6.3.0: {}
 
   cross-spawn@7.0.6:
@@ -1891,9 +1923,13 @@ snapshots:
 
   isexe@2.0.0: {}
 
+  json-canonicalize@3.0.1: {}
+
   json-schema-traverse@0.4.1: {}
 
   json-stable-stringify-without-jsonify@1.0.1: {}
+
+  jsonc-parser@3.3.1: {}
 
   keyv@5.6.0:
     dependencies:

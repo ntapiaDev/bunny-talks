@@ -2,6 +2,8 @@
 
 **Statut : investigation et caractérisation Node, pour revue ; aucune API de coffre ni dépendance de production ajoutée.** Le [format V1](recovery-vault-direct-v1.md) reste candidat. Aucun résultat ci-dessous n'établit la compatibilité Hermes, Expo ou la sécurité de l'intégration complète.
 
+**Actualisation CRYPTO-010 :** l'[évaluation des composants](recovery-vault-component-evaluation.md) présente les essais ultérieurs de trois candidats installés uniquement pour le développement. Les observations ci-dessous décrivent l'état de CRYPTO-009.
+
 ## Parseur et canonisation : candidats distincts
 
 Les candidats ci-dessous ne sont pas installés ni exécutés dans le monorepo. Les versions indiquées sont celles dont les manifests ou tags publics ont été examinés, pas nécessairement les dernières versions publiées. Leurs garanties concrètes, l'intégrité des distributions et leur maintenance devront être vérifiées avant toute sélection.

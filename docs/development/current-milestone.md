@@ -1,18 +1,18 @@
-# Jalon CRYPTO-009 — Prérequis du coffre direct V1
+# Jalon CRYPTO-010 — Caractérisation des composants de sécurité
 
-**Statut :** caractérisation Node et comparaison documentaire pour revue ; aucune API de coffre ni dépendance de production ajoutée.
+**Statut :** essais de caractérisation Node et recommandations pour revue ; aucune API de coffre ni dépendance de production ajoutée.
 
 ## Résultats
 
-L'[investigation des prérequis](../security/recovery-vault-technical-prerequisites.md) compare des parseurs et sérialiseurs JCS candidats, précise les contrôles à combiner et caractérise les comportements JSON/UTF-8 et aléa Noble disponibles sous Node. Elle documente les replis `Math.random` identifiés dans certains chemins de développement Expo et React Native, incompatibles avec les exigences de sécurité.
+L'[évaluation des composants](../security/recovery-vault-component-evaluation.md) décrit les tests de `jsonc-parser` 3.3.1, `canonicalize` 5.0.0 et `json-canonicalize` 3.0.1, ajoutés uniquement en dépendances de développement. Les tests couvrent des exemples RFC 8785 et les octets du vecteur CRYPTO-008. Ils caractérisent des composants, pas un validateur V1 complet.
 
-Le vecteur de l'[enveloppe directe V1](../security/recovery-vault-direct-v1.md) reste expérimental. Les candidats de parsing et JCS ne sont pas installés ni testés ; aucun résultat ne démontre Hermes ou Expo et aucun audit n'a été effectué.
+La stratégie d'aléa explicite exige l'échec fermé et interdit les chemins `Math.random`, y compris en développement. Les cas de repli Expo et React Native documentés restent à vérifier sur les versions et builds mobiles effectivement retenus.
 
 ## Conditions ouvertes
 
-- Choisir et évaluer un parseur et un sérialiseur, leurs versions et licences ; exécuter les vecteurs RFC 8785, les tests d'entrées hostiles, de limites et les tests différentiels sur Node et mobiles.
-- Sélectionner et vérifier la source d'aléa et ses chemins de débogage sur Expo Development Builds iOS et Android ; absence ou erreur doit provoquer un échec fermé, sans repli prévisible.
-- Décider les frontières et dépendances du futur `crypto/backup` avant sa création ; ne pas promouvoir Noble automatiquement en dépendance de production.
-- Définir stockage, fraîcheur, concurrence, reprise et charge durable ; **SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts et bloquants avant production**.
+- Tester les limites d'allocation du parseur, le corpus JCS complet et le fuzzing ; choisir et examiner les dépendances avant toute utilisation de production.
+- Vérifier les fournisseurs, l'UTF-8 et les vecteurs sur Expo Development Builds et Hermes, iOS et Android ; aucune compatibilité mobile ni preuve d'entropie n'est établie par Node.
+- Décider les responsabilités et dépendances du futur `@bunny-talks/crypto-backup` avant création ; concevoir stockage, reprise et fraîcheur.
+- **SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts et bloquants avant production.**
 
-Attendre la revue ; ne pas commencer CRYPTO-010 automatiquement.
+Attendre la revue ; ne pas commencer CRYPTO-011 automatiquement.
