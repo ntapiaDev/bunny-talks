@@ -31,6 +31,19 @@ importers:
 
   packages/contracts: {}
 
+  packages/crypto/backup:
+    dependencies:
+      canonicalize:
+        specifier: 5.0.0
+        version: 5.0.0
+      jsonc-parser:
+        specifier: 3.3.1
+        version: 3.3.1
+    devDependencies:
+      '@types/node':
+        specifier: ^24.19.2
+        version: 24.19.2
+
   packages/crypto/core: {}
 
   packages/crypto/engine:

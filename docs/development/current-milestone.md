@@ -1,18 +1,23 @@
-# Jalon CRYPTO-010 — Caractérisation des composants de sécurité
+# Jalon CRYPTO-011 — Fondations de crypto-backup
 
-**Statut :** essais de caractérisation Node et recommandations pour revue ; aucune API de coffre ni dépendance de production ajoutée.
+**Statut :** validation structurelle expérimentale sous Node, pour revue ; coffre et production non validés.
 
-## Résultats
+## Résultat
 
-L'[évaluation des composants](../security/recovery-vault-component-evaluation.md) décrit les tests de `jsonc-parser` 3.3.1, `canonicalize` 5.0.0 et `json-canonicalize` 3.0.1, ajoutés uniquement en dépendances de développement. Les tests couvrent des exemples RFC 8785 et les octets du vecteur CRYPTO-008. Ils caractérisent des composants, pas un validateur V1 complet.
+`@bunny-talks/crypto-backup` est un package NodeNext indépendant d'OpenE2EE. Il expose `validateEnvelopeStructureV1`, un résultat portant le statut `structural-only-unauthenticated`, et le contrat asynchrone `CryptographicRandomSource` sans fournisseur. `canonicalize` 5.0.0 et `jsonc-parser` 3.3.1 sont des dépendances directes d'exécution du package pour ce validateur expérimental ; leur compatibilité mobile et leur choix pour production restent à valider. Le type d'aléa ne prouve pas que son implémentation est cryptographiquement sûre ; la future orchestration devra refuser une source absente ou non autorisée et propager les erreurs sans repli faible.
 
-La stratégie d'aléa explicite exige l'échec fermé et interdit les chemins `Math.random`, y compris en développement. Les cas de repli Expo et React Native documentés restent à vérifier sur les versions et builds mobiles effectivement retenus.
+Le validateur prend une copie des octets après limite d'entrée, rejette UTF-8 malformé et BOM, contrôle les événements de parsing strict, champs et doublons décodés, profondeur maximale, tailles, Base64url canonique et format, puis compare le JSON canonique. Il retourne des chaînes immuables, sans modifier l'entrée. Le résultat ne vérifie ni authenticité, ni compte attendu, ni fraîcheur, ni autorisation ; il ne faut pas l'utiliser comme preuve d'un de ces états.
 
-## Conditions ouvertes
+Les tests sous Node réutilisent le vecteur CRYPTO-008 et couvrent notamment les erreurs structurelles, les tailles et une entrée profondément imbriquée. Aucun chiffrement, déchiffrement, import d'identité, stockage ou autorisation n'est implémenté.
 
-- Tester les limites d'allocation du parseur, le corpus JCS complet et le fuzzing ; choisir et examiner les dépendances avant toute utilisation de production.
-- Vérifier les fournisseurs, l'UTF-8 et les vecteurs sur Expo Development Builds et Hermes, iOS et Android ; aucune compatibilité mobile ni preuve d'entropie n'est établie par Node.
-- Décider les responsabilités et dépendances du futur `@bunny-talks/crypto-backup` avant création ; concevoir stockage, reprise et fraîcheur.
-- **SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts et bloquants avant production.**
+La revue finale isole la conversion des `SyntaxError` à l'appel `JSON.parse` ; les exceptions inattendues du visiteur et du canoniseur restent propagées. Les caractères de doublon échappé et de substitut isolé sont vérifiés dans les octets des fixtures. Des tests instrumentés observent l'arrêt au troisième objet pour plusieurs profondeurs ainsi que le rejet d'un tableau ou champ inconnu avant visite de leur contenu. Ces observations ne mesurent pas les allocations internes.
 
-Attendre la revue ; ne pas commencer CRYPTO-011 automatiquement.
+## Limites et décisions ouvertes
+
+- **Pas de déclaration de résistance complète aux attaques par allocation.** L'entrée totale est limitée à 131 072 octets et le visiteur interrompt la profondeur au-delà de deux objets ; `jsonc-parser` scanne et peut allouer les chaînes avant leurs callbacks. Les allocations réelles, les extrêmes de temps et les limites sur Hermes/iOS/Android n'ont pas été mesurés. Les limites restent candidates et doivent être justifiées par la charge réelle.
+- `TextDecoder` fatal, `canonicalize` et son besoin `String.prototype.isWellFormed` n'ont pas été validés sur Hermes. Les tests Node ne constituent ni validation mobile ni audit de sécurité.
+- La vérification du compte attendu, l'authentification AEAD, la fraîcheur indépendante et l'autorisation individuelle restent des responsabilités distinctes et non implémentées. La gestion des versions futures et l'interface sûre de données authentifiées restent à concevoir.
+- Aucun CSPRNG ni adaptateur mobile n'est fourni ou approuvé ; il faut inspecter les chemins de débogage et proscrire tout repli prévisible.
+- **SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts et bloquants avant association ou récupération en production.**
+
+Attendre la revue avant d'engager CRYPTO-012.

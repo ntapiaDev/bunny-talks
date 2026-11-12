@@ -4,6 +4,8 @@
 
 L'[investigation CRYPTO-009](recovery-vault-technical-prerequisites.md) précise les candidats de parsing et d'aléa ainsi que les chemins de débogage à repli prévisible à exclure.
 
+**Actualisation CRYPTO-011 :** `@bunny-talks/crypto-backup` implémente une validation structurelle expérimentale et un contrat d'aléa ; les contrats de création et d'ouverture décrits ci-dessous restent des propositions non implémentées. Voir le [jalon courant](../development/current-milestone.md) pour les limites et vérifications.
+
 ## Frontières
 
 Le coffre générique protège des octets opaques et ne connaît pas OpenE2EE. Une couche Bunny Talks distincte construira et validera la charge d'identité et les clés d'archive. Un orchestrateur séparé gérera compte, stockage, autorisation, activation, récupération et reprise. Aucun package n'est créé ; l'emplacement et les dépendances de production nécessitent une décision d'architecture. La possession du secret ou le déchiffrement ne prouvent pas l'autorisation individuelle.
@@ -40,7 +42,7 @@ Les deux préfixes constants, distincts et versionnés, séparent domaine de dé
 
 Avant toute dérivation, limiter l'enveloppe brute à **131 072 octets** et la charge à **65 536 octets** ; ce sont des plafonds candidats à justifier par l'inventaire réel de l'identité et de l'archive, l'expansion Base64 et les appareils cibles. Contrôler les tailles encodées avant allocation, la profondeur maximale de deux objets, le nombre exact de champs et la longueur de chaque chaîne. Refuser types invalides, champs absents ou supplémentaires, versions et profils non pris en charge, secret d'une longueur différente de 32 octets et ciphertext inférieur au tag. Aucune dérivation ne doit précéder ces contrôles.
 
-Un parseur doit détecter les noms dupliqués après décodage des échappements avant leur perte, y compris `account` et `acc\u006funt`. `JSON.parse` seul ne conserve pas cette information. Contrôler l'UTF-8, les doublons et les bornes, puis comparer les octets d'entrée à la sortie JCS exacte et refuser toute représentation non canonique. La sélection d'un parseur et d'un moteur JCS sûrs et portables reste ouverte ; ces comportements ne sont pas encore implémentés.
+Un parseur doit détecter les noms dupliqués après décodage des échappements avant leur perte, y compris `account` et `acc\u006funt`. `JSON.parse` seul ne conserve pas cette information. Contrôler l'UTF-8, les doublons et les bornes, puis comparer les octets d'entrée à la sortie JCS exacte et refuser toute représentation non canonique. La combinaison expérimentale de CRYPTO-011 applique ces contrôles sous Node ; sa sûreté face à toutes les entrées hostiles et sa portabilité mobile ne sont pas démontrées.
 
 Contrats conceptuels, sans modification d'API publique :
 

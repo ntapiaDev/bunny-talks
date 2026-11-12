@@ -351,6 +351,8 @@ Responsabilité :
 - Gestion des versions du format.
 - Gestion des suppressions et des snapshots.
 
+Le package `@bunny-talks/crypto-backup` contient actuellement une validation structurelle expérimentale du format candidat V1 et un contrat d'aléa, sans chiffrement ni restauration. Une validation structurelle ne démontre ni authenticité, ni contexte de compte, ni fraîcheur, ni autorisation. Les dépendances `jsonc-parser` et `canonicalize` y sont directes ; leur compatibilité mobile et leur usage en production ne sont pas validés. Les autres responsabilités listées restent à concevoir.
+
 ### `crypto/devices`
 
 Responsabilité :
