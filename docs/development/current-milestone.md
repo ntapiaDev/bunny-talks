@@ -1,24 +1,28 @@
-# Jalon CRYPTO-005 — Évaluation des primitives du coffre
+# Jalon CRYPTO-006 — Spécification candidate du coffre de récupération
 
-**Statut :** évaluation expérimentale sous Node en revue ; aucun coffre ni choix cryptographique de production n'est validé.
+**Statut :** proposition documentaire pour revue ; aucun format, fournisseur ou profil cryptographique n'est validé pour la production.
 
-## Objectif et périmètre
+## Objectif et résultat
 
-Comparer les KDF et AEAD pour un secret aléatoire fort et le futur coffre de récupération, sans implémenter de format définitif, de récupération complète ou d'autorisation d'appareil. L'identité durable partagée et la décision fonctionnelle de récupération sans ancien appareil restent inchangées.
+La [spécification candidate](../security/recovery-vault-specification.md) sépare un coffre générique et une couche d'identité Bunny Talks ; elle propose une enveloppe versionnée, un profil HKDF-SHA-256 et XChaCha20-Poly1305, des contrats TypeScript illustratifs, des conditions de validation, une stratégie de reprise et un plan de tests. Aucun package ni code de production n'est créé.
 
-## Résultats
+La revue finale compare chiffrement direct et enveloppement d'une clé indépendante : ce dernier reste le candidat décrit, avec ses coûts et sans avantage de rotation du seul emballage dans la proposition actuelle. Les contrats d'erreur, le parseur canonique, les limites candidates, la génération du coffre, la révision de stockage et la référence indépendante de fraîcheur sont explicités.
 
-La [proposition de coffre et son évaluation CRYPTO-005](../security/recovery-vault-architecture.md) comparent HKDF et Argon2id, AES-256-GCM et XChaCha20-Poly1305, Noble, libsodium et les API publiques OpenE2EE. Des tests conservés dans `crypto-engine` caractérisent sous Node les exports publics Noble 2.4.0, avec des vecteurs HKDF, AES-GCM et XChaCha20-Poly1305 et une comparaison AES-GCM avec `node:crypto`. Le vecteur XChaCha est issu d'un Internet-Draft CFRG expiré. Noble est déclaré comme dépendance de développement pour ces tests, pas choisi pour la production.
+Les résultats expérimentaux de CRYPTO-005 restent documentés dans l'[architecture du coffre](../security/recovery-vault-architecture.md) : ils caractérisent des primitives sous Node et ne démontrent ni la composition proposée ni la compatibilité mobile.
 
-Aucune primitive de coffre publique ni format versionné n'est implémenté : le contrat des versions et des tailles, la normalisation, la stratégie de nonce et les limites d'usage restent à décider et à auditer. Les tests de versions inconnues et de tailles applicatives abusives restent à ajouter après définition du contrat ; les comparaisons libsodium restent à réaliser. Aucun résultat Node ne démontre la compatibilité Expo/Hermes ou la sécurité des clés sur appareil ; les tests ne sont pas un audit.
+## Critères de revue
 
-## Exigences ouvertes
+- Examiner la composition à deux clés, les données authentifiées, les limites et les encodages ; comparer un format standard existant et obtenir une revue cryptographique indépendante avant adoption.
+- Valider les frontières des packages et les contrats proposés, la charge métier et les secrets d'archive sans changer les API existantes pendant ce jalon.
+- Définir la source fiable du compte attendu, l'ancre de fraîcheur, la publication conditionnelle, la rotation et la reprise ; examiner la perte de tous les appareils.
+- Préparer des vecteurs de composition et des tests indépendants, de robustesse, de concurrence et des tests Expo Development Builds réels avant production.
 
-- **SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts et bloquants** avant association ou récupération en production : écriture conditionnelle et reprise, autorisation individuelle, prévention des substitutions et rejeux et tests sur les backends réels.
-- Démontrer la source d'entropie et la gestion des nonces sur Node et appareils mobiles, choisir les versions et paramètres avec une revue de sécurité, tester la séparation des usages et la migration.
-- Définir une ancre fiable de fraîcheur : après perte de tous les appareils, un serveur malveillant peut présenter un ancien coffre valide en l'absence de référence indépendante.
-- Évaluer le coût Argon2id et les limites de mémoire et de temps constant JavaScript ; vérifier les bindings natifs et la conservation des secrets sur iOS et Android.
+## Blocages et décisions ouvertes
+
+**SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts et bloquants** pour l'association ou la récupération en production. La possession d'une identité ou d'un coffre ne vaut pas autorisation individuelle. Une génération dans l'enveloppe n'empêche pas seule le retour arrière.
+
+Le profil, la bibliothèque, les limites finales, la représentation humaine du secret, le format, les références de compte et de fraîcheur, le contenu de l'archive et les modalités de publication restent à valider. Les résultats CRYPTO-005 ne constituent pas un audit ni une validation Hermes/iOS/Android.
 
 ## Suite
 
-Soumettre les résultats à revue avant de choisir une bibliothèque et de définir le contrat minimal des primitives et du format. Ne pas engager CRYPTO-006 sans validation.
+Attendre la revue de cette spécification et une décision explicite avant implémentation. Ne pas démarrer CRYPTO-007 automatiquement.
