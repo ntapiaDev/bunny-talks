@@ -27,6 +27,14 @@ describe('jsonc-parser 3.3.1 event characterization', () => {
     expect(result.properties).toEqual([name, name]);
   });
 
+  it('preserves literal Unicode escape bytes before emitting decoded duplicate names', () => {
+    const source = String.raw`{"account":1,"acc\u006funt":2}`;
+    expect(Buffer.from(source).toString('hex')).toBe(
+      '7b226163636f756e74223a312c226163635c7530303666756e74223a327d',
+    );
+    expect(observe(source)).toEqual({ properties: ['account', 'account'], errors: [] });
+  });
+
   it.each(['{/* comment */"a":1}', '{"a":1,}', '{"a":', '{"a" 1}'])(
     'reports syntax errors for %s',
     (source) => {
@@ -190,7 +198,10 @@ describe('JCS candidates', () => {
         '\u0080': 'Control',
         ö: 'Latin Small Letter O With Diaeresis',
       };
-      expect(serialize(value)).toBe(
+      const actual = serialize(value)!;
+      expect(Object.hasOwn(value, '\r')).toBe(true);
+      expect(Buffer.from(actual).subarray(0, 5).toString('hex')).toBe('7b225c7222');
+      expect(actual).toBe(
         '{"\\r":"Carriage Return","1":"One","\u0080":"Control","ö":"Latin Small Letter O With Diaeresis","€":"Euro Sign","😀":"Emoji: Grinning Face","דּ":"Hebrew Letter Dalet With Dagesh"}',
       );
     });

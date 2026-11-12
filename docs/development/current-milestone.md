@@ -1,5 +1,7 @@
 # Jalon CRYPTO-011 — Fondations de crypto-backup
 
+**Audit suivant :** [CRYPTO-FIX-001](crypto-fix-001-audit.md) examine les jalons CRYPTO-001 à CRYPTO-011 avant toute suite ; CRYPTO-012 n'est pas commencé.
+
 **Statut :** validation structurelle expérimentale sous Node, pour revue ; coffre et production non validés.
 
 ## Résultat

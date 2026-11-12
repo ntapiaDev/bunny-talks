@@ -119,7 +119,7 @@ Fonctionnalités prévues :
 
 La révocation empêche les accès futurs, mais ne peut pas effacer les données déjà copiées ou déchiffrées sur un appareil compromis.
 
-Lors d'un changement de mot de passe, les sessions d'authentification de tous les autres appareils sont invalidées, tandis que l'appareil demandeur conserve sa session. Les connexions simultanées ordinaires restent autorisées. Dès la révocation effective, le serveur refuse les sessions révoquées même si leurs jetons subsistent localement ; les appareils hors ligne sont refusés lors de leur prochaine tentative. Cela n'efface pas leurs données locales et ne remplace pas la révocation cryptographique nécessaire pour les échanges futurs.
+L'action « Révoquer tous les autres appareils » nécessite le mot de passe du compte et conserve l'appareil demandeur. Elle doit invalider les sessions et autorisations des autres appareils et renouveler les éléments cryptographiques nécessaires aux futurs échanges. Dès la révocation effective, le serveur refuse les sessions révoquées même si leurs jetons subsistent localement ; les appareils hors ligne sont refusés lors de leur prochaine tentative. Cela n'efface pas leurs données locales. Les connexions simultanées ordinaires restent autorisées ; la politique lors d'un simple changement de mot de passe reste à définir.
 
 ## 8. Stockage et résilience
 

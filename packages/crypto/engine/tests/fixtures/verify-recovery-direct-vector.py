@@ -19,14 +19,32 @@ vector = json.loads(vector_path.read_text())
 data = {name: bytes.fromhex(vector[name]) for name in (
     "secret", "salt", "nonce", "info", "aad", "plaintext", "key", "ciphertextAndTag"
 )}
+if (
+    len(data["secret"]) != 32
+    or len(data["salt"]) != 16
+    or len(data["nonce"]) != 24
+    or len(data["key"]) != 32
+    or len(data["ciphertextAndTag"]) != len(data["plaintext"]) + 16
+):
+    raise SystemExit("Invalid vector field length")
 if "envelopeCanonical" in vector:
     envelope = json.loads(vector["envelopeCanonical"])
     canonical = lambda value: json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    encoded_ciphertext = base64.urlsafe_b64encode(data["ciphertextAndTag"]).rstrip(b"=").decode("ascii")
+    encode = lambda value: base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
+    account = envelope["header"]["account"]
+    try:
+        decoded_account = base64.b64decode(account + "==", altchars=b"-_", validate=True)
+    except (ValueError, TypeError):
+        raise SystemExit("Invalid account encoding") from None
     if (
         canonical(envelope) != vector["envelopeCanonical"]
         or canonical(envelope["header"]) != vector["headerCanonical"]
-        or envelope["ciphertext"] != encoded_ciphertext
+        or len(decoded_account) != 16
+        or encode(decoded_account) != account
+        or envelope["ciphertext"] != encode(data["ciphertextAndTag"])
+        or envelope["header"]["salt"] != encode(data["salt"])
+        or envelope["header"]["nonce"] != encode(data["nonce"])
+        or data["info"] != b"bunny-talks/recovery-vault-direct/v1/key"
         or data["aad"] != b"bunny-talks/recovery-vault-direct/v1/aad\n" + vector["headerCanonical"].encode("utf-8")
     ):
         raise SystemExit("Direct V1 envelope vector mismatch")
@@ -72,4 +90,35 @@ status = encrypt(
 )
 if status != 0 or output.raw[: output_length.value] != data["ciphertextAndTag"]:
     raise SystemExit("Independent XChaCha20-Poly1305 vector mismatch")
+decrypt = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt
+decrypt.argtypes = [
+    ctypes.c_void_p,
+    ctypes.POINTER(ctypes.c_ulonglong),
+    ctypes.c_void_p,
+    ctypes.c_void_p,
+    ctypes.c_ulonglong,
+    ctypes.c_void_p,
+    ctypes.c_ulonglong,
+    ctypes.c_void_p,
+    ctypes.c_void_p,
+]
+decrypt.restype = ctypes.c_int
+plaintext = ctypes.create_string_buffer(len(data["plaintext"]) or 1)
+plaintext_length = ctypes.c_ulonglong()
+status = decrypt(
+    plaintext,
+    ctypes.byref(plaintext_length),
+    None,
+    data["ciphertextAndTag"],
+    len(data["ciphertextAndTag"]),
+    data["aad"],
+    len(data["aad"]),
+    data["nonce"],
+    key,
+)
+if status != 0 or plaintext.raw[: plaintext_length.value] != data["plaintext"]:
+    raise SystemExit("Independent XChaCha20-Poly1305 decryption mismatch")
+altered = data["ciphertextAndTag"][:-1] + bytes([data["ciphertextAndTag"][-1] ^ 1])
+if decrypt(plaintext, ctypes.byref(plaintext_length), None, altered, len(altered), data["aad"], len(data["aad"]), data["nonce"], key) == 0:
+    raise SystemExit("Independent XChaCha20-Poly1305 accepted an altered tag")
 print(f"Independent vector verified with libsodium {sodium.sodium_version_string().decode()}")

@@ -9,7 +9,11 @@ afterEach(() => {
 describe('Node JSON and UTF-8 behavior relevant to recovery', () => {
   it('shows JSON.parse silently overwrites simple and escaped duplicate keys', () => {
     expect(JSON.parse('{"account":1,"account":2}')).toEqual({ account: 2 });
-    expect(JSON.parse('{"account":1,"acc\\u006funt":2}')).toEqual({ account: 2 });
+    const source = String.raw`{"account":1,"acc\u006funt":2}`;
+    expect(Buffer.from(source).toString('hex')).toBe(
+      '7b226163636f756e74223a312c226163635c7530303666756e74223a327d',
+    );
+    expect(JSON.parse(source)).toEqual({ account: 2 });
   });
 
   it('rejects malformed UTF-8 only with fatal decoding', () => {

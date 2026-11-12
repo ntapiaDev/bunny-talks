@@ -299,11 +299,11 @@ Protections attendues :
 
 Le MFA n'est pas prévu dans la V1, mais l'architecture doit permettre de l'ajouter.
 
-**Changement de mot de passe — décision fonctionnelle :** invalider les sessions de tous les autres appareils tout en conservant la session de l'appareil demandeur. Les connexions simultanées ordinaires restent autorisées. Dès que la révocation est effective, le serveur doit refuser les autres sessions, même si leurs jetons restent stockés localement.
+**Révoquer tous les autres appareils — décision fonctionnelle :** cette action nécessite le mot de passe, conserve l'appareil demandeur et invalide les sessions et autorisations des autres appareils. Dès que la révocation est effective, le serveur doit refuser les sessions révoquées, même si leurs jetons restent stockés localement. Les connexions simultanées ordinaires restent autorisées. La politique pour un simple changement de mot de passe reste à décider.
 
 Cette exigence concerne les jetons d'accès et de renouvellement ainsi que les connexions persistantes. Un jeton signé vérifié uniquement jusqu'à son expiration ne suffit pas à garantir un refus immédiat : la conception doit prévoir un contrôle d'état serveur cohérent sur tous les points d'accès. Les connexions déjà ouvertes doivent être fermées ou leurs opérations refusées après révocation. Les appareils hors ligne ne reçoivent pas immédiatement l'événement, mais doivent être refusés à leur prochaine tentative serveur. Il faut définir la frontière de révocation effective, traiter les courses et la propagation entre composants, et tester les canaux persistants ; aucune implémentation n'est encore validée.
 
-La révocation des sessions d'authentification ne garantit ni l'effacement des données locales ni la révocation cryptographique des futurs échanges. Celle-ci reste une exigence distincte à concevoir et à tester. Voir [RFC 7009](https://www.rfc-editor.org/rfc/rfc7009.html) pour les considérations de révocation et de propagation des jetons, sans présumer du protocole d'authentification retenu.
+La révocation des sessions d'authentification ne garantit ni l'effacement des données locales ni la révocation cryptographique des futurs échanges. Les éléments cryptographiques nécessaires à ces échanges doivent être renouvelés ; le mécanisme reste à concevoir et à tester. Voir [RFC 7009](https://www.rfc-editor.org/rfc/rfc7009.html) pour les considérations de révocation et de propagation des jetons, sans présumer du protocole d'authentification retenu.
 
 ### 6.2. Communications privées
 

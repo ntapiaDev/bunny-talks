@@ -219,7 +219,7 @@ describe('OpenE2EE device transfer primitives', () => {
     }
   });
 
-  it('checks QR format, version, freshness and future clock skew', async () => {
+  it('checks QR format, version, declared timestamp age and future clock skew', async () => {
     expect(fixture.qr.publicKey === fixture.receiver.keyPair.publicKey).toBe(true);
     for (const invalid of [
       { ...fixture.qr, timestamp: Date.now() - QR_CODE_MAX_AGE - 1000 },
