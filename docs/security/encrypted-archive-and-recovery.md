@@ -25,9 +25,13 @@ L'archive doit conserver :
 
 Les messages éphémères sont exclus de l'archive permanente après leur expiration, conformément à leur fonctionnement.
 
-Chaque utilisateur possède sa propre copie chiffrée des communications qu'il a envoyées ou reçues. La suppression d'une copie ne doit pas entraîner automatiquement la suppression de celle de l'autre correspondant.
+Chaque utilisateur possède sa propre copie chiffrée des communications qu'il a envoyées ou reçues. La suppression personnelle d'une copie ne doit pas entraîner automatiquement la suppression de celle de l'autre correspondant.
 
-## 3. Sauvegarde automatique
+## 3. Synchronisation et sauvegardes
+
+La synchronisation chiffrée régulière doit transmettre les communications et autres données à conserver après leur modification, afin de permettre leur récupération sans attendre la sauvegarde quotidienne. Sa fréquence, ses accusés de réussite et la gestion des interruptions restent à définir ; les données non encore synchronisées lors d'une perte peuvent être irrécupérables.
+
+Les sauvegardes périodiques constituent des points de reprise distincts de cette synchronisation. Les snapshots sont des états datés de référence facilitant une restauration efficace ; ils ne remplacent pas la synchronisation des changements récents.
 
 Le système doit proposer :
 
@@ -133,6 +137,9 @@ Le serveur ne doit pas avoir besoin de déchiffrer les contenus pour gérer les 
 
 La suppression d'un compte, d'une conversation ou d'un message doit suivre des règles explicites.
 
+- **Suppression personnelle :** la suppression demandée par un utilisateur concerne sa propre copie et son archive, selon les règles de propagation et de conservation retenues. Elle ne supprime pas automatiquement les copies ou archives des autres correspondants.
+- **Suppression pour tous :** si cette possibilité est proposée pour un contenu donné, elle vise également les copies et archives des autres participants selon les conditions et délais qui seront définis. La demande doit être propagée aux appareils et prise en compte lors des restaurations ; elle ne peut pas garantir l'effacement des copies déjà exportées, enregistrées ou déchiffrées par un destinataire.
+
 En particulier :
 
 - La suppression d'une lettre chez son expéditeur ne doit pas supprimer automatiquement la copie déjà reçue.
@@ -178,3 +185,11 @@ Le système doit donc aider activement l'utilisateur à protéger son secret de 
 Ces deux responsabilités sont distinctes et doivent rester indépendantes.
 
 Aucune décision concernant le SDK cryptographique, le stockage ou la synchronisation ne doit compromettre la capacité d'un utilisateur à retrouver durablement ses lettres, ses conversations et ses brouillons.
+
+## 13. Limite de l'import d'identité en évaluation
+
+La préparation d'une identité vérifie la cohérence de ses clés sans authentifier sa provenance. L'import contrôlé refuse une identité déjà détectée et vérifie l'écriture dans un store SQLite, mais le contrôle préalable et l'écriture ne sont pas atomiques. Sa sérialisation locale ne couvre ni les autres processus ni les écritures SDK directes. L'appelant doit exclure les autres écrivains ; un état corrompu ou un échec d'écriture ou de relecture exige une procédure de reprise sûre. La coordination durable, l'authentification du transfert et le comportement après panne doivent être validés avant l'association ou la récupération en production.
+
+L'absence d'identité ne prouve pas qu'un store est vierge : il peut déjà contenir des préclés, des sessions ou d'autres données. L'opération actuelle ne vérifie pas leur absence ou leur cohérence. Un état inconnu ou partiel doit rester isolé et ne doit pas être automatiquement réinitialisé. Après une écriture potentiellement réussie suivie d'une erreur, conserver le store et son coffre, empêcher l'activation et les nouvelles écritures, puis appliquer une procédure de diagnostic et de reprise authentifiée qui reste à définir et à tester.
+
+L'exigence bloquante **SEC-CRYPTO-002**, définie dans ADR-003 et suivie dans le jalon courant, impose les garanties de création conditionnelle, de protection des chemins d'écriture, de reprise après panne, de gestion des états partiels et de tests de concurrence sur les backends réels avant toute association ou récupération d'appareil en production.

@@ -11,12 +11,16 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tests/tsconfig.json --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
     "@bunny-talks/crypto-core": "workspace:*",
     "@noble/curves": "2.4.0",
     "@open-e2ee/signal-protocol-sdk": "14.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "better-sqlite3-multiple-ciphers": "13.0.3"
   }
 }

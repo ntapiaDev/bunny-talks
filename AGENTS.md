@@ -68,6 +68,18 @@ Ces exigences ne sont pas encore validées par rapport au SDK.
 
 ## Qualité
 
+### Organisation des imports TypeScript
+
+Dans tous les fichiers TypeScript et TSX du monorepo, organiser les imports par groupes, dans cet ordre :
+
+1. Modules natifs Node.js (`node:`).
+2. Dépendances externes, y compris les packages npm avec scope.
+3. Packages internes `@bunny-talks/*`.
+4. Alias internes éventuels (`@/*`, etc.).
+5. Imports relatifs, en privilégiant les chemins parents avant les chemins du dossier courant.
+
+Trier alphabétiquement les imports au sein de chaque groupe, sans imposer de ligne vide entre les groupes, et utiliser `import type` pour les dépendances utilisées uniquement comme types. Préserver impérativement l'ordre des imports à effets de bord lorsque leur exécution en dépend. Respecter les conventions TypeScript NodeNext ESM, notamment les extensions `.js` nécessaires aux imports relatifs.
+
 Lorsque cela est pertinent, exécuter :
 
 - pnpm typecheck
