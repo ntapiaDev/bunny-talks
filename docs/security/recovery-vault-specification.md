@@ -4,6 +4,8 @@
 
 **Actualisation CRYPTO-007 :** l'[évaluation d'interopérabilité](recovery-vault-interop-evaluation.md) recommande de poursuivre les expérimentations avec la composition directe A. Les sections ci-dessous conservent la proposition B et ses contrats comme référence de comparaison ; elles ne définissent pas le format de A et ne constituent pas une décision de production.
 
+**Actualisation CRYPTO-008 :** la [spécification candidate directe V1](recovery-vault-direct-v1.md) décrit séparément les champs et contrats envisagés pour A ; elle n'est ni implémentée ni validée pour la production.
+
 ## 1. Frontières et responsabilités
 
 La séparation suivante précise [ADR-001](../architecture/decisions/001-crypto-packages.md) sans créer ni modifier de package :

@@ -10,6 +10,62 @@ const utf8 = (value: string) => new TextEncoder().encode(value);
 const fromHex = (value: string) => new Uint8Array(Buffer.from(value, 'hex'));
 
 describe('recovery primitive candidates under Node', () => {
+  it('matches the independently verified direct V1 envelope vector', () => {
+    const vector = JSON.parse(
+      readFileSync(new URL('./fixtures/recovery-direct-v1-vector.json', import.meta.url), 'utf8'),
+    ) as Record<string, string>;
+    const secret = fromHex(vector.secret!);
+    const salt = fromHex(vector.salt!);
+    const nonce = fromHex(vector.nonce!);
+    const info = fromHex(vector.info!);
+    const aad = fromHex(vector.aad!);
+    const plaintext = fromHex(vector.plaintext!);
+    const expected = fromHex(vector.ciphertextAndTag!);
+    const header = JSON.parse(vector.headerCanonical!) as Record<string, unknown>;
+    const expectedEnvelope = JSON.stringify({
+      ciphertext: Buffer.from(expected).toString('base64url'),
+      header,
+    });
+    const key = hkdf(sha256, secret, salt, info, 32);
+    try {
+      expect(JSON.stringify(header)).toBe(vector.headerCanonical);
+      expect(expectedEnvelope).toBe(vector.envelopeCanonical);
+      expect(header.salt).toBe(Buffer.from(salt).toString('base64url'));
+      expect(header.nonce).toBe(Buffer.from(nonce).toString('base64url'));
+      expect(aad).toEqual(
+        utf8(`bunny-talks/recovery-vault-direct/v1/aad\n${vector.headerCanonical}`),
+      );
+      expect(key).toEqual(fromHex(vector.key!));
+      expect(xchacha20poly1305(key, nonce, aad).encrypt(plaintext)).toEqual(expected);
+      expect(xchacha20poly1305(key, nonce, aad).decrypt(expected)).toEqual(plaintext);
+      const changedHeader = { ...header, generation: 2 };
+      const changedAad = utf8(
+        `bunny-talks/recovery-vault-direct/v1/aad\n${JSON.stringify(changedHeader)}`,
+      );
+      expect(() => xchacha20poly1305(key, nonce, changedAad).decrypt(expected)).toThrow();
+      for (const alteredHeader of [
+        { ...header, account: 'AQECAwQFBgcICQoLDA0ODw' },
+        { ...header, purpose: 'another-purpose' },
+      ]) {
+        const alteredAad = utf8(
+          `bunny-talks/recovery-vault-direct/v1/aad\n${JSON.stringify(alteredHeader)}`,
+        );
+        expect(() => xchacha20poly1305(key, nonce, alteredAad).decrypt(expected)).toThrow();
+      }
+      const changedSalt = salt.slice();
+      changedSalt[0] = changedSalt[0]! ^ 1;
+      const otherKey = hkdf(sha256, secret, changedSalt, info, 32);
+      try {
+        expect(() => xchacha20poly1305(otherKey, nonce, aad).decrypt(expected)).toThrow();
+      } finally {
+        otherKey.fill(0);
+      }
+    } finally {
+      secret.fill(0);
+      key.fill(0);
+    }
+  });
+
   it('matches an independently verified direct HKDF and XChaCha20-Poly1305 vector', () => {
     const vector = JSON.parse(
       readFileSync(new URL('./fixtures/recovery-direct-vector.json', import.meta.url), 'utf8'),

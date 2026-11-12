@@ -4,16 +4,32 @@ Run separately: python3 packages/crypto/engine/tests/fixtures/verify-recovery-di
 Requires Python cryptography and a system libsodium; neither is a production dependency.
 """
 
+import base64
 import ctypes
 import ctypes.util
 import json
+import sys
 from pathlib import Path
 
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
-vector = json.loads(Path(__file__).with_name("recovery-direct-vector.json").read_text())
-data = {name: bytes.fromhex(value) for name, value in vector.items()}
+vector_path = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).with_name("recovery-direct-vector.json")
+vector = json.loads(vector_path.read_text())
+data = {name: bytes.fromhex(vector[name]) for name in (
+    "secret", "salt", "nonce", "info", "aad", "plaintext", "key", "ciphertextAndTag"
+)}
+if "envelopeCanonical" in vector:
+    envelope = json.loads(vector["envelopeCanonical"])
+    canonical = lambda value: json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    encoded_ciphertext = base64.urlsafe_b64encode(data["ciphertextAndTag"]).rstrip(b"=").decode("ascii")
+    if (
+        canonical(envelope) != vector["envelopeCanonical"]
+        or canonical(envelope["header"]) != vector["headerCanonical"]
+        or envelope["ciphertext"] != encoded_ciphertext
+        or data["aad"] != b"bunny-talks/recovery-vault-direct/v1/aad\n" + vector["headerCanonical"].encode("utf-8")
+    ):
+        raise SystemExit("Direct V1 envelope vector mismatch")
 key = HKDF(algorithm=hashes.SHA256(), length=32, salt=data["salt"], info=data["info"]).derive(
     data["secret"]
 )
