@@ -613,7 +613,7 @@ Décisions :
 - Ajout principal d'un appareil par connexion au compte, secret de récupération et coffre déchiffré localement, sans ancien appareil.
 - Autorisation individuelle du nouvel appareil ; association par QR code facultative et reportée.
 - Notifications de sécurité lors de l'ajout ou de la révocation.
-- L'action « Révoquer tous les autres appareils » nécessite le mot de passe du compte, conserve l'appareil demandeur et invalide les sessions et autorisations des autres appareils ; les éléments cryptographiques nécessaires aux futurs échanges doivent être renouvelés. Les connexions simultanées ordinaires restent autorisées. La politique appliquée lors d'un changement ordinaire du mot de passe reste à définir.
+- L'action « Révoquer tous les autres appareils » nécessite le mot de passe du compte, conserve l'appareil demandeur et invalide les sessions et autorisations des autres appareils ; les éléments cryptographiques nécessaires aux futurs échanges doivent être renouvelés. Les connexions simultanées ordinaires restent autorisées. Un changement ordinaire du mot de passe conserve tous les autres appareils connectés et autorisés.
 - Révocation empêchant les accès futurs.
 - Reconnaissance du fait que la révocation ne peut pas effacer les données déjà déchiffrées ou copiées.
 

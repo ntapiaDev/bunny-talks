@@ -1,25 +1,9 @@
-# Jalon CRYPTO-011 — Fondations de crypto-backup
+# Jalon CRYPTO-012 — Moteur expérimental du coffre direct V1
 
-**Audit suivant :** [CRYPTO-FIX-001](crypto-fix-001-audit.md) examine les jalons CRYPTO-001 à CRYPTO-011 avant toute suite ; CRYPTO-012 n'est pas commencé.
+`@bunny-talks/crypto-backup` expose `createDirectVaultV1`, `openDirectVaultV1` et le validateur structurel existant. La création chiffre des octets opaques avec HKDF-SHA256 et XChaCha20-Poly1305, un sel de 16 octets, un nonce de 24 octets et un en-tête JCS authentifié. L'ouverture valide d'abord l'enveloppe puis vérifie le tag avant de retourner le contenu. Le vecteur direct V1 indépendant sert de référence ; il ne démontre pas l'interopérabilité générale.
 
-**Statut :** validation structurelle expérimentale sous Node, pour revue ; coffre et production non validés.
+Le fournisseur `CryptographicRandomSource` est explicite et obligatoire, sans implémentation fournie. Il doit remplir intégralement les tampons avec un CSPRNG vérifié et produire des valeurs fraîches et indépendantes. Une source défectueuse peut satisfaire l'interface : sa qualité et la politique contre les collisions restent à vérifier avant utilisation réelle. Les dépendances d'exécution Noble 2.4.0 sont réutilisées depuis les évaluations du monorepo, sans approbation de production. Les copies locales sensibles sont écrasées au mieux ; JavaScript ne garantit pas leur effacement.
 
-## Résultat
+Le compte attendu et l'autorisation doivent être vérifiés indépendamment après authentification. La génération ne protège pas contre le rejeu ou un retour arrière. Les différences d'erreurs peuvent devenir un oracle distant. La conversion de l'erreur de tag dépend du message de Noble 2.4.0 ; elle doit être revue lors des mises à jour. Les erreurs internes inattendues sont propagées. La compatibilité Expo/Hermes, la résistance aux allocations sur mobile, la fraîcheur, le protocole de récupération et une revue indépendante restent ouverts. **SEC-CRYPTO-002 et SEC-CRYPTO-003 restent bloquants en production.** Voir la [spécification directe](../security/recovery-vault-direct-v1.md).
 
-`@bunny-talks/crypto-backup` est un package NodeNext indépendant d'OpenE2EE. Il expose `validateEnvelopeStructureV1`, un résultat portant le statut `structural-only-unauthenticated`, et le contrat asynchrone `CryptographicRandomSource` sans fournisseur. `canonicalize` 5.0.0 et `jsonc-parser` 3.3.1 sont des dépendances directes d'exécution du package pour ce validateur expérimental ; leur compatibilité mobile et leur choix pour production restent à valider. Le type d'aléa ne prouve pas que son implémentation est cryptographiquement sûre ; la future orchestration devra refuser une source absente ou non autorisée et propager les erreurs sans repli faible.
-
-Le validateur prend une copie des octets après limite d'entrée, rejette UTF-8 malformé et BOM, contrôle les événements de parsing strict, champs et doublons décodés, profondeur maximale, tailles, Base64url canonique et format, puis compare le JSON canonique. Il retourne des chaînes immuables, sans modifier l'entrée. Le résultat ne vérifie ni authenticité, ni compte attendu, ni fraîcheur, ni autorisation ; il ne faut pas l'utiliser comme preuve d'un de ces états.
-
-Les tests sous Node réutilisent le vecteur CRYPTO-008 et couvrent notamment les erreurs structurelles, les tailles et une entrée profondément imbriquée. Aucun chiffrement, déchiffrement, import d'identité, stockage ou autorisation n'est implémenté.
-
-La revue finale isole la conversion des `SyntaxError` à l'appel `JSON.parse` ; les exceptions inattendues du visiteur et du canoniseur restent propagées. Les caractères de doublon échappé et de substitut isolé sont vérifiés dans les octets des fixtures. Des tests instrumentés observent l'arrêt au troisième objet pour plusieurs profondeurs ainsi que le rejet d'un tableau ou champ inconnu avant visite de leur contenu. Ces observations ne mesurent pas les allocations internes.
-
-## Limites et décisions ouvertes
-
-- **Pas de déclaration de résistance complète aux attaques par allocation.** L'entrée totale est limitée à 131 072 octets et le visiteur interrompt la profondeur au-delà de deux objets ; `jsonc-parser` scanne et peut allouer les chaînes avant leurs callbacks. Les allocations réelles, les extrêmes de temps et les limites sur Hermes/iOS/Android n'ont pas été mesurés. Les limites restent candidates et doivent être justifiées par la charge réelle.
-- `TextDecoder` fatal, `canonicalize` et son besoin `String.prototype.isWellFormed` n'ont pas été validés sur Hermes. Les tests Node ne constituent ni validation mobile ni audit de sécurité.
-- La vérification du compte attendu, l'authentification AEAD, la fraîcheur indépendante et l'autorisation individuelle restent des responsabilités distinctes et non implémentées. La gestion des versions futures et l'interface sûre de données authentifiées restent à concevoir.
-- Aucun CSPRNG ni adaptateur mobile n'est fourni ou approuvé ; il faut inspecter les chemins de débogage et proscrire tout repli prévisible.
-- **SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts et bloquants avant association ou récupération en production.**
-
-Attendre la revue avant d'engager CRYPTO-012.
+Un changement ordinaire du mot de passe conserve les autres appareils connectés et autorisés ; leur révocation est une action distincte. Le secret de récupération est indépendant du mot de passe. Aucun de ces comportements de compte n'est implémenté ici.
