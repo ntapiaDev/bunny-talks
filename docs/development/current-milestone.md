@@ -1,35 +1,28 @@
-# Jalon CRYPTO-002 — Import contrôlé d'identité
+# Jalon CRYPTO-003 — Évaluation du transfert d'identité
 
-**Statut :** démonstration technique CRYPTO-002 réalisée pour revue ; non validée pour la production. SEC-CRYPTO-002 reste ouvert et bloque toute association ou récupération en production.
+**Statut :** caractérisation expérimentale en revue ; association sécurisée non validée.
 
-## Objectif et comportement
+## Objectif
 
-L'import est réservé à l'initialisation d'un appareil vierge ou à une récupération explicite ; la connexion classique ne doit pas l'appeler. `importIdentity` valide une copie de l'identité, refuse un store ACI déjà initialisé, écrit via le store SQLite public du SDK puis relit et vérifie les deux paires et l'identifiant local. Tout import répété est refusé, même pour la même identité. Il ne génère pas d'identité et ne modifie pas les sessions ni les préclés.
+Évaluer les API publiques de transfert d'OpenE2EE 14.4.0 sans construire de protocole d'association ni d'interface mobile. L'identité durable est partagée entre appareils autorisés ; les sessions, préclés et identifiants d'enregistrement restent propres à chaque appareil.
 
-Le type d'entrée limite l'opération aux stores SQLite Node, Expo et React Native du SDK. Les stores mémoire et clé-valeur examinés ne mettent pas nécessairement à jour l'identifiant local lors de `storeIdentityKey` ; ils ne sont pas pris en charge par cette opération.
+## Résultats observés
 
-## Garanties testées
+Le test de caractérisation utilise deux stores SQLCipher Node et des clés générées à l'exécution. Il vérifie le transfert chiffré des deux paires d'identité, leur import expérimental avec un nouvel identifiant, l'absence de copie des préclés et sessions, et le rejet d'une altération du ciphertext ou d'une mauvaise clé. Ce test ne démontre ni un échange authentifié ni la sûreté du protocole complet.
 
-Sur deux bases SQLCipher Node indépendantes : import vierge, rejet d'une identité invalide, refus des réimports et d'une identité différente, sérialisation de deux appels concurrents sur la même instance, conservation d'une préclé, réouverture et vérification des deux paires et de l'identifiant. Les clés des bases sont distinctes dans un même coffre de test ; une mauvaise clé ne rouvre pas la base. Le coffre de test est en mémoire et ne démontre pas la persistance d'un coffre natif.
+Le même QR est accepté plusieurs fois dans sa fenêtre et un même paquet peut être déchiffré plusieurs fois. Un tiers connaissant le QR public peut générer sa propre paire éphémère et construire un bundle que le destinataire peut déchiffrer avec la clé publique de ce tiers : les primitives testées n'authentifient pas l'ancien appareil. Les métadonnées extérieures du bundle chiffré ne sont pas vérifiées par `decryptBackup`. Ces tests caractérisent les primitives ; ils ne prouvent pas que toutes les intégrations possibles sont vulnérables.
 
-## Limites de sécurité
+Le déchiffrement répété démontre uniquement que `decryptBackup` ne maintient pas d'état anti-rejeu ; il ne démontre pas l'acceptation répétée d'une autorisation ou l'enregistrement d'un appareil, qui ne sont pas testés. Le SDK dérive avec HKDF une `authenticationKey` distincte de l'`encryptionKey` et la retourne à l'appelant. Aucun usage de cette clé dans une opération publique de transfert, ni protocole de messages de contrôle associé, n'a été trouvé dans la version distribuée. Sa dérivation seule n'authentifie pas les appareils ni les messages ; AES-GCM assure l'intégrité de la charge chiffrée via l'`encryptionKey`, tandis que l'application reste responsable de l'authentification, des autorisations, du contexte et de l'anti-rejeu.
 
-- Le contrôle d'absence et l'écriture ne forment pas une transaction atomique. La sérialisation locale ne coordonne que les appels `importIdentity` partageant la même instance de store dans le même contexte JavaScript ; elle ne protège pas des autres processus, instances ou écritures SDK directes. L'appelant doit exclure tous les autres écrivains pendant l'import.
-- Les contrôles publics d'existence ne garantissent pas la détection de tous les états de base partiellement corrompus. Une base corrompue ou au statut incertain ne doit pas être traitée comme vierge.
-- En cas d'échec de l'écriture ou de la relecture, l'état doit être considéré comme incertain : aucun rollback de l'opération complète n'est garanti. Il ne faut pas relancer automatiquement l'import ni activer l'appareil sans diagnostic et reprise sûrs.
-- Un store sans identité peut contenir des préclés, sessions ou autres données cryptographiques. L'opération actuelle ne vérifie pas l'absence de ces données : le test de conservation d'une préclé ne valide pas son utilisation avec l'identité importée. L'initialisation n'est acceptable que dans un espace dont l'état vierge ou la cohérence avec l'identité à installer a été établi par une procédure autorisée et testée. Un état inconnu ou partiel doit rester isolé, sans suppression ni réinitialisation automatique.
-- Le store SQLite du SDK écrit identité et registration ID dans une transaction interne ; cela ne rend pas atomique le contrôle d'absence préalable. Les tests n'injectent pas de panne pendant cette transaction.
-- La cohérence des clés n'authentifie pas leur provenance. Avant association multi-appareils en production, il faut authentifier le transfert, autoriser l'appareil, coordonner durablement tous les écrivains et tester récupération, panne et révocation.
-- La compatibilité Expo, le coffre natif et les stores SQLCipher mobiles restent à tester sur appareils. La plage d'identifiants 1–16380 demeure conservatrice en raison de la divergence du SDK.
+`createDeviceBackup` recopie l'objet renvoyé par l'adaptateur. Si celui-ci retourne l'identité SDK complète, le registration ID source est également exporté et `validateBackup` l'accepte dans l'objet d'identité. L'adaptateur de test sélectionne explicitement les deux paires ; un futur export devra faire de même et vérifier les champs transmis.
 
-## Reprise attendue après une écriture incertaine
+## Exigences ouvertes avant production
 
-Mettre l'appareil et son store en attente, empêcher leur activation et toute écriture concurrente, conserver les données et le coffre pour diagnostic, puis appliquer une procédure de reprise authentifiée et testée. Cette procédure doit déterminer l'état durable et sa cohérence avant toute décision d'activation ou nouvelle tentative. Aucun effacement, remplacement ou nouvel import automatique n'est autorisé. Cette procédure n'est pas encore implémentée ni validée.
+- **SEC-CRYPTO-002 reste ouvert et bloquant** : création conditionnelle ou équivalent, protection de tous les chemins d'écriture, reprise après panne, états partiels et tests sur les backends réels.
+- **SEC-CRYPTO-003 — transfert et autorisation : ouvert et bloquant.** Définir et valider un parcours qui authentifie et lie les deux appareils et leur compte à la même tentative, protège l'intégrité du contexte, vérifie l'autorisation explicite et la limite d'appareils, empêche les substitutions et rejeux, impose une expiration et assure l'annulation et la reprise sûres. Tester également le relais hostile, les interruptions, les erreurs d'horloge et la révocation. Aucun mécanisme propre n'est retenu à ce stade.
+- L'identité cohérente ne prouve ni son origine ni l'autorisation de l'appareil. Un coffre de récupération indépendant et l'archive chiffrée restent distincts du transfert entre appareils.
+- Le nettoyage des secrets en mémoire JavaScript est limité ; les chaînes et copies ne peuvent pas être effacées de façon garantie. Les intégrations Expo, SQLCipher et coffre natif restent à tester sur appareils.
 
-## SEC-CRYPTO-002 — Ouvert
+## Suite recommandée
 
-Avant toute association ou récupération d'appareil en production, démontrer la création conditionnelle atomique de l'identité et de son identifiant local ou une garantie équivalente, la protection de tous les chemins d'écriture contre les remplacements silencieux, une reprise sûre après panne, des tests de concurrence et d'intégration sur les backends réellement utilisés et une gestion cohérente des états partiels. Les détails et options figurent dans ADR-003.
-
-## Suite
-
-Étudier d'abord une primitive publique OpenE2EE adaptée. À défaut, évaluer un adaptateur transactionnel conforme aux interfaces publiques après décision architecturale supplémentaire. Aucun jalon ultérieur n'est engagé.
+Examiner d'abord les garanties publiques d'une solution d'association authentifiée et soumettre sa conception et son modèle de menace à revue avant toute intégration. Ne pas utiliser directement les primitives caractérisées comme parcours de production.

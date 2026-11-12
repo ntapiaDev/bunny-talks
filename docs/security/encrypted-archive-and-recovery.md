@@ -193,3 +193,7 @@ La préparation d'une identité vérifie la cohérence de ses clés sans authent
 L'absence d'identité ne prouve pas qu'un store est vierge : il peut déjà contenir des préclés, des sessions ou d'autres données. L'opération actuelle ne vérifie pas leur absence ou leur cohérence. Un état inconnu ou partiel doit rester isolé et ne doit pas être automatiquement réinitialisé. Après une écriture potentiellement réussie suivie d'une erreur, conserver le store et son coffre, empêcher l'activation et les nouvelles écritures, puis appliquer une procédure de diagnostic et de reprise authentifiée qui reste à définir et à tester.
 
 L'exigence bloquante **SEC-CRYPTO-002**, définie dans ADR-003 et suivie dans le jalon courant, impose les garanties de création conditionnelle, de protection des chemins d'écriture, de reprise après panne, de gestion des états partiels et de tests de concurrence sur les backends réels avant toute association ou récupération d'appareil en production.
+
+## 14. Transfert entre appareils : authentification à valider
+
+Le QR et le chiffrement du bundle ne suffisent pas à établir à eux seuls l'identité et l'autorisation des deux appareils. Le parcours d'association doit satisfaire **SEC-CRYPTO-003**, exigence ouverte et bloquante avant production décrite dans ADR-003 : authentification des appareils et du compte, liaison à une tentative unique, protection contre substitution et rejeu, expiration et reprise sûre. La récupération indépendante après perte des appareils reste un parcours distinct. **SEC-CRYPTO-002 reste bloquant.**

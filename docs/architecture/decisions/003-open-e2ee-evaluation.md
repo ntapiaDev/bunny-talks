@@ -49,3 +49,15 @@ Avant utilisation en production, démontrer :
 5. Une gestion cohérente des états partiellement initialisés.
 
 Étudier en priorité l'obtention d'une primitive publique adaptée dans OpenE2EE. Si elle n'est pas disponible, conserver l'option d'un adaptateur transactionnel conforme aux interfaces publiques ; sa réalisation exige une décision d'architecture supplémentaire.
+
+## CRYPTO-003 — Transfert d'identité en évaluation
+
+Les primitives publiques de `device` permettent de chiffrer un bundle contenant l'identité durable et de générer de nouvelles clés éphémères. Le test Node vérifie le transfert et l'import expérimental, mais pas un parcours d'association authentifié. Le QR public contient la clé du nouvel appareil et une date ; les primitives examinées ne démontrent ni l'authentification de l'ancien appareil, ni l'usage unique du QR ou du paquet. Le SDK délègue le transport et sa politique à l'application. Les métadonnées extérieures à la charge chiffrée ne sont pas contrôlées par `decryptBackup`.
+
+`deriveTransferKeys` dérive et retourne deux clés distinctes au moyen de HKDF : `encryptionKey` et `authenticationKey`. Les opérations de transfert distribuées utilisent l'`encryptionKey` pour AES-GCM ; aucun usage de l'`authenticationKey` ni protocole de messages de contrôle associé n'a été identifié dans leurs API ou leur implémentation. Sa dérivation ne prouve donc pas l'authentification des appareils ou des messages. L'intégrité de la charge AES-GCM ne couvre pas à elle seule l'identité des participants, leur autorisation ou l'anti-rejeu : ces garanties restent à définir et à valider pour Bunny Talks.
+
+Le déchiffrement répété d'un paquet est observé dans le test sans état anti-rejeu. Il ne démontre pas l'acceptation répétée d'une autorisation ou d'un enregistrement d'appareil, parcours que ce test n'exécute pas.
+
+Le bundle ne contient que les deux paires si l'adaptateur d'export sélectionne explicitement ces champs. `createDeviceBackup` recopie l'objet de l'adaptateur et `validateBackup` accepte des champs supplémentaires à l'intérieur de l'identité : un adaptateur renvoyant une identité SDK complète transmet aussi son registration ID. Le futur export doit éviter cette transmission accidentelle.
+
+**SEC-CRYPTO-003 : ouvert et bloquant avant production.** Le futur parcours doit authentifier les deux appareils et leur compte, lier leur autorisation et le contexte à une tentative unique, prévenir substitution et rejeu, imposer une expiration, et assurer une reprise sûre après interruption. Les garanties doivent être validées par une conception et des tests d'intégration sur les backends réels. Ne pas déduire de l'échange ECDH seul l'autorisation d'un appareil. **SEC-CRYPTO-002 reste également ouvert et bloquant.**
