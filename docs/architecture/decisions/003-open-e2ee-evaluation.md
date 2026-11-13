@@ -1,6 +1,6 @@
 # ADR-003 — Évaluation d'OpenE2EE 14.4.0
 
-**Statut :** en évaluation ; aucun choix de production définitif.
+**Statut au 13 novembre 2026 : recommandation B retenue pour l'évaluation** — poursuivre provisoirement les expériences avec OpenE2EE 14.4.0 ; aucun choix de production définitif. Le prochain POC n'est pas autorisé par cette décision documentaire.
 
 ## Contexte
 
@@ -14,11 +14,25 @@ Isoler OpenE2EE 14.4.0 dans `crypto-engine` et vérifier ses API publiques, son 
 
 D'autres bibliothèques, notamment libsignal, restent candidates ; choisir maintenant sans intégration ni audit suffisant serait prématuré.
 
+Libsignal offre un moteur officiel utilisé par Signal, mais les usages tiers ne sont pas supportés, la distribution AGPL et les ponts natifs Expo restent à évaluer. Libsodium fournit des primitives candidates pour le coffre et les contenus, pas un protocole de messagerie. Son ajout exigerait une justification et une qualification du binding. Aucun changement de bibliothèque n'est décidé. Voir [l'audit de transition](../e2ee-transition-audit.md).
+
 ## Conséquences
 
 Les essais doivent rester réutilisables et couvrir les pannes. La cohérence d'une paire de clés ne prouve pas l'authenticité de sa provenance. Les divergences de bornes de registration ID et la compatibilité native restent à résoudre.
 
 L'examen de CRYPTO-002 ne démontre pas d'import conditionnel atomique avec les API publiques `IdentityKeyStore`. La préparation d'une identité ne constitue pas un import, et le comportement des stores SQLite et clé-valeur pour l'identifiant local doit être testé séparément.
+
+## Éléments et limites de l'évaluation
+
+Les API publiques permettent l'export des deux paires d'identité et leur import avec un registration ID propre à l'appareil. Les tests du projet démontrent cet import et sa persistance après réouverture d'un store SQLCipher sous Node, sans démontrer des échanges multi-appareils complets. Le bundle d'identité exclut les sessions, préclés et messages ; il ne restaure pas l'historique à lui seul. Les données de sessions conservées et l'archive requièrent des traitements distincts.
+
+Le projet est publiquement récent, son écosystème et sa maintenance restent à observer. Le document d'assurance livré indique que les principaux tests d'ingénierie ne sont pas publics et qu'aucun audit cryptographique indépendant n'est engagé. Ces déclarations ne constituent ni une preuve de vulnérabilité, ni une validation de sécurité. Les résultats de tests privés et l'interopérabilité annoncée n'ont pas été reproduits ; le profil du SDK n'est pas compatible sur le fil avec libsignal. Expo/Hermes pour Bunny Talks, la récupération intégrale et la révocation après compromission ne sont pas démontrés.
+
+Deux anomalies demandent une caractérisation : le générateur produit des registration IDs jusqu'à 16383 alors que la constante publique utilisée par notre import limite à 16380 ; le sérialiseur public de sessions utilise JSON simple tandis que les stores persistants disposent d'un codec spécifique pour des types supplémentaires. L'impact sur une session réelle doit être testé ; aucune vulnérabilité exploitable n'est affirmée. Les versions publiées et les avis de sécurité n'ont pas pu être établis exhaustivement lors de l'audit en raison d'accès externes incomplets.
+
+**Poursuite du prototype :** limiter les travaux approuvés à des expériences vérifiables sur les API publiques, l'identité commune, les sessions, la reprise et les frontières de révocation. **Arrêt ou réévaluation :** dépendance incontournable à des API internes pour une exigence fondamentale, impossibilité de restaurer les secrets indispensables, absence de stratégie crédible d'historique ou de révocation, défaut cryptographique démontré ou maintenance devenue déraisonnable. Un manque d'audit ou la jeunesse du projet n'établit pas seul une incompatibilité, mais reste un risque majeur pour une production sensible.
+
+Avant production : résoudre SEC-CRYPTO-002/003, concevoir le coffre et l'archive, valider les parcours sur les appareils réels, examiner les licences et la chaîne de dépendances, assurer des tests et une stratégie de migration, puis obtenir une revue cryptographique indépendante du système livré.
 
 ## Import concurrent : options étudiées
 

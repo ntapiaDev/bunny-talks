@@ -2,6 +2,8 @@
 
 **Statut : format et API expérimentaux pour revue.** Cette charge n'est pas un protocole de restauration, n'est pas approuvée pour la production et peut évoluer après revue. Les limites et la représentation des secrets d'archive sont des choix de test, pas une décision sur la hiérarchie réelle des archives.
 
+**Actualisation du 13 novembre 2026 :** cette charge demeure un profil expérimental lié aux deux paires d'identité étudiées. La cible du coffre possède désormais une clé maître indépendante et deux enveloppes, par mot de passe et par clé de récupération ; aucun pont complet entre ce format, le SDK et l'archive n'est démontré. Voir [l'architecture cible](recovery-vault-architecture.md).
+
 ## Schéma binaire candidat
 
 Tous les entiers multioctets sont non signés et en ordre réseau (big endian). Les octets sont opaques ; aucun encodage texte, alignement ou padding n'est admis. Les offsets commencent à zéro.

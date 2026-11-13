@@ -1,6 +1,8 @@
 # CRYPTO-008 — Spécification candidate du coffre direct V1
 
-**Statut : format et moteur expérimentaux pour revue ; aucun protocole complet de coffre n'est validé pour la production.** Le format ci-dessous remplace, pour les prochaines expériences, l'enveloppe à deux clés de CRYPTO-006, conservée comme comparaison. Les limites, identifiants, contrats et octets restent candidats ; les modifier exige de régénérer les vecteurs. Les tests des primitives ne valident pas le protocole complet.
+**Statut : format et moteur expérimentaux pour revue ; aucun protocole complet de coffre n'est validé pour la production.** Au jalon CRYPTO-008, le format ci-dessous remplaçait pour les expériences l'enveloppe à deux clés de CRYPTO-006, conservée comme comparaison. Les limites, identifiants, contrats et octets restent candidats ; les modifier exige de régénérer les vecteurs. Les tests des primitives ne valident pas le protocole complet.
+
+**Actualisation du 13 novembre 2026 — format expérimental historique :** la recommandation de poursuivre ce format comme cible est remplacée par la décision d'une clé maître indépendante et de deux enveloppes d'accès. Le code direct V1 existe toujours pour caractérisation ; ses tests et vecteurs restent utiles, mais il ne met pas en œuvre cette nouvelle cible. Voir [l'architecture actuelle](recovery-vault-architecture.md).
 
 L'[investigation CRYPTO-009](recovery-vault-technical-prerequisites.md) précise les candidats de parsing et d'aléa ainsi que les chemins de débogage à repli prévisible à exclure.
 

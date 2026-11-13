@@ -2,6 +2,8 @@
 
 **Statut : proposition pour revue, non implémentée et non validée pour la production.** Les noms, limites, contrats et octets ci-dessous constituent un profil candidat cohérent à examiner, pas un format déployé ni un choix définitif de fournisseur. Les primitives standard ne rendent pas automatiquement sûre leur composition ; une revue cryptographique indépendante et des tests d'interopérabilité sont préalables à son adoption. CRYPTO-005 a seulement caractérisé des primitives sous Node.
 
+**Actualisation du 13 novembre 2026 — étude historique :** les propositions et arbitrages CRYPTO-006 à CRYPTO-008 ci-dessous visaient un accès par secret de récupération. Ils ne sont plus la cible fonctionnelle : celle-ci exige une clé maître indépendante et deux enveloppes, par mot de passe et par clé de récupération, après autorisation individuelle. Leur comparaison reste utile mais ne spécifie pas ce nouveau format. Voir [l'architecture actuelle](recovery-vault-architecture.md).
+
 **Actualisation CRYPTO-007 :** l'[évaluation d'interopérabilité](recovery-vault-interop-evaluation.md) recommande de poursuivre les expérimentations avec la composition directe A. Les sections ci-dessous conservent la proposition B et ses contrats comme référence de comparaison ; elles ne définissent pas le format de A et ne constituent pas une décision de production.
 
 **Actualisation CRYPTO-008 :** la [spécification candidate directe V1](recovery-vault-direct-v1.md) décrit séparément les champs et contrats envisagés pour A ; elle n'est ni implémentée ni validée pour la production.

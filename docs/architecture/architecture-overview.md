@@ -24,32 +24,32 @@ L'architecture retenue est un **monolithe modulaire organisé en monorepo**, ave
 
 ### 2.1. Applications
 
-Le dépôt comporte plusieurs applications ayant des responsabilités distinctes.
+Les applications suivantes sont prévues avec des responsabilités distinctes. Les répertoires locaux `apps/api`, `apps/mobile` et `apps/crypto-lab` sont actuellement vides : aucune de ces applications n'est encore implémentée dans le dépôt.
 
-| Application       | Responsabilité                                            | Technologie        |
-| ----------------- | --------------------------------------------------------- | ------------------ |
-| `apps/api`        | API, comptes, relations, communications, espaces partagés | NestJS             |
-| `apps/mobile`     | Application principale iOS et Android                     | React Native, Expo |
-| `apps/crypto-lab` | Banc d'essai et démonstration cryptographique             | À déterminer       |
-| `apps/web`        | Application web future                                    | À déterminer       |
+| Application       | Responsabilité                                            | Technologie        | Statut                |
+| ----------------- | --------------------------------------------------------- | ------------------ | --------------------- |
+| `apps/api`        | API, comptes, relations, communications, espaces partagés | NestJS             | Prévue                |
+| `apps/mobile`     | Application principale iOS et Android                     | React Native, Expo | Prévue                |
+| `apps/crypto-lab` | Banc d'essai et démonstration cryptographique             | À déterminer       | Prévu, non implémenté |
+| `apps/web`        | Application web future                                    | À déterminer       | Différée              |
 
-L'application mobile constitue le premier client du produit.
+L'application mobile est prévue comme premier client du produit.
 
 L'application web sera développée ultérieurement, sans imposer de dépendance architecturale au client mobile.
 
 ### 2.2. Packages partagés
 
-Les packages contiennent du code réutilisable par plusieurs applications.
+Les packages ont vocation à contenir du code réutilisable par plusieurs applications. Les packages indiqués comme présents existent déjà, mais leurs responsabilités ci-dessous décrivent aussi des capacités futures.
 
-| Package          | Responsabilité                                    |
-| ---------------- | ------------------------------------------------- |
-| `contracts`      | Contrats et types partagés                        |
-| `validation`     | Schémas de validation partagés                    |
-| `crypto/core`    | Modèle cryptographique indépendant                |
-| `crypto/engine`  | Intégration du protocole cryptographique          |
-| `crypto/storage` | Stockage local sécurisé                           |
-| `crypto/backup`  | Sauvegarde et restauration cryptographiques       |
-| `crypto/devices` | Gestion des identités et associations d'appareils |
+| Package          | Responsabilité                                    | Statut                                     |
+| ---------------- | ------------------------------------------------- | ------------------------------------------ |
+| `contracts`      | Contrats et types partagés                        | Présent ; point d'entrée actuellement vide |
+| `validation`     | Schémas de validation partagés                    | Présent ; validation d'e-mail              |
+| `crypto/core`    | Modèle cryptographique indépendant                | Présent ; fondations                       |
+| `crypto/engine`  | Intégration du protocole cryptographique          | Présent ; évaluation expérimentale         |
+| `crypto/storage` | Stockage local sécurisé                           | Prévu ; répertoire local vide              |
+| `crypto/backup`  | Sauvegarde et restauration cryptographiques       | Présent ; composants expérimentaux         |
+| `crypto/devices` | Gestion des identités et associations d'appareils | Prévu ; répertoire local vide              |
 
 Le package `config` est reporté tant qu'un besoin réel de partage ne le justifie pas.
 
@@ -97,23 +97,25 @@ Expo Go ne constitue pas l'environnement de référence pour les fonctionnalité
 
 ## 4. Organisation du monorepo
 
+L'arborescence ci-dessous présente la cible, avec les statuts actuels. Un répertoire local vide ne constitue pas une application ou un package implémenté ; sa présence n'est pas garantie dans un nouveau checkout Git.
+
 ```text
 bunny-talks/
 ├── apps/
-│   ├── api/
-│   ├── mobile/
-│   ├── crypto-lab/
-│   └── web/                     # futur
+│   ├── api/                     # prévu ; répertoire local vide
+│   ├── mobile/                  # prévu ; répertoire local vide
+│   ├── crypto-lab/              # prévu ; répertoire local vide
+│   └── web/                     # différé
 │
 ├── packages/
-│   ├── contracts/
-│   ├── validation/
+│   ├── contracts/               # présent ; point d'entrée vide
+│   ├── validation/              # présent
 │   └── crypto/
-│       ├── core/
-│       ├── engine/
-│       ├── storage/
-│       ├── backup/
-│       └── devices/
+│       ├── core/                # présent ; fondations
+│       ├── engine/              # présent ; expérimental
+│       ├── storage/             # prévu ; répertoire local vide
+│       ├── backup/              # présent ; expérimental
+│       └── devices/             # prévu ; répertoire local vide
 │
 ├── docs/
 │   ├── product/
@@ -256,7 +258,7 @@ Les appareils de confiance d'un même compte partagent une identité cryptograph
 
 Un compte peut disposer au maximum de cinq appareils de confiance.
 
-Un nouvel appareil restaure principalement l'identité à partir du coffre et du secret de récupération, sans ancien appareil. Il doit obtenir une autorisation individuelle et accède à l'historique par l'archive chiffrée indépendante des sessions de transport. L'ordre entre autorisation et accès au coffre reste à valider. Le transfert par QR code est facultatif et reporté ; sa conception est distincte.
+Un nouvel appareil s'authentifie puis obtient une autorisation individuelle par lien e-mail à usage unique lié à sa demande, avant tout accès aux données protégées. Il peut ensuite déverrouiller localement le coffre avec le mot de passe et restaurer l'identité sans ancien appareil. Une archive chiffrée indépendante des sessions de transport est à étudier pour l'historique ; sa conception et sa récupération ne sont pas démontrées. Le transfert par QR code est facultatif et reporté.
 
 La distribution des messages doit tenir compte :
 
@@ -264,7 +266,7 @@ La distribution des messages doit tenir compte :
 - Des autres appareils autorisés de l'expéditeur.
 - Des sessions cryptographiques propres à chaque paire d'appareils.
 
-Le modèle précis de distribution sera défini après sélection du protocole.
+Le modèle précis de distribution reste à définir et à valider avec le moteur évalué ; aucun choix de protocole pour la production n'est définitif.
 
 ### 6.3. Médias
 
@@ -306,6 +308,8 @@ Les détails de la stratégie de nettoyage et de restauration restent à défini
 ## 8. Packages cryptographiques
 
 La cryptographie est isolée dans des packages réutilisables.
+
+Les listes suivantes décrivent les responsabilités visées. Elles ne signifient pas que toutes ces capacités sont déjà implémentées ; les statuts actuels figurent dans la section 2.2.
 
 ### `crypto/core`
 
@@ -351,14 +355,14 @@ Responsabilité :
 - Gestion des versions du format.
 - Gestion des suppressions et des snapshots.
 
-Le package `@bunny-talks/crypto-backup` contient actuellement une validation structurelle expérimentale du format candidat V1 et un contrat d'aléa, sans chiffrement ni restauration. Une validation structurelle ne démontre ni authenticité, ni contexte de compte, ni fraîcheur, ni autorisation. Les dépendances `jsonc-parser` et `canonicalize` y sont directes ; leur compatibilité mobile et leur usage en production ne sont pas validés. Les autres responsabilités listées restent à concevoir.
+Le package `@bunny-talks/crypto-backup` contient une validation structurelle, un contrat d'aléa, une création et une ouverture expérimentales de coffre direct V1, ainsi qu'une sérialisation candidate de charge de récupération. Le coffre direct ne réalise pas la cible à deux enveloppes. L'ouverture authentifiée ne prouve ni contexte de compte attendu, ni fraîcheur, ni autorisation. Les dépendances et leur compatibilité mobile ne sont pas validées pour la production ; aucun parcours complet de restauration n'est implémenté. Voir [l'architecture cible du coffre](../security/recovery-vault-architecture.md).
 
 ### `crypto/devices`
 
 Responsabilité :
 
 - Association d'un nouvel appareil.
-- Approbation cryptographique.
+- Autorisation individuelle des appareils.
 - Révocation.
 - Gestion des identités d'appareils.
 - Coordination des opérations multi-appareils.
@@ -367,9 +371,9 @@ Les frontières exactes entre ces packages pourront évoluer après validation d
 
 ### 8.1. Laboratoire cryptographique
 
-`apps/crypto-lab` est un banc d'essai.
+`apps/crypto-lab` est prévu comme banc d'essai ; son répertoire local est actuellement vide.
 
-Il permet de tester :
+Il pourra permettre de tester :
 
 - Les identités.
 - Les échanges entre utilisateurs.
@@ -533,7 +537,7 @@ Les points suivants ne sont pas encore définitivement définis :
 - Modèle de données PostgreSQL.
 - Protocole WebSocket.
 - Choix du fournisseur de stockage média.
-- Choix du SDK cryptographique.
+- Choix définitif du SDK cryptographique pour la production.
 - Modèle exact des identités et délégations cryptographiques.
 - Détails du stockage local mobile.
 - Infrastructure et hébergement.

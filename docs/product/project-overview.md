@@ -610,11 +610,11 @@ Décisions :
 
 - Maximum cinq appareils de confiance par compte.
 - Chaque appareil conserve ses propres éléments cryptographiques locaux lorsque le protocole l'exige.
-- Ajout principal d'un appareil par connexion au compte, secret de récupération et coffre déchiffré localement, sans ancien appareil.
-- Autorisation individuelle du nouvel appareil ; association par QR code facultative et reportée.
+- Ajout principal sans ancien appareil : connexion par e-mail et mot de passe, puis autorisation individuelle par lien e-mail à usage unique, lié à une demande identifiable et expirante. L'absence d'autorisation valide, et non la seule empreinte matérielle, caractérise un nouvel appareil.
+- Aucun accès aux données protégées avant l'autorisation requise. Le coffre est ensuite déverrouillé localement avec le mot de passe ; l'association par QR code est facultative et reportée.
 - Notifications de sécurité lors de l'ajout ou de la révocation.
 - L'action « Révoquer tous les autres appareils » nécessite le mot de passe du compte, conserve l'appareil demandeur et invalide les sessions et autorisations des autres appareils ; les éléments cryptographiques nécessaires aux futurs échanges doivent être renouvelés. Les connexions simultanées ordinaires restent autorisées. Un changement ordinaire du mot de passe conserve tous les autres appareils connectés et autorisés.
-- Révocation empêchant les accès futurs.
+- Révocation individuelle distincte, avec mot de passe exigé pour les opérations de révocation prévues ; le serveur refuse les accès après révocation effective et les futures distributions de clés doivent exclure l'appareil révoqué.
 - Reconnaissance du fait que la révocation ne peut pas effacer les données déjà déchiffrées ou copiées.
 
 Le QR code ne doit jamais contenir de clé privée en clair.
@@ -628,19 +628,18 @@ Décisions :
 - Sauvegarde quotidienne automatique lorsque des données ont changé.
 - Sauvegarde manuelle possible.
 - Sauvegarde chiffrée dans un coffre.
-- Phrase secrète personnelle distincte du mot de passe du compte.
-- Récupération de compte par e-mail, mais récupération cryptographique indépendante.
+- Un seul mot de passe pour le compte et le déverrouillage local du coffre ; aucune seconde phrase secrète choisie n'est demandée.
+- Une clé de récupération aléatoire indépendante est présentée dès l'inscription, avec des instructions pour la conserver hors du seul appareil.
+- La réinitialisation du compte par e-mail ne déchiffre pas le coffre : après oubli du mot de passe, il faut la clé de récupération ou l'intervention cryptographiquement valide d'un appareil encore autorisé.
 
 Modèle envisagé :
 
-- Argon2id pour dériver une clé à partir de la phrase secrète.
-- Sel unique.
-- Clé de chiffrement aléatoire de 256 bits.
-- Clé de chiffrement des données protégée par une clé de chiffrement dérivée.
-- Chiffrement authentifié AEAD avec nonces uniques.
-- Changement de phrase secrète permettant de ré-envelopper la clé de données sans nécessairement rechiffrer toute l'archive.
+- Authentification par mot de passe sur TLS et vérificateur Argon2id côté serveur, sans stockage du mot de passe en clair.
+- Dérivation côté client indépendante de celle du serveur, avec sel, paramètres et séparation de domaine propres.
+- Clé maître de coffre aléatoire et indépendante du mot de passe, protégée par deux enveloppes distinctes et versionnées : l'une par le mot de passe, l'autre par la clé de récupération.
+- Chiffrement authentifié du coffre ; un changement ordinaire du mot de passe permet de réenvelopper sa clé maître et laisse les autres appareils autorisés connectés.
 
-Le format exact et les paramètres cryptographiques devront être validés avec la bibliothèque choisie.
+Le format exact, les algorithmes et les paramètres cryptographiques restent à valider. Le serveur d'authentification reçoit le mot de passe ; un serveur activement compromis peut le capturer et potentiellement ouvrir le coffre. OPAQUE n'est pas retenu en V1. Voir [l'architecture du coffre](../security/recovery-vault-architecture.md).
 
 ## 10.5. Contenu des sauvegardes
 
@@ -659,6 +658,10 @@ Le format exact et les paramètres cryptographiques devront être validés avec 
 - Sessions actives, qui seront recréées après restauration.
 
 Le système doit gérer les suppressions par tombstones et prendre en charge les sauvegardes initiales puis, à terme, incrémentales.
+
+La suppression pour tous des messages est retenue : une demande valide rend immédiatement le message inaccessible côté serveur, puis se propage aux appareils concernés. Les copies chiffrées, archives, sauvegardes et restaurations doivent tenir compte des tombstones pour éviter sa réapparition. L'effacement physique différé et les copies déjà exportées ou déchiffrées restent soumis aux limites décrites dans [les règles de conservation](../security/encrypted-archive-and-recovery.md#9-suppression-et-conservation).
+
+L'objectif est de restaurer aussi complètement que possible l'historique conservé et effectivement archivé, avec ses médias et données de modules partagés. Les messages encore en attente de distribution, les données jamais synchronisées ou archivées et les objets ou clés indisponibles peuvent manquer ; la récupération intégrale n'est pas encore démontrée.
 
 Les transferts de sauvegarde doivent suivre un processus temporaire puis de validation définitive.
 

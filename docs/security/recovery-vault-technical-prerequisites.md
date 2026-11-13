@@ -1,6 +1,8 @@
 # CRYPTO-009 — Prérequis techniques du coffre direct V1
 
-**Statut : investigation et caractérisation Node, pour revue ; aucune API de coffre ni dépendance de production ajoutée.** Le [format V1](recovery-vault-direct-v1.md) reste candidat. Aucun résultat ci-dessous n'établit la compatibilité Hermes, Expo ou la sécurité de l'intégration complète.
+**Actualisation du 13 novembre 2026 — état historique :** les affirmations ci-dessous sur les API et dépendances décrivent CRYPTO-009. Le coffre direct est depuis implémenté à titre expérimental ; il est remplacé comme cible par [l'architecture à deux enveloppes](recovery-vault-architecture.md).
+
+**Statut historique CRYPTO-009 : investigation et caractérisation Node, pour revue ; à ce jalon, aucune API de coffre ni dépendance de production n'avait été ajoutée.** Le [format V1](recovery-vault-direct-v1.md) demeure expérimental. Aucun résultat ci-dessous n'établit la compatibilité Hermes, Expo ou la sécurité de l'intégration complète.
 
 **Actualisation CRYPTO-010 :** l'[évaluation des composants](recovery-vault-component-evaluation.md) présente les essais ultérieurs de trois candidats installés uniquement pour le développement. Les observations ci-dessous décrivent l'état de CRYPTO-009.
 

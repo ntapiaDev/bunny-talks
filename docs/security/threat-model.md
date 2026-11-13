@@ -36,7 +36,7 @@ L'objectif est de définir précisément :
 
 Les lettres, conversations instantanées, notes éphémères et médias privés doivent être chiffrés de bout en bout.
 
-Le serveur ne doit pas pouvoir déchiffrer ces contenus.
+Dans le fonctionnement prévu, le serveur ne reçoit pas les clés E2EE en clair et ne doit pas déchiffrer ces contenus. Cette propriété reste soumise aux limites d'un serveur d'authentification activement compromis, décrites en section 6.1.
 
 ### 2.2. Minimisation des données
 
@@ -289,7 +289,7 @@ Menaces :
 
 Protections attendues :
 
-- Stockage sécurisé des mots de passe côté serveur.
+- Vérificateur Argon2id côté serveur, sans conservation du mot de passe en clair ; le mot de passe est transmis au serveur sur TLS.
 - Protection contre les tentatives répétées.
 - Sessions révocables.
 - Gestion des appareils.
@@ -298,6 +298,8 @@ Protections attendues :
 - Séparation entre récupération du compte et récupération cryptographique.
 
 Le MFA n'est pas prévu dans la V1, mais l'architecture doit permettre de l'ajouter.
+
+La dérivation cliente de protection du coffre possède son propre sel, ses paramètres et sa séparation de domaine, indépendants du vérificateur serveur. Le serveur d'authentification reçoit le mot de passe : s'il est activement compromis, il peut le capturer et potentiellement ouvrir un coffre obtenu. OPAQUE, qui répond à un autre modèle d'authentification à mot de passe, n'est pas retenu en V1 ; aucune protection absolue contre un serveur actif n'est promise.
 
 **Révoquer tous les autres appareils — décision fonctionnelle :** cette action nécessite le mot de passe, conserve l'appareil demandeur et invalide les sessions et autorisations des autres appareils. Dès que la révocation est effective, le serveur doit refuser les sessions révoquées, même si leurs jetons restent stockés localement. Les connexions simultanées ordinaires restent autorisées. Un changement ordinaire du mot de passe conserve tous les autres appareils connectés et autorisés.
 
@@ -328,7 +330,7 @@ Protections attendues :
 - Vérification de l'identité des appareils.
 - Gestion des changements de clés et des révocations.
 
-Le protocole devra être sélectionné après étude approfondie.
+OpenE2EE 14.4.0 est le moteur actuellement évalué pour le prototype, selon la recommandation B : poursuivre provisoirement les expériences sous conditions. Aucun choix définitif de protocole ou de moteur pour la production n'a été approuvé. Voir [ADR-003](../architecture/decisions/003-open-e2ee-evaluation.md).
 
 ### 6.3. Médias
 
@@ -384,6 +386,7 @@ Protections attendues :
 - Identité cryptographique durable commune aux appareils de confiance du compte.
 - Identifiants d'enregistrement, sessions, préclés et clés locales de stockage propres à chaque appareil lorsque le protocole l'exige.
 - Autorisation individuelle authentifiée, y compris sans appareil existant ; son mécanisme reste à valider.
+- Lien e-mail à usage unique et expirant, lié à une demande d'ajout identifiable et protégé contre substitution et rejeu ; aucun accès protégé avant autorisation.
 - Association authentifiée.
 - Si l'association facultative par QR code est mise en œuvre : QR temporaire ne contenant aucune clé privée, et échange authentifié.
 - Notification des associations.
@@ -396,12 +399,14 @@ Une attention particulière doit être portée au risque qu'une clé d'identité
 
 Cette question doit être résolue avant la validation de l'architecture cryptographique.
 
+Un appareil révoqué peut conserver l'identité privée commune, les secrets d'archive ou la clé de récupération. Le refus des sessions par le serveur ne garantit ni l'effacement à distance ni l'impossibilité d'usurpation. Une compromission peut exiger de nouvelles clés indépendantes, une rotation exceptionnelle de l'identité et une nouvelle vérification par les correspondants ; leur orchestration reste à concevoir.
+
 ### 6.6. Sauvegardes et récupération
 
 Menaces :
 
 - Vol du coffre de sauvegarde.
-- Vol de la phrase secrète.
+- Vol du mot de passe ou de la clé de récupération.
 - Attaque par dictionnaire.
 - Corruption de l'archive.
 - Restauration d'une archive falsifiée.
@@ -410,16 +415,17 @@ Menaces :
 
 Protections attendues :
 
-- Phrase secrète distincte du mot de passe du compte.
-- Dérivation adaptée au secret ; Argon2id est un candidat à évaluer, notamment pour les secrets humains de faible entropie.
-- Sel unique.
-- Clé de chiffrement aléatoire.
+- Même mot de passe pour le compte et le déverrouillage local ; clé de récupération aléatoire indépendante, présentée dès l'inscription et conservée hors du seul appareil.
+- Clé maître aléatoire indépendante et deux enveloppes versionnées : mot de passe dérivé côté client et clé de récupération. Algorithmes et paramètres restent à valider.
+- Sel et paramètres indépendants pour la dérivation cliente ; une clé de récupération forte ne compense pas un mot de passe faible lorsque les deux enveloppes donnent accès à la même clé maître.
 - Chiffrement authentifié.
 - Nonces uniques.
 - Versionnement du format.
 - Vérification de l'intégrité.
 - Restauration contrôlée.
-- Révocation des anciens appareils après perte totale.
+- Révocation explicite des appareils selon l'incident, distincte du changement ordinaire du mot de passe.
+
+Un coffre ou une enveloppe copiés permettent des essais hors ligne indépendants de la limitation de débit serveur. La résistance dépend du mot de passe, du KDF et de ses paramètres, ainsi que de la protection d'accès aux enveloppes. L'e-mail seul ne déchiffre pas le coffre après réinitialisation. Les données non sauvegardées et les secrets perdus peuvent être irrécupérables ; un ancien coffre authentique n'établit pas sa propre fraîcheur.
 
 Les paramètres exacts devront être définis selon les recommandations actuelles et le SDK retenu.
 
@@ -503,7 +509,7 @@ Principes :
 - Les secrets ne sont jamais écrits dans les logs.
 - Les copies temporaires de clés doivent être limitées.
 
-Le modèle exact de cycle de vie des clés sera documenté après sélection du protocole.
+Le modèle exact de cycle de vie des clés reste à définir et à valider avec le moteur évalué, avant tout choix de production.
 
 ## 8. Protection des données au repos
 
@@ -602,7 +608,7 @@ Le chiffrement du contenu ne masque pas automatiquement les relations, horaires,
 
 ### Sauvegardes
 
-La perte de la phrase secrète peut rendre une sauvegarde définitivement inaccessible.
+La perte des moyens valides de déverrouillage et des appareils autorisés peut rendre une sauvegarde définitivement inaccessible.
 
 ### Notifications
 
@@ -610,7 +616,7 @@ Les fournisseurs push peuvent observer certaines informations de distribution.
 
 ### Compromission de l'infrastructure
 
-Un serveur compromis peut perturber les communications, modifier des métadonnées ou bloquer des comptes, même s'il ne peut pas déchiffrer les contenus protégés par un E2EE correctement implémenté.
+Un serveur compromis peut perturber les communications, modifier des métadonnées ou bloquer des comptes. Le serveur d'authentification reçoit le mot de passe : s'il est activement compromis, il peut le capturer et potentiellement ouvrir le coffre et les données protégées accessibles avec ses secrets. La bonne implémentation du transport E2EE n'élimine pas cette limite de la V1.
 
 Ces limites doivent être prises en compte dans les garanties annoncées aux utilisateurs.
 
@@ -644,7 +650,7 @@ Avant une mise en production, il faudra notamment vérifier :
 - Sauvegarde après modification.
 - Restauration.
 - Corruption.
-- Mauvaise phrase secrète.
+- Mauvais mot de passe ou mauvaise clé de récupération.
 - Perte totale des appareils.
 - Révocation des anciens appareils.
 

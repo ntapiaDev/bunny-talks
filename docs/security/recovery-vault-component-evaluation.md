@@ -1,6 +1,8 @@
 # CRYPTO-010 — Caractérisation des composants de sécurité
 
-**Statut :** résultats expérimentaux Node pour revue ; aucun composant n'est approuvé pour un coffre de production. Aucun package `crypto-backup` ni API de coffre n'est créé. Le [format direct V1](recovery-vault-direct-v1.md) et SEC-CRYPTO-002/003 restent ouverts.
+**Actualisation du 13 novembre 2026 — état historique :** les affirmations ci-dessous sur les packages et dépendances décrivent CRYPTO-010. `crypto-backup` existe depuis et contient notamment le coffre direct expérimental, qui ne satisfait pas la cible actuelle à deux enveloppes. Voir [le jalon courant](../development/current-milestone.md).
+
+**Statut historique CRYPTO-010 :** résultats expérimentaux Node pour revue ; aucun composant n'est approuvé pour un coffre de production. À ce jalon, aucun package `crypto-backup` ni API de coffre n'avait été créé. Le [format direct V1](recovery-vault-direct-v1.md) demeure expérimental et SEC-CRYPTO-002/003 restent ouverts.
 
 ## Périmètre et dépendances
 
