@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@bunny-talks/crypto-backup": "workspace:*",
     "@bunny-talks/crypto-engine": "workspace:*",
     "@open-e2ee/signal-protocol-sdk": "14.5.0",
     "expo": "57.0.25",

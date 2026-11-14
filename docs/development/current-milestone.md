@@ -1,4 +1,8 @@
-# Jalon 2 — Composition authentifiée du coffre E2EE — 14 novembre 2026
+# Jalon 3 — Qualification Android/Hermes du coffre — 14 novembre 2026
+
+**Qualification partielle, non validée :** les contrôles rapides (aléa natif, vecteur HKDF, ouverture du vecteur de publication par récupération et manifest) réussissent sur émulateur Android/Hermes. La dérivation Argon2id a été interrompue avant résultat après plusieurs observations ; le parcours complet et la persistance ne sont pas qualifiés. Voir le [rapport détaillé](android-vault-qualification.md). La configuration Metro cible l’entrée ESM du parseur après un échec runtime de l’entrée UMD. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. Aucun jalon suivant n’est commencé.
+
+## Historique — Jalon 2 du coffre E2EE
 
 **Implémenté pour revue :** création et ouverture d’une charge opaque par les deux voies, manifest HMAC-SHA-256 et réenveloppement local du mot de passe conservant exactement contenu chiffré et enveloppe récupération. Voir la [spécification V1](../security/account-vault-v1.md). Le profil Argon2id, Hermes et les plateformes natives restent à qualifier. Aucun backend, parcours de compte, import SDK ou archive n’est ajouté. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. Les modifications restent non commitées ; le jalon 3 n’est pas commencé.
 
