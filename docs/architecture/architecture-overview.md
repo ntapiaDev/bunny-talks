@@ -355,7 +355,7 @@ Responsabilité :
 - Gestion des versions du format.
 - Gestion des suppressions et des snapshots.
 
-Le package `@bunny-talks/crypto-backup` contient une validation structurelle, un contrat d'aléa, une création et une ouverture expérimentales de coffre direct V1, ainsi qu'une sérialisation candidate de charge de récupération. Le coffre direct ne réalise pas la cible à deux enveloppes. L'ouverture authentifiée ne prouve ni contexte de compte attendu, ni fraîcheur, ni autorisation. Les dépendances et leur compatibilité mobile ne sont pas validées pour la production ; aucun parcours complet de restauration n'est implémenté. Voir [l'architecture cible du coffre](../security/recovery-vault-architecture.md).
+Le package `@bunny-talks/crypto-backup` ne propose aucune API de coffre à sa racine. Son entrée explicite `@bunny-talks/crypto-backup/experimental` conserve la validation structurelle, le contrat d'aléa, la création et l'ouverture du coffre direct V1 et la sérialisation candidate de charge de récupération. Ces formats expérimentaux ne définissent pas la cible à deux enveloppes. Leurs contrôles de structure et de bornes sont des pistes réutilisables, sans préjuger du futur format ni des secrets d'archive. L'ouverture authentifiée ne prouve ni contexte de compte attendu, ni fraîcheur, ni autorisation. Les dépendances et leur compatibilité mobile ne sont pas validées pour la production ; aucun parcours complet de restauration n'est implémenté. Voir [l'architecture cible du coffre](../security/recovery-vault-architecture.md).
 
 ### `crypto/devices`
 

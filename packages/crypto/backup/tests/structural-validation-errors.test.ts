@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import type * as CanonicalizeModule from 'canonicalize';
 import type * as JsoncParserModule from 'jsonc-parser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { validateEnvelopeStructureV1 } from '../src/index.js';
+import { validateEnvelopeStructureV1 } from '../src/experimental.js';
 
 const calls = vi.hoisted(() => ({
   begins: 0,

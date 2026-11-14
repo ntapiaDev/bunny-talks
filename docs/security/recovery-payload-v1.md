@@ -4,6 +4,8 @@
 
 **Actualisation du 13 novembre 2026 :** cette charge demeure un profil expérimental lié aux deux paires d'identité étudiées. La cible du coffre possède désormais une clé maître indépendante et deux enveloppes, par mot de passe et par clé de récupération ; aucun pont complet entre ce format, le SDK et l'archive n'est démontré. Voir [l'architecture cible](recovery-vault-architecture.md).
 
+Les API de ce format sont exposées uniquement par `@bunny-talks/crypto-backup/experimental`. Les contrôles de longueur, de version, d'ordre et de copie peuvent guider une conception future, mais les champs, la limite de 64 et le sens des secrets d'archive restent des hypothèses expérimentales, pas un contrat retenu.
+
 ## Schéma binaire candidat
 
 Tous les entiers multioctets sont non signés et en ordre réseau (big endian). Les octets sont opaques ; aucun encodage texte, alignement ou padding n'est admis. Les offsets commencent à zéro.

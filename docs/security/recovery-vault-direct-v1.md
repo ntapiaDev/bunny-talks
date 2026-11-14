@@ -6,7 +6,7 @@
 
 L'[investigation CRYPTO-009](recovery-vault-technical-prerequisites.md) précise les candidats de parsing et d'aléa ainsi que les chemins de débogage à repli prévisible à exclure.
 
-**Actualisation CRYPTO-012 :** `@bunny-talks/crypto-backup` implémente une création et une ouverture expérimentales ainsi que la validation structurelle. Ces API ne sont pas approuvées pour la production. Voir le [jalon courant](../development/current-milestone.md) pour les limites et vérifications.
+**Actualisation CRYPTO-012 :** `@bunny-talks/crypto-backup/experimental` expose la création et l'ouverture expérimentales ainsi que la validation structurelle ; elles ne sont plus exportées à la racine du package. Ces API ne sont pas approuvées pour la production. Voir le [jalon courant](../development/current-milestone.md) pour les limites et vérifications.
 
 ## Frontières
 

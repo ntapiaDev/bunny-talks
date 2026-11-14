@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import type * as Ciphers from '@noble/ciphers/chacha.js';
 import type * as Hashes from '@noble/hashes/hkdf.js';
 import { describe, expect, it, vi } from 'vitest';
-import { openDirectVaultV1 } from '../src/index.js';
+import { openDirectVaultV1 } from '../src/experimental.js';
 
 const calls = vi.hoisted(() => ({ derivations: 0, failure: null as Error | null }));
 vi.mock('@noble/hashes/hkdf.js', async (original) => {

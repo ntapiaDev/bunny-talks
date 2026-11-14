@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { validateEnvelopeStructureV1 } from '../src/index.js';
+import { validateEnvelopeStructureV1 } from '../src/experimental.js';
 
 const encoder = new TextEncoder();
 const vector = JSON.parse(

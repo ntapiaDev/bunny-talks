@@ -1,12 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
 import { describe, expect, it, vi } from 'vitest';
-import type { CryptographicRandomSource } from '../src/index.js';
+import type { CryptographicRandomSource } from '../src/experimental.js';
 import {
   createDirectVaultV1,
   openDirectVaultV1,
   validateEnvelopeStructureV1,
-} from '../src/index.js';
+} from '../src/experimental.js';
 
 const vector = JSON.parse(
   readFileSync(

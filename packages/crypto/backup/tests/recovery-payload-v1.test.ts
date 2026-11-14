@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { RecoveryPayloadV1 } from '../src/index.js';
+import type { RecoveryPayloadV1 } from '../src/experimental.js';
 import {
   createDirectVaultV1,
   decodeRecoveryPayloadV1,
   openDirectVaultV1,
   serializeRecoveryPayloadV1,
-} from '../src/index.js';
+} from '../src/experimental.js';
 
 const key = (value: number) => new Uint8Array(32).fill(value);
 const example = (): RecoveryPayloadV1 => ({
