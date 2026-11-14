@@ -2,12 +2,12 @@ import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
 import { hkdf } from '@noble/hashes/hkdf.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import canonicalize from 'canonicalize';
+import { decodeBase64Url as decode, encodeBase64Url as encode } from './base64url.js';
 import type { CryptographicRandomSource } from './random-source.js';
 import type { StructuralValidationError } from './structural-validation.js';
 import { validateEnvelopeStructureV1 } from './structural-validation.js';
 
 const encoder = new TextEncoder();
-const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
 const info = encoder.encode('bunny-talks/recovery-vault-direct/v1/key');
 const aadPrefix = 'bunny-talks/recovery-vault-direct/v1/aad\n';
 const maxPlaintext = 65_536;
@@ -21,36 +21,6 @@ export interface DirectVaultMetadataV1 {
 export type OpenDirectVaultResultV1 =
   | { readonly ok: true; readonly plaintext: Uint8Array }
   | { readonly ok: false; readonly code: StructuralValidationError | 'AUTHENTICATION_FAILED' };
-
-function encode(bytes: Uint8Array): string {
-  let result = '';
-  for (let i = 0; i < bytes.length; i += 3) {
-    const a = bytes[i]!;
-    const b = bytes[i + 1];
-    const c = bytes[i + 2];
-    result += alphabet[a >> 2]! + alphabet[((a & 3) << 4) | ((b ?? 0) >> 4)]!;
-    if (b !== undefined) result += alphabet[((b & 15) << 2) | ((c ?? 0) >> 6)]!;
-    if (c !== undefined) result += alphabet[c & 63]!;
-  }
-  return result;
-}
-
-// Only used after structural validation has checked the alphabet, length and padding bits.
-function decode(value: string): Uint8Array {
-  const bytes = new Uint8Array(Math.floor((value.length * 3) / 4));
-  let bits = 0;
-  let accumulator = 0;
-  let offset = 0;
-  for (const char of value) {
-    accumulator = (accumulator << 6) | alphabet.indexOf(char);
-    bits += 6;
-    if (bits >= 8) {
-      bits -= 8;
-      bytes[offset++] = (accumulator >> bits) & 255;
-    }
-  }
-  return bytes;
-}
 
 function secretCopy(secret: Uint8Array): Uint8Array {
   if (!(secret instanceof Uint8Array) || secret.byteLength !== 32) {

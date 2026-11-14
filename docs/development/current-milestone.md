@@ -1,5 +1,7 @@
 # Migration de sécurité OpenE2EE 14.5.0 — 14 novembre 2026
 
+**Jalon 1 du coffre récupérable :** les primitives et deux enveloppes de clé maîtresse sont implémentées pour revue dans `crypto-backup`. Voir les [formats, API et limites](../security/key-envelopes-v1.md). Le profil Argon2id à 64 Mio est expérimental et sa qualification Hermes reste ouverte. Le manifest, le contenu métier, les parcours de compte, l'archive et la restauration OpenE2EE restent hors périmètre. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. Les modifications sont laissées non commitées pour revue.
+
 **Actualisation :** la qualification Android est partiellement validée sur un émulateur Android 17 avec Hermes et SQLCipher, y compris après arrêt forcé. Le diagnostic renforcé et ses limites sont décrits dans le [rapport mobile](mobile-open-e2ee-qualification.md) ; iOS et la production restent à qualifier.
 
 La migration vers OpenE2EE 14.5.0 est le dernier jalon technique terminé et validé au niveau expérimental sous Node. La revue des tests adversariaux et de la migration SQLCipher est favorable ; le [rapport de migration](open-e2ee-14-5-migration.md) décrit leurs résultats et leurs limites. La qualification React Native/Expo reste partielle : Android a été testé sur un émulateur et iOS reste à qualifier. Aucun choix de production définitif n’est arrêté.

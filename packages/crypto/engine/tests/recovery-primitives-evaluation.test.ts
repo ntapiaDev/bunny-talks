@@ -2,6 +2,7 @@ import { createCipheriv, hkdfSync, randomBytes, timingSafeEqual } from 'node:cry
 import { readFileSync } from 'node:fs';
 import { gcm } from '@noble/ciphers/aes.js';
 import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
+import { argon2idAsync } from '@noble/hashes/argon2.js';
 import { hkdf } from '@noble/hashes/hkdf.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { describe, expect, it } from 'vitest';
@@ -10,6 +11,21 @@ const utf8 = (value: string) => new TextEncoder().encode(value);
 const fromHex = (value: string) => new Uint8Array(Buffer.from(value, 'hex'));
 
 describe('recovery primitive candidates under Node', () => {
+  it('matches the RFC 9106 Argon2id test vector', async () => {
+    const actual = await argon2idAsync(new Uint8Array(32).fill(1), new Uint8Array(16).fill(2), {
+      m: 32,
+      t: 3,
+      p: 4,
+      version: 0x13,
+      dkLen: 32,
+      key: new Uint8Array(8).fill(3),
+      personalization: new Uint8Array(12).fill(4),
+    });
+    expect(actual).toEqual(
+      fromHex('0d640df58d78766c08c037a34a8b53c9d01ef0452d75b65eb52520e96b01e659'),
+    );
+  });
+
   it('matches the independently verified direct V1 envelope vector', () => {
     const vector = JSON.parse(
       readFileSync(new URL('./fixtures/recovery-direct-v1-vector.json', import.meta.url), 'utf8'),

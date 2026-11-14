@@ -1,0 +1,8 @@
+{
+  "secret": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "salt": "000102030405060708090a0b0c0d0e0f",
+  "nonce": "000102030405060708090a0b0c0d0e0f1011121314151617",
+  "master": "0707070707070707070707070707070707070707070707070707070707070707",
+  "key": "32bdf9d95996825936b301b076d2a815babcddaada41a023a2a206367481fc7c",
+  "envelope": "{\"ciphertext\":\"usgv9PZU1zRJX0sRZgwcJm5qp8o5W-4hcrTY08GPd9N1uribmih8zpWUDkJ-16Gh\",\"header\":{\"access\":\"recovery\",\"account\":\"opaque:account-1\",\"domain\":\"bunny-talks/key-envelope/recovery/v1/wrapping-key\",\"format\":\"bunny-recovery-key-envelope\",\"nonce\":\"AAECAwQFBgcICQoLDA0ODxAREhMUFRYX\",\"outputBytes\":32,\"profile\":\"hkdf-sha256-xchacha20poly1305-v1\",\"revision\":1,\"salt\":\"AAECAwQFBgcICQoLDA0ODw\",\"vaultId\":\"AAAAAAAAAAAAAAAAAAAAAA\",\"version\":1}}"
+}

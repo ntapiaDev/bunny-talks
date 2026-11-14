@@ -24,12 +24,12 @@ L'architecture retenue est un **monolithe modulaire organisé en monorepo**, ave
 
 ### 2.1. Applications
 
-Les applications suivantes ont des responsabilités distinctes. `apps/mobile` contient une fondation Expo de diagnostic non qualifiée sur appareil ; `apps/api` et `apps/crypto-lab` restent vides.
+Les applications suivantes ont des responsabilités distinctes. `apps/mobile` contient une fondation Expo de diagnostic partiellement qualifiée sur un émulateur Android ; `apps/api` et `apps/crypto-lab` restent vides. La qualification iOS et celle des appareils physiques restent ouvertes.
 
 | Application       | Responsabilité                                            | Technologie        | Statut                                                    |
 | ----------------- | --------------------------------------------------------- | ------------------ | --------------------------------------------------------- |
 | `apps/api`        | API, comptes, relations, communications, espaces partagés | NestJS             | Prévue                                                    |
-| `apps/mobile`     | Application principale iOS et Android                     | React Native, Expo | Fondation expérimentale ; qualification mobile en attente |
+| `apps/mobile`     | Application principale iOS et Android                     | React Native, Expo | Fondation expérimentale ; qualification Android partielle |
 | `apps/crypto-lab` | Banc d'essai et démonstration cryptographique             | À déterminer       | Prévu, non implémenté                                     |
 | `apps/web`        | Application web future                                    | À déterminer       | Différée                                                  |
 
@@ -355,7 +355,7 @@ Responsabilité :
 - Gestion des versions du format.
 - Gestion des suppressions et des snapshots.
 
-Le package `@bunny-talks/crypto-backup` ne propose aucune API de coffre à sa racine. Son entrée explicite `@bunny-talks/crypto-backup/experimental` conserve la validation structurelle, le contrat d'aléa, la création et l'ouverture du coffre direct V1 et la sérialisation candidate de charge de récupération. Ces formats expérimentaux ne définissent pas la cible à deux enveloppes. Leurs contrôles de structure et de bornes sont des pistes réutilisables, sans préjuger du futur format ni des secrets d'archive. L'ouverture authentifiée ne prouve ni contexte de compte attendu, ni fraîcheur, ni autorisation. Les dépendances et leur compatibilité mobile ne sont pas validées pour la production ; aucun parcours complet de restauration n'est implémenté. Voir [l'architecture cible du coffre](../security/recovery-vault-architecture.md).
+La racine de `@bunny-talks/crypto-backup` expose les primitives et [enveloppes de clé maîtresse V1](../security/key-envelopes-v1.md), sans composition de coffre ni restauration de compte. Son entrée explicite `@bunny-talks/crypto-backup/experimental` conserve la validation structurelle, le contrat d'aléa, la création et l'ouverture du coffre direct V1 et la sérialisation candidate de charge de récupération. Ces formats expérimentaux ne définissent pas la cible à deux enveloppes. Leurs contrôles de structure et de bornes sont des pistes réutilisables, sans préjuger du futur format ni des secrets d'archive. L'ouverture authentifiée ne prouve ni contexte de compte attendu, ni fraîcheur, ni autorisation. Les dépendances et leur compatibilité mobile ne sont pas validées pour la production ; aucun parcours complet de restauration n'est implémenté. Voir [l'architecture cible du coffre](../security/recovery-vault-architecture.md).
 
 ### `crypto/devices`
 

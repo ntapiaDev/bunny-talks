@@ -1,8 +1,12 @@
 # CRYPTO-004 — Proposition d'architecture du coffre de récupération
 
-**Statut au 13 novembre 2026 : décisions fonctionnelles confirmées ; conception cryptographique cible à valider, non implémentée.** Ce document décrit la cible actuelle et conserve les analyses de CRYPTO-004 et CRYPTO-005. Le coffre direct expérimental n'implémente pas cette cible.
+**Statut au 14 novembre 2026 : décisions fonctionnelles confirmées ; enveloppes du jalon 1 implémentées pour revue, coffre complet non implémenté.** Ce document décrit la cible actuelle et conserve les analyses de CRYPTO-004 et CRYPTO-005. Le coffre direct expérimental n'implémente pas cette cible.
 
 La [spécification historique CRYPTO-006](recovery-vault-specification.md) et le [coffre direct V1](recovery-vault-direct-v1.md) restent des références expérimentales ; leurs formats à un seul accès ne définissent pas la nouvelle cible à deux enveloppes.
+
+## Implémentation du jalon 1
+
+Les [enveloppes de clé maîtresse V1](key-envelopes-v1.md) sont maintenant implémentées dans `crypto-backup` : accès par mot de passe avec Argon2id et accès par clé aléatoire avec HKDF, puis XChaCha20-Poly1305. Elles protègent une clé de 32 octets et vérifient le contexte attendu. Le profil Argon2id à 64 Mio reste expérimental ; sa qualification Hermes est ouverte. Le manifest global, la charge métier et les parcours de récupération ne sont pas implémentés. Les formats historiques restent isolés dans `/experimental`. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts.
 
 ## Périmètre et parcours
 
@@ -43,7 +47,7 @@ La clé de récupération peut être volée indépendamment du mot de passe. Une
 
 ## Proposition de hiérarchie et de format
 
-**Cible confirmée :** générer une clé maître aléatoire indépendante du mot de passe et chiffrer localement le coffre avec authentification. Deux enveloppes distinctes et versionnées protègent cette même clé : l'une avec une clé dérivée côté client du mot de passe du compte, avec sel, paramètres et séparation de domaine indépendants du vérificateur serveur ; l'autre avec une clé issue de la clé de récupération aléatoire. Présenter cette dernière dès l'inscription et expliquer sa conservation hors du seul appareil. Aucun algorithme, paramètre de KDF, fournisseur ou format binaire définitif n'est choisi.
+**Cible confirmée :** générer une clé maître aléatoire indépendante du mot de passe et chiffrer localement le coffre avec authentification. Deux enveloppes distinctes et versionnées protègent cette même clé : l'une avec une clé dérivée côté client du mot de passe du compte, avec sel, paramètres et séparation de domaine indépendants du vérificateur serveur ; l'autre avec une clé issue de la clé de récupération aléatoire. Présenter cette dernière dès l'inscription et expliquer sa conservation hors du seul appareil. Les choix du jalon 1 (Argon2id, HKDF-SHA-256, XChaCha20-Poly1305 et Noble 2.4.0) sont décrits dans la spécification des enveloppes. Le profil reste expérimental et le format global du coffre reste à concevoir.
 
 Les deux enveloppes étant des accès alternatifs à la même clé maître, une récupération forte ne compense pas un mot de passe faible. Les essais hors ligne dépendent notamment du mot de passe, du KDF et de ses paramètres ainsi que de l'accès aux enveloppes. La limitation serveur ne protège pas une copie déjà obtenue.
 

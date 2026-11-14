@@ -37,7 +37,7 @@ L'application n'est pas une plateforme de rencontres amoureuses.
 La justesse cryptographique et la sécurité priment sur la vitesse.
 
 - Ne jamais implémenter de primitives cryptographiques maison.
-- Considérer OpenE2EE 14.4.0 comme un SDK en cours d'évaluation.
+- Considérer OpenE2EE 14.5.0 comme un SDK en cours d'évaluation.
 - Ne pas présumer de la compatibilité du SDK sans vérification.
 - Examiner le code source installé et les déclarations TypeScript publiques.
 - Préférer les API publiques documentées aux détails internes d'implémentation.
