@@ -1,9 +1,10 @@
 import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
-import { argon2idAsync } from '@noble/hashes/argon2.js';
 import { hkdf } from '@noble/hashes/hkdf.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import canonicalize from 'canonicalize';
 import { visit } from 'jsonc-parser';
+import type { Argon2idProvider } from './argon2-provider.js';
+import { ARGON2ID_V1, nobleArgon2idProvider } from './argon2-provider.js';
 import { decodeBase64Url, encodeBase64Url as encode } from './base64url.js';
 import type { CryptographicRandomSource } from './random-source.js';
 
@@ -156,35 +157,40 @@ export const generateRecoveryKey = (random: CryptographicRandomSource): Promise<
 export async function generateVaultId(random: CryptographicRandomSource): Promise<string> {
   return encode(await fillRandomBytes(16, random));
 }
-async function passwordKey(bytes: Uint8Array, salt: Uint8Array): Promise<Uint8Array> {
+async function passwordKey(
+  bytes: Uint8Array,
+  salt: Uint8Array,
+  provider: Argon2idProvider = nobleArgon2idProvider,
+): Promise<Uint8Array> {
   let root: Uint8Array | undefined;
   try {
-    root = await argon2idAsync(bytes, salt, {
-      m: 65536,
-      t: 3,
-      p: 4,
-      version: 0x13,
-      dkLen: 32,
-      maxmem: 64 * 1024 * 1024,
-      asyncTick: 10,
-    });
+    root = await provider.derive(bytes, salt, ARGON2ID_V1);
+    if (
+      !(root instanceof Uint8Array) ||
+      root.length !== 32 ||
+      root.buffer === bytes.buffer ||
+      root.buffer === salt.buffer
+    )
+      return fail('CRYPTO_UNAVAILABLE');
     return hkdf(sha256, root, salt, encoder.encode(domain('password')), 32);
   } catch {
     return fail('CRYPTO_UNAVAILABLE');
   } finally {
-    root?.fill(0);
+    if (root instanceof Uint8Array && root.buffer !== bytes.buffer && root.buffer !== salt.buffer)
+      root.fill(0);
   }
 }
 /** Returned key is sensitive and belongs to the caller. No input buffer is mutated. */
 export async function derivePasswordWrappingKey(
   password: string,
   salt: Uint8Array,
+  provider: Argon2idProvider = nobleArgon2idProvider,
 ): Promise<Uint8Array> {
   const bytes = encodeEnvelopePassword(password);
   let snapshot: Uint8Array | undefined;
   try {
     snapshot = copy(salt, 16);
-    return await passwordKey(bytes, snapshot);
+    return await passwordKey(bytes, snapshot, provider);
   } finally {
     bytes.fill(0);
     snapshot?.fill(0);
@@ -213,6 +219,7 @@ async function create(
   secret: string | Uint8Array,
   metadata: KeyEnvelopeMetadata,
   random: CryptographicRandomSource,
+  provider: Argon2idProvider = nobleArgon2idProvider,
 ): Promise<Uint8Array> {
   const master = copy(masterKey, 32);
   let secretBytes: Uint8Array | undefined;
@@ -244,7 +251,7 @@ async function create(
     };
     key =
       access === 'password'
-        ? await passwordKey(secretBytes, salt)
+        ? await passwordKey(secretBytes, salt, provider)
         : deriveRecoveryWrappingKey(secretBytes, salt);
     const ciphertext = xchacha20poly1305(key, nonce, aad(header)).encrypt(master);
     return encoder.encode(canonical({ ciphertext: encode(ciphertext), header }));
@@ -262,8 +269,9 @@ export function createPasswordKeyEnvelope(
   password: string,
   metadata: KeyEnvelopeMetadata,
   random: CryptographicRandomSource,
+  provider: Argon2idProvider = nobleArgon2idProvider,
 ): Promise<Uint8Array> {
-  return create('password', masterKey, password, metadata, random);
+  return create('password', masterKey, password, metadata, random, provider);
 }
 export function createRecoveryKeyEnvelope(
   masterKey: Uint8Array,
@@ -374,6 +382,7 @@ async function open(
   input: Uint8Array,
   secret: string | Uint8Array,
   expectedContext: KeyEnvelopeContext,
+  provider: Argon2idProvider = nobleArgon2idProvider,
 ): Promise<OpenKeyEnvelopeResult> {
   let secretBytes: Uint8Array | undefined;
   let key: Uint8Array | undefined;
@@ -391,7 +400,7 @@ async function open(
     const salt = decode(header.salt, 16);
     key =
       access === 'password'
-        ? await passwordKey(secretBytes, salt)
+        ? await passwordKey(secretBytes, salt, provider)
         : deriveRecoveryWrappingKey(secretBytes, salt);
     try {
       return {
@@ -420,8 +429,9 @@ export function openPasswordKeyEnvelope(
   input: Uint8Array,
   password: string,
   expectedContext: KeyEnvelopeContext,
+  provider: Argon2idProvider = nobleArgon2idProvider,
 ): Promise<OpenKeyEnvelopeResult> {
-  return open('password', input, password, expectedContext);
+  return open('password', input, password, expectedContext, provider);
 }
 export function openRecoveryKeyEnvelope(
   input: Uint8Array,

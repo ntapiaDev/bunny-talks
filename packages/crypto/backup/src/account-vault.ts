@@ -21,6 +21,8 @@ import {
   vaultEncoder,
   vaultFailure,
 } from './account-vault-format.js';
+import type { Argon2idProvider } from './argon2-provider.js';
+import { nobleArgon2idProvider } from './argon2-provider.js';
 import { encodeBase64Url } from './base64url.js';
 import type { KeyEnvelopeContext } from './key-envelopes.js';
 import {
@@ -137,6 +139,7 @@ async function unlock(
   parsed: ParsedVault,
   access: AccountVaultAccess,
   context: KeyEnvelopeContext,
+  provider: Argon2idProvider = nobleArgon2idProvider,
 ): Promise<Uint8Array> {
   const { publication } = parsed;
   const result =
@@ -145,6 +148,7 @@ async function unlock(
           vaultEncoder.encode(publication.passwordEnvelope),
           access.password,
           context,
+          provider,
         )
       : await openRecoveryKeyEnvelope(
           vaultEncoder.encode(publication.recoveryEnvelope),
@@ -165,6 +169,7 @@ export async function createAccountVault(
   recoveryKey: Uint8Array,
   plaintext: Uint8Array,
   random: CryptographicRandomSource,
+  provider: Argon2idProvider = nobleArgon2idProvider,
 ): Promise<Uint8Array> {
   let master: Uint8Array | undefined;
   let recovery: AccountVaultAccess | undefined;
@@ -180,7 +185,13 @@ export async function createAccountVault(
     payload = Uint8Array.from(plaintext);
     master = await generateMasterKey(random);
     const metadata = { ...expected, revision: 1 };
-    const passwordEnvelope = await createPasswordKeyEnvelope(master, password, metadata, random);
+    const passwordEnvelope = await createPasswordKeyEnvelope(
+      master,
+      password,
+      metadata,
+      random,
+      provider,
+    );
     const recoveryEnvelope = await createRecoveryKeyEnvelope(
       master,
       recovery.recoveryKey,
@@ -190,7 +201,7 @@ export async function createAccountVault(
     // Verify both actual access paths; authenticated inclusion alone is insufficient.
     const checks: Awaited<ReturnType<typeof openPasswordKeyEnvelope>>[] = [];
     try {
-      checks.push(await openPasswordKeyEnvelope(passwordEnvelope, password, expected));
+      checks.push(await openPasswordKeyEnvelope(passwordEnvelope, password, expected, provider));
       checks.push(await openRecoveryKeyEnvelope(recoveryEnvelope, recovery.recoveryKey, expected));
       for (const check of checks) {
         if (!check.ok) return rejectVault(check.code);
@@ -242,6 +253,7 @@ async function open(
   input: Uint8Array,
   access: AccountVaultAccess,
   context: KeyEnvelopeContext,
+  provider: Argon2idProvider = nobleArgon2idProvider,
 ): Promise<OpenAccountVaultResult> {
   let saved: AccountVaultAccess | undefined;
   let master: Uint8Array | undefined;
@@ -249,7 +261,7 @@ async function open(
     const parsed = parseVault(input, context);
     const expected = snapshotKeyEnvelopeContext(parsed.publication.header);
     saved = snapshotAccess(access);
-    master = await unlock(parsed, saved, expected);
+    master = await unlock(parsed, saved, expected, provider);
     return { ok: true, plaintext: authenticate(parsed, master), revisions: revisions(parsed) };
   } catch (error) {
     return { ok: false, code: vaultFailure(error) };
@@ -262,8 +274,9 @@ export function openAccountVaultWithPassword(
   input: Uint8Array,
   password: string,
   context: KeyEnvelopeContext,
+  provider: Argon2idProvider = nobleArgon2idProvider,
 ): Promise<OpenAccountVaultResult> {
-  return open(input, { type: 'password', password }, context);
+  return open(input, { type: 'password', password }, context, provider);
 }
 export function openAccountVaultWithRecoveryKey(
   input: Uint8Array,
@@ -279,6 +292,7 @@ export async function rewrapAccountVaultPassword(
   access: AccountVaultAccess,
   newPassword: string,
   random: CryptographicRandomSource,
+  provider: Argon2idProvider = nobleArgon2idProvider,
 ): Promise<Uint8Array> {
   let master: Uint8Array | undefined;
   let saved: AccountVaultAccess | undefined;
@@ -289,15 +303,16 @@ export async function rewrapAccountVaultPassword(
     const generation = increment(parsed.publication.manifest.generation);
     const revision = increment(parsed.passwordRevision);
     saved = snapshotAccess(access);
-    master = await unlock(parsed, saved, expected);
+    master = await unlock(parsed, saved, expected, provider);
     authenticate(parsed, master).fill(0);
     const envelope = await createPasswordKeyEnvelope(
       master,
       newPassword,
       { ...expected, revision },
       random,
+      provider,
     );
-    const verified = await openPasswordKeyEnvelope(envelope, newPassword, expected);
+    const verified = await openPasswordKeyEnvelope(envelope, newPassword, expected, provider);
     if (!verified.ok) return rejectVault(verified.code);
     try {
       if (!equalBytes(verified.masterKey, master)) return rejectVault('AUTHENTICATION_FAILED');

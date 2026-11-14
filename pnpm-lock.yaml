@@ -31,12 +31,21 @@ importers:
 
   apps/mobile:
     dependencies:
+      '@bunny-talks/crypto-backup':
+        specifier: workspace:*
+        version: link:../../packages/crypto/backup
       '@bunny-talks/crypto-engine':
         specifier: workspace:*
         version: link:../../packages/crypto/engine
+      '@noble/hashes':
+        specifier: 2.4.0
+        version: 2.4.0
       '@open-e2ee/signal-protocol-sdk':
         specifier: 14.5.0
         version: 14.5.0(better-sqlite3-multiple-ciphers@13.0.3)(expo-constants@57.0.24(expo@57.0.25)(react-native@0.86.3(@babel/core@7.29.13)(@types/react@19.2.18)(react@19.2.3)))(expo-secure-store@57.0.4(expo@57.0.25))(expo-sqlite@57.0.3(expo@57.0.25)(react-native@0.86.3(@babel/core@7.29.13)(@types/react@19.2.18)(react@19.2.3))(react@19.2.3))(expo@57.0.25)(react-native@0.86.3(@babel/core@7.29.13)(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)
+      '@sonnetstationsolutions/expo-argon2':
+        specifier: 0.1.1
+        version: 0.1.1(expo@57.0.25)(react-native@0.86.3(@babel/core@7.29.13)(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)
       expo:
         specifier: 57.0.25
         version: 57.0.25(@babel/core@7.29.13)(@expo/dom-webview@57.0.1)(react-native@0.86.3(@babel/core@7.29.13)(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)(typescript@6.0.3)
@@ -1506,6 +1515,16 @@ packages:
       {
         integrity: sha512-hhyNJ+nbR6ZR7pToHvllEFun9TL0sbL+tk/ON75lo+Xas054uez98qRbsuNt7MBCyZKK4+8Yli/OAGZhmfBZ/g==,
       }
+
+  '@sonnetstationsolutions/expo-argon2@0.1.1':
+    resolution:
+      {
+        integrity: sha512-teVgoTRTF0UFRAKY+aid9HFXV5RXLrNnYD4ujFOW8K3BpvMgoXXEuM6hpn+iFy7YCVU76LIkaw5qO1vniq/eOw==,
+      }
+    peerDependencies:
+      expo: '*'
+      react: '*'
+      react-native: '*'
 
   '@types/chai@5.2.3':
     resolution:
@@ -5880,6 +5899,12 @@ snapshots:
   '@rolldown/pluginutils@1.1.0': {}
 
   '@sinclair/typebox@0.27.12': {}
+
+  '@sonnetstationsolutions/expo-argon2@0.1.1(expo@57.0.25)(react-native@0.86.3(@babel/core@7.29.13)(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)':
+    dependencies:
+      expo: 57.0.25(@babel/core@7.29.13)(@expo/dom-webview@57.0.1)(react-native@0.86.3(@babel/core@7.29.13)(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)(typescript@6.0.3)
+      react: 19.2.3
+      react-native: 0.86.3(@babel/core@7.29.13)(@types/react@19.2.18)(react@19.2.3)
 
   '@types/chai@5.2.3':
     dependencies:

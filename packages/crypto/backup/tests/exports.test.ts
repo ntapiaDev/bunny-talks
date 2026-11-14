@@ -10,6 +10,8 @@ describe('backup package entry points', () => {
 
     expect(Object.keys(root).sort()).toEqual(
       [
+        'ARGON2ID_V1',
+        'nobleArgon2idProvider',
         'KeyEnvelopeError',
         'AccountVaultError',
         'createAccountVault',

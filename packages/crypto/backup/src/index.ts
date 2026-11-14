@@ -34,3 +34,6 @@ export {
   rewrapAccountVaultPassword,
 } from './account-vault.js';
 export type { AccountVaultAccess, OpenAccountVaultResult } from './account-vault.js';
+
+export type { Argon2idParameters, Argon2idProvider } from './argon2-provider.js';
+export { ARGON2ID_V1, nobleArgon2idProvider } from './argon2-provider.js';
