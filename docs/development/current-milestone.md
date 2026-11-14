@@ -1,6 +1,8 @@
-# POC de décision OpenE2EE — 13 novembre 2026
+# Migration de sécurité OpenE2EE 14.5.0 — 14 novembre 2026
 
-L'audit technique et documentaire est terminé, et le POC multi-appareils OpenE2EE 14.4.0 a reçu une revue favorable. La **recommandation B** est de poursuivre provisoirement l'évaluation d'OpenE2EE, sans validation de production. Voir [l'audit consolidé](../architecture/e2ee-transition-audit.md) et [ADR-003](../architecture/decisions/003-open-e2ee-evaluation.md).
+La migration vers OpenE2EE 14.5.0 est le dernier jalon technique terminé et validé au niveau expérimental sous Node. La revue des tests adversariaux et de la migration SQLCipher est favorable ; le [rapport de migration](open-e2ee-14-5-migration.md) décrit leurs résultats et leurs limites. La qualification React Native/Expo est la prochaine étape envisagée et reste non validée. Aucun choix de production définitif n’est arrêté.
+
+Le POC multi-appareils sous 14.4.0, dont les résultats historiques sont conservés ci-dessous, a reçu une revue favorable. La **recommandation B** demeure de poursuivre provisoirement l’évaluation d’OpenE2EE. Voir [l’audit consolidé](../architecture/e2ee-transition-audit.md) et [ADR-003](../architecture/decisions/003-open-e2ee-evaluation.md).
 
 Les décisions fonctionnelles actuelles retiennent un mot de passe unique, une clé maître de coffre indépendante et deux enveloppes, ainsi qu'une autorisation individuelle par e-mail avant accès protégé. Le coffre direct existant est expérimental ; aucun parcours complet de récupération ou d'autorisation n'est implémenté. Les bornes de registration ID et la sérialisation d'une session réelle ont été caractérisées sous Node ; les autres chemins, la révocation après compromission, l'archive et la compatibilité mobile restent à qualifier. **SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts et bloquants pour la production.**
 

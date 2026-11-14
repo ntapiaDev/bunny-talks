@@ -100,7 +100,7 @@ Un compte peut posséder au maximum cinq appareils de confiance autorisés.
 
 Les appareils de confiance partagent une identité cryptographique durable du compte. Ils conservent leurs propres identifiants d'enregistrement, sessions, préclés et clés locales de stockage lorsque le protocole l'exige. L'accès à l'historique par une archive chiffrée indépendante reste à concevoir et valider ; la récupération sans ancien appareil est distincte du transfert entre appareils.
 
-OpenE2EE Signal Protocol SDK 14.4.0 demeure un candidat en évaluation, sans choix de production définitif.
+OpenE2EE Signal Protocol SDK 14.5.0 demeure un candidat en évaluation, sans choix de production définitif.
 
 Fonctionnalités prévues :
 

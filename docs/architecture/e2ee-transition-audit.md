@@ -1,7 +1,7 @@
 # Audit de transition E2EE et pérennité du moteur
 
 **Date :** 13 novembre 2026  
-**Statut :** analyse technique et documentaire terminée, conclusions à revoir ; aucune validation de production et aucun POC supplémentaire autorisé.
+**Statut historique :** analyse technique et documentaire terminée au moment de cet audit ; les expériences et la migration ultérieures sont présentées dans le [jalon courant](../development/current-milestone.md). Aucune validation de production.
 
 ## Décision et périmètre
 

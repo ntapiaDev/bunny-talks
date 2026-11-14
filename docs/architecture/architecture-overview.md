@@ -335,7 +335,7 @@ Responsabilité :
 
 Le moteur doit être accessible au travers d'interfaces définies par le cœur cryptographique.
 
-OpenE2EE Signal Protocol SDK 14.4.0 est un candidat en évaluation ; son utilisation en production n'est pas encore validée.
+OpenE2EE Signal Protocol SDK 14.5.0 est un candidat en évaluation ; son utilisation en production n'est pas encore validée.
 
 ### `crypto/storage`
 

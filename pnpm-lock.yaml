@@ -61,9 +61,12 @@ importers:
         specifier: 2.4.0
         version: 2.4.0
       '@open-e2ee/signal-protocol-sdk':
-        specifier: 14.4.0
-        version: 14.4.0(better-sqlite3-multiple-ciphers@13.0.3)
+        specifier: 14.5.0
+        version: 14.5.0(better-sqlite3-multiple-ciphers@13.0.3)
     devDependencies:
+      '@bunny-talks/open-e2ee-14-4':
+        specifier: npm:@open-e2ee/signal-protocol-sdk@14.4.0
+        version: '@open-e2ee/signal-protocol-sdk@14.4.0(better-sqlite3-multiple-ciphers@13.0.3)'
       '@noble/ciphers':
         specifier: 2.4.0
         version: 2.4.0
@@ -269,6 +272,54 @@ packages:
     resolution:
       {
         integrity: sha512-+ioVRkY6T18+z5ZnvJU+EwlTUZ3H5+uETqUfeR1pRrbnsfUk8zrhz/gPfDRV3LfjfAJSx+gqiBs1yvguSZ25XA==,
+      }
+    engines: { node: '>=22.12.0' }
+    peerDependencies:
+      '@op-engineering/op-sqlite': '>=18.2.5'
+      better-sqlite3-multiple-ciphers: '>=13.0.3'
+      convex: '>=1.42.1'
+      expo: '>=55.0.27'
+      expo-constants: '>=55.0.7'
+      expo-device: '>=55.0.15'
+      expo-secure-store: '>=55.0.15'
+      expo-sqlite: '>=55.0.17'
+      idb: '>=8.0.3'
+      react: '>=19.0.0'
+      react-native: '>=0.83.6'
+      react-native-device-info: '>=15.0.1'
+      react-native-keychain: '>=10.0.0'
+    peerDependenciesMeta:
+      '@op-engineering/op-sqlite':
+        optional: true
+      better-sqlite3-multiple-ciphers:
+        optional: true
+      convex:
+        optional: true
+      expo:
+        optional: true
+      expo-constants:
+        optional: true
+      expo-device:
+        optional: true
+      expo-secure-store:
+        optional: true
+      expo-sqlite:
+        optional: true
+      idb:
+        optional: true
+      react:
+        optional: true
+      react-native:
+        optional: true
+      react-native-device-info:
+        optional: true
+      react-native-keychain:
+        optional: true
+
+  '@open-e2ee/signal-protocol-sdk@14.5.0':
+    resolution:
+      {
+        integrity: sha512-qTbcDtjA4Szg/4KYKshn8Cd8UlE+1NSaVj32ZhnUpqIKyGxb8qiqqOWNUnEAgUcfGw53aehDZ2puogY6sXAZ6w==,
       }
     engines: { node: '>=22.12.0' }
     peerDependencies:
@@ -1577,6 +1628,17 @@ snapshots:
       '@noble/hashes': 2.4.0
 
   '@open-e2ee/signal-protocol-sdk@14.4.0(better-sqlite3-multiple-ciphers@13.0.3)':
+    dependencies:
+      '@noble/ciphers': 2.4.0
+      '@noble/curves': 2.4.0
+      '@noble/hashes': 2.4.0
+      '@noble/post-quantum': 0.7.1
+      async-lock: 1.5.0
+      unique-names-generator: 4.7.1
+    optionalDependencies:
+      better-sqlite3-multiple-ciphers: 13.0.3
+
+  '@open-e2ee/signal-protocol-sdk@14.5.0(better-sqlite3-multiple-ciphers@13.0.3)':
     dependencies:
       '@noble/ciphers': 2.4.0
       '@noble/curves': 2.4.0

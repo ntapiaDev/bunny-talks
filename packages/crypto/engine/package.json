@@ -17,9 +17,10 @@
   "dependencies": {
     "@bunny-talks/crypto-core": "workspace:*",
     "@noble/curves": "2.4.0",
-    "@open-e2ee/signal-protocol-sdk": "14.4.0"
+    "@open-e2ee/signal-protocol-sdk": "14.5.0"
   },
   "devDependencies": {
+    "@bunny-talks/open-e2ee-14-4": "npm:@open-e2ee/signal-protocol-sdk@14.4.0",
     "@noble/ciphers": "2.4.0",
     "@noble/hashes": "2.4.0",
     "@types/node": "^24.19.2",

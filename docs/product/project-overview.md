@@ -699,7 +699,7 @@ Pistes étudiées :
 - Bibliothèque officielle Signal `libsignal`.
 - Éventuellement OpenMLS pour les besoins futurs de communication de groupe.
 
-OpenE2EE Signal Protocol SDK 14.4.0 est un candidat en évaluation, pas un choix de production définitif.
+OpenE2EE Signal Protocol SDK 14.5.0 est un candidat en évaluation, pas un choix de production définitif.
 
 Points de vigilance :
 

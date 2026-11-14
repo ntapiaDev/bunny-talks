@@ -330,7 +330,7 @@ Protections attendues :
 - Vérification de l'identité des appareils.
 - Gestion des changements de clés et des révocations.
 
-OpenE2EE 14.4.0 est le moteur actuellement évalué pour le prototype, selon la recommandation B : poursuivre provisoirement les expériences sous conditions. Aucun choix définitif de protocole ou de moteur pour la production n'a été approuvé. Voir [ADR-003](../architecture/decisions/003-open-e2ee-evaluation.md).
+OpenE2EE 14.5.0 est le moteur actuellement évalué pour le prototype, selon la recommandation B : poursuivre provisoirement les expériences sous conditions. Aucun choix définitif de protocole ou de moteur pour la production n'a été approuvé. Voir [ADR-003](../architecture/decisions/003-open-e2ee-evaluation.md).
 
 ### 6.3. Médias
 
@@ -727,3 +727,7 @@ Elle constitue une propriété de l'ensemble du système :
 Toute décision technique susceptible de modifier les garanties de sécurité doit être évaluée à l'aide de ce modèle de menaces et documentée.
 
 **La confidentialité est une propriété fondamentale de Bunny Talks, pas une option ajoutée après le développement.**
+
+## Correction d'identité propre — OpenE2EE 14.5.0
+
+La migration expérimentale Node vers 14.5.0 ajoute une preuve ciblée : une identité divergente présentée par le relay comme celle d'un appareil du compte ne reçoit ni nouvelle session ni copie de synchronisation dans le scénario testé. Sous 14.4.0, le même scénario permettait le déchiffrement de la copie par l'identité substituée. La comparaison à l'identité durable locale ne démontre pas l'autorisation de l'appareil : un appareil compromis possédant cette identité commune reste une menace. Le remplacement d'une épingle propre périmée restaure la référence locale, sans accepter une nouvelle identité distante. Les groupes et les courses concurrentes restent à qualifier ; voir le [rapport](../development/open-e2ee-14-5-migration.md).
