@@ -1,12 +1,12 @@
 # CRYPTO-004 — Proposition d'architecture du coffre de récupération
 
-**Statut au 14 novembre 2026 : décisions fonctionnelles confirmées ; enveloppes du jalon 1 implémentées pour revue, coffre complet non implémenté.** Ce document décrit la cible actuelle et conserve les analyses de CRYPTO-004 et CRYPTO-005. Le coffre direct expérimental n'implémente pas cette cible.
+**Statut au 14 novembre 2026 : décisions fonctionnelles confirmées ; enveloppes et composition opaque du jalon 2 implémentées pour revue, restauration métier non implémentée.** Ce document décrit la cible actuelle et conserve les analyses de CRYPTO-004 et CRYPTO-005. Le coffre direct expérimental n'implémente pas cette cible.
 
 La [spécification historique CRYPTO-006](recovery-vault-specification.md) et le [coffre direct V1](recovery-vault-direct-v1.md) restent des références expérimentales ; leurs formats à un seul accès ne définissent pas la nouvelle cible à deux enveloppes.
 
-## Implémentation du jalon 1
+## Implémentation des jalons 1 et 2
 
-Les [enveloppes de clé maîtresse V1](key-envelopes-v1.md) sont maintenant implémentées dans `crypto-backup` : accès par mot de passe avec Argon2id et accès par clé aléatoire avec HKDF, puis XChaCha20-Poly1305. Elles protègent une clé de 32 octets et vérifient le contexte attendu. Le profil Argon2id à 64 Mio reste expérimental ; sa qualification Hermes est ouverte. Le manifest global, la charge métier et les parcours de récupération ne sont pas implémentés. Les formats historiques restent isolés dans `/experimental`. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts.
+Les [enveloppes de clé maîtresse V1](key-envelopes-v1.md) sont maintenant implémentées dans `crypto-backup` : accès par mot de passe avec Argon2id et accès par clé aléatoire avec HKDF, puis XChaCha20-Poly1305. Elles protègent une clé de 32 octets et vérifient le contexte attendu. Le profil Argon2id à 64 Mio reste expérimental ; sa qualification Hermes est ouverte. La [composition V1 du jalon 2](account-vault-v1.md) authentifie maintenant le contenu opaque et les deux enveloppes et permet le réenveloppement local du mot de passe. La charge métier et les parcours de récupération ne sont pas implémentés. Les formats historiques restent isolés dans `/experimental`. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts.
 
 ## Périmètre et parcours
 

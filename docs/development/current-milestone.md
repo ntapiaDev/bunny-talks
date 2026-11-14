@@ -1,6 +1,10 @@
-# Migration de sécurité OpenE2EE 14.5.0 — 14 novembre 2026
+# Jalon 2 — Composition authentifiée du coffre E2EE — 14 novembre 2026
 
-**Jalon 1 du coffre récupérable :** les primitives et deux enveloppes de clé maîtresse sont implémentées pour revue dans `crypto-backup`. Voir les [formats, API et limites](../security/key-envelopes-v1.md). Le profil Argon2id à 64 Mio est expérimental et sa qualification Hermes reste ouverte. Le manifest, le contenu métier, les parcours de compte, l'archive et la restauration OpenE2EE restent hors périmètre. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. Les modifications sont laissées non commitées pour revue.
+**Implémenté pour revue :** création et ouverture d’une charge opaque par les deux voies, manifest HMAC-SHA-256 et réenveloppement local du mot de passe conservant exactement contenu chiffré et enveloppe récupération. Voir la [spécification V1](../security/account-vault-v1.md). Le profil Argon2id, Hermes et les plateformes natives restent à qualifier. Aucun backend, parcours de compte, import SDK ou archive n’est ajouté. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. Les modifications restent non commitées ; le jalon 3 n’est pas commencé.
+
+## Historique — Migration de sécurité OpenE2EE 14.5.0
+
+**Jalon 1 du coffre récupérable :** les primitives et deux enveloppes de clé maîtresse sont implémentées pour revue dans `crypto-backup`. Voir les [formats, API et limites](../security/key-envelopes-v1.md). Le profil Argon2id à 64 Mio est expérimental et sa qualification Hermes reste ouverte. Le manifest est désormais ajouté par le jalon 2 ci-dessus ; contenu métier, parcours de compte, archive et restauration OpenE2EE restent hors périmètre. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. Les modifications sont laissées non commitées pour revue.
 
 **Actualisation :** la qualification Android est partiellement validée sur un émulateur Android 17 avec Hermes et SQLCipher, y compris après arrêt forcé. Le diagnostic renforcé et ses limites sont décrits dans le [rapport mobile](mobile-open-e2ee-qualification.md) ; iOS et la production restent à qualifier.
 

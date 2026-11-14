@@ -109,7 +109,7 @@ function copy(bytes: Uint8Array, length: number): Uint8Array {
   if (!(bytes instanceof Uint8Array) || bytes.byteLength !== length) return fail('INVALID_INPUT');
   return Uint8Array.from(bytes);
 }
-function context(value: KeyEnvelopeContext): KeyEnvelopeContext {
+export function snapshotKeyEnvelopeContext(value: KeyEnvelopeContext): KeyEnvelopeContext {
   if (!value || typeof value !== 'object') return fail('INVALID_INPUT');
   const account = value.account;
   const vaultId = value.vaultId;
@@ -118,7 +118,7 @@ function context(value: KeyEnvelopeContext): KeyEnvelopeContext {
   decode(vaultId, 16);
   return { account, vaultId };
 }
-function passwordBytes(password: string): Uint8Array {
+export function encodeEnvelopePassword(password: string): Uint8Array {
   if (
     typeof password !== 'string' ||
     password.length === 0 ||
@@ -133,7 +133,10 @@ function passwordBytes(password: string): Uint8Array {
   }
   return bytes;
 }
-async function randomBytes(length: number, random: CryptographicRandomSource): Promise<Uint8Array> {
+export async function fillRandomBytes(
+  length: number,
+  random: CryptographicRandomSource,
+): Promise<Uint8Array> {
   const bytes = new Uint8Array(length);
   try {
     if (!random || typeof random.fill !== 'function') return fail('CRYPTO_UNAVAILABLE');
@@ -147,11 +150,11 @@ async function randomBytes(length: number, random: CryptographicRandomSource): P
   }
 }
 export const generateMasterKey = (random: CryptographicRandomSource): Promise<Uint8Array> =>
-  randomBytes(32, random);
+  fillRandomBytes(32, random);
 export const generateRecoveryKey = (random: CryptographicRandomSource): Promise<Uint8Array> =>
-  randomBytes(32, random);
+  fillRandomBytes(32, random);
 export async function generateVaultId(random: CryptographicRandomSource): Promise<string> {
-  return encode(await randomBytes(16, random));
+  return encode(await fillRandomBytes(16, random));
 }
 async function passwordKey(bytes: Uint8Array, salt: Uint8Array): Promise<Uint8Array> {
   let root: Uint8Array | undefined;
@@ -177,7 +180,7 @@ export async function derivePasswordWrappingKey(
   password: string,
   salt: Uint8Array,
 ): Promise<Uint8Array> {
-  const bytes = passwordBytes(password);
+  const bytes = encodeEnvelopePassword(password);
   let snapshot: Uint8Array | undefined;
   try {
     snapshot = copy(salt, 16);
@@ -215,13 +218,15 @@ async function create(
   let secretBytes: Uint8Array | undefined;
   let key: Uint8Array | undefined;
   try {
-    const expected = context(metadata);
+    const expected = snapshotKeyEnvelopeContext(metadata);
     const revision = metadata.revision;
     if (!Number.isSafeInteger(revision) || revision < 1) return fail('INVALID_INPUT');
     secretBytes =
-      access === 'password' ? passwordBytes(secret as string) : copy(secret as Uint8Array, 32);
-    const salt = await randomBytes(16, random);
-    const nonce = await randomBytes(24, random);
+      access === 'password'
+        ? encodeEnvelopePassword(secret as string)
+        : copy(secret as Uint8Array, 32);
+    const salt = await fillRandomBytes(16, random);
+    const nonce = await fillRandomBytes(24, random);
     const header: Header = {
       ...expected,
       revision,
@@ -329,7 +334,7 @@ function validate(input: Uint8Array, access: Access): KeyEnvelopeValidation {
       header.domain !== domain(access)
     )
       return fail('UNSUPPORTED_FORMAT');
-    context(header);
+    snapshotKeyEnvelopeContext(header);
     if (!Number.isSafeInteger(header.revision) || header.revision < 1 || header.outputBytes !== 32)
       return fail('INVALID_ENVELOPE');
     if (
@@ -375,12 +380,14 @@ async function open(
   try {
     const validation = validate(input, access);
     if (!validation.ok) return validation;
-    const expected = context(expectedContext);
+    const expected = snapshotKeyEnvelopeContext(expectedContext);
     const { header, ciphertext } = validation.envelope;
     if (expected.account !== header.account || expected.vaultId !== header.vaultId)
       return fail('CONTEXT_MISMATCH');
     secretBytes =
-      access === 'password' ? passwordBytes(secret as string) : copy(secret as Uint8Array, 32);
+      access === 'password'
+        ? encodeEnvelopePassword(secret as string)
+        : copy(secret as Uint8Array, 32);
     const salt = decode(header.salt, 16);
     key =
       access === 'password'

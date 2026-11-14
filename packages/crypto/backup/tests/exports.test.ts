@@ -11,6 +11,12 @@ describe('backup package entry points', () => {
     expect(Object.keys(root).sort()).toEqual(
       [
         'KeyEnvelopeError',
+        'AccountVaultError',
+        'createAccountVault',
+        'openAccountVaultWithPassword',
+        'openAccountVaultWithRecoveryKey',
+        'rewrapAccountVaultPassword',
+        'validateAccountVault',
         'createPasswordKeyEnvelope',
         'createRecoveryKeyEnvelope',
         'derivePasswordWrappingKey',

@@ -63,7 +63,7 @@ Seuls les profils exacts ci-dessus sont autorisés. Les paramètres de documents
 
 Les codes sont `INVALID_INPUT`, `INVALID_ENVELOPE`, `UNSUPPORTED_FORMAT`, `LIMIT_EXCEEDED`, `CONTEXT_MISMATCH`, `AUTHENTICATION_FAILED`, `CRYPTO_UNAVAILABLE`. Un mauvais secret et un tag invalide partagent `AUTHENTICATION_FAILED`. Aucun secret partiel n'est retourné. La reconnaissance du message `invalid tag` dépend de Noble 2.4.0 épinglé ; une autre erreur est classée comme indisponibilité cryptographique. La catégorie structurelle peut précéder la détection d'un format incompatible.
 
-La révision est authentifiée mais n'établit aucune fraîcheur. Un ancien document valide reste ouvrable. Les deux enveloppes indépendantes ne prouvent pas encore leur appartenance à une même publication : le manifest authentifié futur devra lier les enveloppes et le contenu. Les créations doivent recevoir la même clé maîtresse ; aucune activation de compte n'est effectuée ici.
+La révision est authentifiée mais n'établit aucune fraîcheur. Un ancien document valide reste ouvrable. Les deux enveloppes utilisées seules ne prouvent pas leur appartenance à une même publication. La [composition du jalon 2](account-vault-v1.md) les lie au contenu par un manifest authentifié. Leur format reste inchangé. Les créations doivent recevoir la même clé maîtresse ; aucune activation de compte n'est effectuée ici.
 
 La force de la clé de récupération ne compense pas un mot de passe faible. Une copie des enveloppes autorise les essais hors ligne. Une ancienne enveloppe copiée reste déchiffrable avec son ancien secret. L'authentification classique transmet temporairement le mot de passe au serveur sur TLS : un serveur actif peut le capturer. Aucun secret E2EE ne doit lui être transmis en clair.
 
