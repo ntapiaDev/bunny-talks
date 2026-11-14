@@ -1,6 +1,6 @@
 # Qualification mobile — prérequis et état de la migration
 
-**État mobile au 14 novembre 2026 : qualification non validée.** L'examen préalable a révélé une correction de sécurité en OpenE2EE 14.5.0 qui concerne directement l'identité commune. La migration Node vers 14.5.0 a depuis été autorisée et réalisée ; ses résultats figurent dans le [rapport de migration](open-e2ee-14-5-migration.md). La qualification mobile est la prochaine étape envisagée ; aucune application mobile n'a été réalisée.
+**État mobile au 14 novembre 2026 : qualification non validée.** L'examen préalable a révélé une correction de sécurité en OpenE2EE 14.5.0 qui concerne directement l'identité commune. La migration Node vers 14.5.0 a depuis été autorisée et réalisée ; ses résultats figurent dans le [rapport de migration](open-e2ee-14-5-migration.md). Une fondation Expo de diagnostic est désormais préparée ; la [qualification mobile](mobile-open-e2ee-qualification.md) reste non validée faute d'exécution native.
 
 ## Comparaison OpenE2EE
 
@@ -16,7 +16,7 @@ Le fichier de génération de registration ID est identique entre les archives e
 
 Node 24.22.2 et pnpm 10.34.9 sont présents. Aucun `java`, `adb`, `emulator`, `sdkmanager`, `gradle` ou `xcodebuild` n'a été trouvé dans le PATH ; aucun SDK Android n'a été trouvé aux emplacements locaux examinés. Cela ne prouve pas l'absence d'un appareil ou d'une installation externe accessible autrement. Aucune compilation native, exécution Hermes, session mobile, mesure, fermeture ou réouverture SQLCipher mobile n'a été réalisée. iOS exige un environnement macOS et Xcode approprié.
 
-La documentation installée de 14.4.0 indique les minima Expo 55.0.27, React Native 0.83.6, `expo-sqlite` 55.0.17 et `expo-secure-store` 55.0.15. L'adaptateur public exige un build natif avec SQLCipher ; Expo Go ne suffit pas. Il indique utiliser SecureStore par défaut pour la clé de base et refuser l'ouverture chiffrée sans SQLCipher ou lorsque la clé d'une base existante manque. Ce sont des contrats documentés, non des observations mobiles. Le choix exact d'un ensemble de versions compatibles, le fournisseur d'aléa et le comportement Hermes restent à qualifier dans la version retenue.
+La documentation installée de 14.5.0 indique les minima Expo 55.0.27, React Native 0.83.6, `expo-sqlite` 55.0.17 et `expo-secure-store` 55.0.15. L'adaptateur public exige un build natif avec SQLCipher ; Expo Go ne suffit pas. Il indique utiliser SecureStore par défaut pour la clé de base et refuser l'ouverture chiffrée sans SQLCipher ou lorsque la clé d'une base existante manque. Ce sont des contrats documentés, non des observations mobiles. Le choix exact d'un ensemble de versions compatibles, le fournisseur d'aléa et le comportement Hermes restent à qualifier dans la version retenue.
 
 ## Proposition historique ayant conduit au jalon de migration
 

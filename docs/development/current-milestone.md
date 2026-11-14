@@ -1,6 +1,8 @@
 # Migration de sécurité OpenE2EE 14.5.0 — 14 novembre 2026
 
-La migration vers OpenE2EE 14.5.0 est le dernier jalon technique terminé et validé au niveau expérimental sous Node. La revue des tests adversariaux et de la migration SQLCipher est favorable ; le [rapport de migration](open-e2ee-14-5-migration.md) décrit leurs résultats et leurs limites. La qualification React Native/Expo est la prochaine étape envisagée et reste non validée. Aucun choix de production définitif n’est arrêté.
+**Actualisation :** la qualification Android est partiellement validée sur un émulateur Android 17 avec Hermes et SQLCipher, y compris après arrêt forcé. Le diagnostic renforcé et ses limites sont décrits dans le [rapport mobile](mobile-open-e2ee-qualification.md) ; iOS et la production restent à qualifier.
+
+La migration vers OpenE2EE 14.5.0 est le dernier jalon technique terminé et validé au niveau expérimental sous Node. La revue des tests adversariaux et de la migration SQLCipher est favorable ; le [rapport de migration](open-e2ee-14-5-migration.md) décrit leurs résultats et leurs limites. La qualification React Native/Expo reste partielle : Android a été testé sur un émulateur et iOS reste à qualifier. Aucun choix de production définitif n’est arrêté.
 
 Le POC multi-appareils sous 14.4.0, dont les résultats historiques sont conservés ci-dessous, a reçu une revue favorable. La **recommandation B** demeure de poursuivre provisoirement l’évaluation d’OpenE2EE. Voir [l’audit consolidé](../architecture/e2ee-transition-audit.md) et [ADR-003](../architecture/decisions/003-open-e2ee-evaluation.md).
 

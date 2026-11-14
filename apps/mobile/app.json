@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "Bunny Talks",
+    "slug": "bunny-talks",
+    "scheme": "bunnytalks",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "android": { "package": "fr.bunnytalks.mobile" },
+    "ios": { "bundleIdentifier": "fr.bunnytalks.mobile" },
+    "plugins": [["expo-sqlite", { "useSQLCipher": true }], "expo-secure-store"]
+  }
+}

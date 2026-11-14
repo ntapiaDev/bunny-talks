@@ -24,14 +24,14 @@ L'architecture retenue est un **monolithe modulaire organisé en monorepo**, ave
 
 ### 2.1. Applications
 
-Les applications suivantes sont prévues avec des responsabilités distinctes. Les répertoires locaux `apps/api`, `apps/mobile` et `apps/crypto-lab` sont actuellement vides : aucune de ces applications n'est encore implémentée dans le dépôt.
+Les applications suivantes ont des responsabilités distinctes. `apps/mobile` contient une fondation Expo de diagnostic non qualifiée sur appareil ; `apps/api` et `apps/crypto-lab` restent vides.
 
-| Application       | Responsabilité                                            | Technologie        | Statut                |
-| ----------------- | --------------------------------------------------------- | ------------------ | --------------------- |
-| `apps/api`        | API, comptes, relations, communications, espaces partagés | NestJS             | Prévue                |
-| `apps/mobile`     | Application principale iOS et Android                     | React Native, Expo | Prévue                |
-| `apps/crypto-lab` | Banc d'essai et démonstration cryptographique             | À déterminer       | Prévu, non implémenté |
-| `apps/web`        | Application web future                                    | À déterminer       | Différée              |
+| Application       | Responsabilité                                            | Technologie        | Statut                                                    |
+| ----------------- | --------------------------------------------------------- | ------------------ | --------------------------------------------------------- |
+| `apps/api`        | API, comptes, relations, communications, espaces partagés | NestJS             | Prévue                                                    |
+| `apps/mobile`     | Application principale iOS et Android                     | React Native, Expo | Fondation expérimentale ; qualification mobile en attente |
+| `apps/crypto-lab` | Banc d'essai et démonstration cryptographique             | À déterminer       | Prévu, non implémenté                                     |
+| `apps/web`        | Application web future                                    | À déterminer       | Différée                                                  |
 
 L'application mobile est prévue comme premier client du produit.
 
