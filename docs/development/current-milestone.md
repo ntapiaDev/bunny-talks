@@ -1,6 +1,12 @@
-# Jalon 4.2A — Fondation PostgreSQL et Prisma
+# Jalon 4.2B — Repository transactionnel PostgreSQL
 
-La fondation et ses limites sont décrites dans [PostgreSQL et Prisma](postgresql-prisma-foundation.md). Les tests ciblés ont réussi sur une instance PostgreSQL 18.7 temporaire ; la revue reste nécessaire avant le jalon 4.2B.
+Implémenté et testé pour revue, sans commit : activation initiale, réenveloppement interne atomique, CAS, reçus durables et empreinte HMAC. Voir le [contrat interne, la politique de clés et la qualification PostgreSQL](transactional-vault-repository.md). Les tests réels sur PostgreSQL 18.7 couvrent concurrence, rollbacks, réponse perdue, timeout et relecture après recréation du client Prisma. Aucun endpoint, authentification ou mécanisme d'autorisation d'appareil n'est ajouté. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. Le jalon 4.3 n'est pas commencé ; attendre la revue avant toute suite.
+
+Correction pour revue : une enveloppe liée à une ancienne révision d'authentification reste lisible après une réinitialisation simulée ; le changement ordinaire est refusé jusqu'à une réparation future. Les services de réinitialisation et de réparation restent à concevoir.
+
+## Historique — Jalon 4.2A : fondation PostgreSQL et Prisma
+
+La fondation et ses limites sont décrites dans [PostgreSQL et Prisma](postgresql-prisma-foundation.md). Les tests ciblés ont réussi sur une instance PostgreSQL 18.7 temporaire ; ce jalon a été commité avant 4.2B.
 
 # Historique — Jalon 3 : qualification Android/Hermes du coffre — 14 novembre 2026
 

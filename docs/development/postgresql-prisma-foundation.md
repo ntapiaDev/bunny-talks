@@ -1,5 +1,7 @@
 # Fondation PostgreSQL et Prisma — jalon 4.2A
 
+Cette page conserve la description de la fondation 4.2A. Le [jalon 4.2B](transactional-vault-repository.md) ajoute désormais le repository interne, les transactions, le CAS, l'empreinte HMAC et les tests concurrents, sans modifier ce schéma ni exposer d'API HTTP. Les mentions ci-dessous de capacités futures décrivent la situation à la fin de 4.2A.
+
 ## Environnement local
 
 Versions retenues : Node 24, pnpm 10.34.9, PostgreSQL 18.7, Prisma CLI, client et adaptateur PostgreSQL 7.10.1, pilote `pg` 8.23.1. Prisma 7 requiert un adaptateur pour les connexions directes ; le client généré est local et ignoré par Git. Aucune connexion applicative ni service HTTP n'est encore implémenté.

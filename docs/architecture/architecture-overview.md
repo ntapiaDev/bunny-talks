@@ -24,14 +24,14 @@ L'architecture retenue est un **monolithe modulaire organisé en monorepo**, ave
 
 ### 2.1. Applications
 
-Les applications suivantes ont des responsabilités distinctes. `apps/mobile` contient une fondation Expo de diagnostic partiellement qualifiée sur un émulateur Android ; `apps/api` et `apps/crypto-lab` restent vides. La qualification iOS et celle des appareils physiques restent ouvertes.
+Les applications suivantes ont des responsabilités distinctes. `apps/mobile` contient une fondation Expo de diagnostic partiellement qualifiée sur un émulateur Android ; `apps/api` contient la persistance Prisma/PostgreSQL et un repository transactionnel interne sans endpoint ; `apps/crypto-lab` reste vide. La qualification iOS et celle des appareils physiques restent ouvertes.
 
-| Application       | Responsabilité                                            | Technologie        | Statut                                                    |
-| ----------------- | --------------------------------------------------------- | ------------------ | --------------------------------------------------------- |
-| `apps/api`        | API, comptes, relations, communications, espaces partagés | NestJS             | Prévue                                                    |
-| `apps/mobile`     | Application principale iOS et Android                     | React Native, Expo | Fondation expérimentale ; qualification Android partielle |
-| `apps/crypto-lab` | Banc d'essai et démonstration cryptographique             | À déterminer       | Prévu, non implémenté                                     |
-| `apps/web`        | Application web future                                    | À déterminer       | Différée                                                  |
+| Application       | Responsabilité                                            | Technologie                      | Statut                                                    |
+| ----------------- | --------------------------------------------------------- | -------------------------------- | --------------------------------------------------------- |
+| `apps/api`        | API, comptes, relations, communications, espaces partagés | NestJS prévu ; Prisma/PostgreSQL | Persistance interne ; HTTP et authentification à venir    |
+| `apps/mobile`     | Application principale iOS et Android                     | React Native, Expo               | Fondation expérimentale ; qualification Android partielle |
+| `apps/crypto-lab` | Banc d'essai et démonstration cryptographique             | À déterminer                     | Prévu, non implémenté                                     |
+| `apps/web`        | Application web future                                    | À déterminer                     | Différée                                                  |
 
 L'application mobile est prévue comme premier client du produit.
 
@@ -41,15 +41,15 @@ L'application web sera développée ultérieurement, sans imposer de dépendance
 
 Les packages ont vocation à contenir du code réutilisable par plusieurs applications. Les packages indiqués comme présents existent déjà, mais leurs responsabilités ci-dessous décrivent aussi des capacités futures.
 
-| Package          | Responsabilité                                    | Statut                                     |
-| ---------------- | ------------------------------------------------- | ------------------------------------------ |
-| `contracts`      | Contrats et types partagés                        | Présent ; point d'entrée actuellement vide |
-| `validation`     | Schémas de validation partagés                    | Présent ; validation d'e-mail              |
-| `crypto/core`    | Modèle cryptographique indépendant                | Présent ; fondations                       |
-| `crypto/engine`  | Intégration du protocole cryptographique          | Présent ; évaluation expérimentale         |
-| `crypto/storage` | Stockage local sécurisé                           | Prévu ; répertoire local vide              |
-| `crypto/backup`  | Sauvegarde et restauration cryptographiques       | Présent ; composants expérimentaux         |
-| `crypto/devices` | Gestion des identités et associations d'appareils | Prévu ; répertoire local vide              |
+| Package          | Responsabilité                                    | Statut                                      |
+| ---------------- | ------------------------------------------------- | ------------------------------------------- |
+| `contracts`      | Contrats et types partagés                        | Présent ; contrats de publication du coffre |
+| `validation`     | Schémas de validation partagés                    | Présent ; e-mail et publication du coffre   |
+| `crypto/core`    | Modèle cryptographique indépendant                | Présent ; fondations                        |
+| `crypto/engine`  | Intégration du protocole cryptographique          | Présent ; évaluation expérimentale          |
+| `crypto/storage` | Stockage local sécurisé                           | Prévu ; répertoire local vide               |
+| `crypto/backup`  | Sauvegarde et restauration cryptographiques       | Présent ; composants expérimentaux          |
+| `crypto/devices` | Gestion des identités et associations d'appareils | Prévu ; répertoire local vide               |
 
 Le package `config` est reporté tant qu'un besoin réel de partage ne le justifie pas.
 
@@ -102,13 +102,13 @@ L'arborescence ci-dessous présente la cible, avec les statuts actuels. Un répe
 ```text
 bunny-talks/
 ├── apps/
-│   ├── api/                     # prévu ; répertoire local vide
+│   ├── api/                     # persistance interne Prisma/PostgreSQL
 │   ├── mobile/                  # prévu ; répertoire local vide
 │   ├── crypto-lab/              # prévu ; répertoire local vide
 │   └── web/                     # différé
 │
 ├── packages/
-│   ├── contracts/               # présent ; point d'entrée vide
+│   ├── contracts/               # présent ; contrats de publication du coffre
 │   ├── validation/              # présent
 │   └── crypto/
 │       ├── core/                # présent ; fondations
@@ -451,7 +451,7 @@ Le serveur doit distinguer :
 
 Les informations sensibles ne doivent pas être exposées dans les logs.
 
-Le schéma Prisma sera construit progressivement, après stabilisation des modèles fonctionnels et cryptographiques nécessaires.
+Le schéma Prisma est construit progressivement, après stabilisation des modèles fonctionnels et cryptographiques nécessaires. La [fondation 4.2A](../development/postgresql-prisma-foundation.md) et le [repository transactionnel 4.2B](../development/transactional-vault-repository.md) couvrent le stockage du coffre, les révisions et reçus ; les règles pures restent dans les packages indépendants de Prisma et NestJS. Les services d'authentification et d'autorisation devront imposer leurs préconditions avant toute exposition.
 
 ## 12. Internationalisation
 

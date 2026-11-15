@@ -7,12 +7,15 @@
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",
     "prisma:migrate": "prisma migrate deploy",
-    "test:persistence": "vitest run tests/postgres.test.mjs",
+    "test:persistence": "vitest run tests/postgres.test.mjs tests/postgres-vault-repository.test.ts",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tests/tsconfig.json",
-    "test": "vitest run tests/publication-digest.test.ts tests/local-env.test.mjs"
+    "test": "vitest run tests/publication-digest.test.ts tests/vault-request-fingerprint.test.ts tests/postgres-test-database.test.ts tests/local-env.test.mjs"
   },
   "dependencies": {
+    "@bunny-talks/contracts": "workspace:*",
+    "@bunny-talks/crypto-backup": "workspace:*",
+    "@bunny-talks/validation": "workspace:*",
     "@prisma/adapter-pg": "7.10.1",
     "@prisma/client": "7.10.1",
     "pg": "8.23.1"
