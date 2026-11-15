@@ -1,0 +1,86 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Account {
+  id                 String              @id @db.VarChar(128)
+  credential         PasswordCredential?
+  vault              VaultState?
+  publications       VaultPublication[]
+  operations         VaultOperation[]
+  devices            Device[]
+}
+
+model PasswordCredential {
+  accountId String  @id @db.VarChar(128)
+  verifier  String
+  revision  BigInt  @default(1)
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+}
+
+model VaultState {
+  accountId                  String           @id @db.VarChar(128)
+  vaultId                    String           @db.VarChar(22)
+  storageRevision            BigInt
+  activePublicationId        String           @db.Uuid
+  account                    Account          @relation(fields: [accountId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  activePublication          VaultPublication @relation(fields: [accountId, vaultId, activePublicationId], references: [accountId, vaultId, id], onDelete: Restrict, onUpdate: Restrict)
+  @@unique([accountId, vaultId])
+}
+
+model VaultPublication {
+  id                         String       @id @db.Uuid
+  accountId                  String       @db.VarChar(128)
+  vaultId                    String       @db.VarChar(22)
+  cryptographicFormatVersion Int
+  generation                 BigInt
+  contentRevision            BigInt
+  passwordRevision           BigInt
+  recoveryRevision           BigInt
+  envelopeCredentialRevision BigInt
+  bytes                      Bytes
+  digest                     Bytes
+  account                    Account      @relation(fields: [accountId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  activeFor                  VaultState[]
+  @@unique([accountId, vaultId, id])
+}
+
+model VaultOperation {
+  accountId                  String  @db.VarChar(128)
+  operationId                String  @db.Uuid
+  kind                       String  @db.VarChar(32)
+  expectedStorageRevision    BigInt?
+  expectedCredentialRevision BigInt
+  fingerprintKeyId           String  @db.VarChar(128)
+  fingerprint                Bytes
+  status                     String  @db.VarChar(16)
+  resultStorageRevision      BigInt?
+  resultCredentialRevision   BigInt?
+  publicationDigest          Bytes?
+  rejectionCode              String? @db.VarChar(32)
+  account                    Account @relation(fields: [accountId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  @@id([accountId, operationId])
+}
+
+model Device {
+  id        String    @id @db.Uuid
+  accountId String    @db.VarChar(128)
+  revokedAt DateTime? @db.Timestamptz(3)
+  account   Account   @relation(fields: [accountId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  sessions  Session[]
+  @@unique([accountId, id])
+}
+
+model Session {
+  id        String    @id @db.Uuid
+  accountId String    @db.VarChar(128)
+  deviceId  String    @db.Uuid
+  revokedAt DateTime? @db.Timestamptz(3)
+  device    Device    @relation(fields: [accountId, deviceId], references: [accountId, id], onDelete: Restrict, onUpdate: Restrict)
+}

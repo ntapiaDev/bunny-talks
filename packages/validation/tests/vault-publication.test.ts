@@ -3,6 +3,7 @@ import {
   databaseRevisionSchema,
   initialVaultPublicationSchema,
   ordinaryPasswordChangeSchema,
+  publicationDigestSchema,
   vaultOperationResultSchema,
   vaultReadStateSchema,
 } from '../src/index.js';
@@ -69,11 +70,15 @@ it('validates read states and each public operation result without exposing inte
     vaultId: input.vaultId,
     cryptographicFormatVersion: 1,
     publicationBase64Url: 'AA',
+    publicationDigest: 'ungWv48Bz-pBQUDeXa4iI7ADYaOWF3qctBD_YfIAFa0',
     cas,
     revisions: { generation: 1, contentRevision: 1, passwordRevision: 1, recoveryRevision: 1 },
     envelopeCredentialRevision: '2',
   };
   expect(vaultReadStateSchema.safeParse(state).success).toBe(true);
+  expect(vaultReadStateSchema.safeParse({ ...state, publicationDigest: undefined }).success).toBe(
+    false,
+  );
   expect(
     vaultReadStateSchema.safeParse({
       ...state,
@@ -89,8 +94,17 @@ it('validates read states and each public operation result without exposing inte
     status: 'committed',
     identity,
     cas,
-    publicationDigest: 'format-not-yet-defined',
+    publicationDigest: 'A'.repeat(43),
   };
+  for (const invalidDigest of ['A'.repeat(42), `${'A'.repeat(42)}B`, `${'A'.repeat(42)}+`]) {
+    expect(
+      vaultReadStateSchema.safeParse({ ...state, publicationDigest: invalidDigest }).success,
+    ).toBe(false);
+    expect(
+      vaultOperationResultSchema.safeParse({ ...committed, publicationDigest: invalidDigest })
+        .success,
+    ).toBe(false);
+  }
   expect(
     vaultOperationResultSchema.safeParse({ transportVersion: 1, status: 'unknown' }).success,
   ).toBe(true);
@@ -130,4 +144,20 @@ it('validates read states and each public operation result without exposing inte
     vaultOperationResultSchema.safeParse({ transportVersion: 1, status: 'unknown', identity })
       .success,
   ).toBe(false);
+});
+
+it('requires a canonical unpadded 32-byte publication digest', () => {
+  expect(publicationDigestSchema.safeParse('A'.repeat(43)).success).toBe(true);
+  for (const digest of [
+    '',
+    'A'.repeat(42),
+    'A'.repeat(44),
+    `${'A'.repeat(42)}B`,
+    `${'A'.repeat(43)}=`,
+    `${'A'.repeat(42)}+`,
+    `${'A'.repeat(42)}/`,
+    `${'A'.repeat(41)} A`,
+  ]) {
+    expect(publicationDigestSchema.safeParse(digest).success).toBe(false);
+  }
 });

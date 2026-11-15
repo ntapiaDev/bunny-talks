@@ -18,6 +18,8 @@ export interface VaultReadState {
   readonly vaultId: string;
   readonly cryptographicFormatVersion: 1;
   readonly publicationBase64Url: string;
+  /** SHA-256 of the exact publication bytes, canonical unpadded base64url. */
+  readonly publicationDigest: string;
   readonly cas: VaultCas;
   /** Structurally extracted; clients must authenticate before trusting these values. */
   readonly revisions: VaultCryptoRevisions;
@@ -64,6 +66,7 @@ export type VaultOperationResult =
       readonly status: 'committed';
       readonly identity: Omit<VaultOperationIdentity, 'fingerprint'>;
       readonly cas: VaultCas;
+      /** SHA-256 of the exact publication bytes, canonical unpadded base64url. */
       readonly publicationDigest: string;
     }
   | {

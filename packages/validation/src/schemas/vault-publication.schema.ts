@@ -8,6 +8,8 @@ export const databaseRevisionSchema = z
 const operationId = z.uuid().refine((value) => value === value.toLowerCase());
 const account = z.string().regex(/^[!-~]{1,128}$/);
 const vaultId = z.string().regex(/^[A-Za-z0-9_-]{21}[AQgw]$/);
+/** Canonical unpadded base64url encoding of a 32-byte SHA-256 digest. */
+export const publicationDigestSchema = z.string().regex(/^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/);
 // A 131072-byte publication encodes to at most 174763 unpadded characters.
 const publication = z
   .string()
@@ -55,6 +57,7 @@ export const vaultReadStateSchema = z.strictObject({
   vaultId,
   cryptographicFormatVersion: z.literal(1),
   publicationBase64Url: publication,
+  publicationDigest: publicationDigestSchema,
   cas: vaultCasSchema,
   revisions: vaultCryptoRevisionsSchema,
   envelopeCredentialRevision: databaseRevisionSchema,
@@ -81,7 +84,7 @@ export const vaultOperationResultSchema = z.discriminatedUnion('status', [
     status: z.literal('committed'),
     identity: publicOperationIdentity,
     cas: vaultCasSchema,
-    publicationDigest: z.string(),
+    publicationDigest: publicationDigestSchema,
   }),
   z.strictObject({
     transportVersion: z.literal(1),

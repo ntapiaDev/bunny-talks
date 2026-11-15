@@ -1,4 +1,8 @@
-# Jalon 3 — Qualification Android/Hermes du coffre — 14 novembre 2026
+# Jalon 4.2A — Fondation PostgreSQL et Prisma
+
+La fondation et ses limites sont décrites dans [PostgreSQL et Prisma](postgresql-prisma-foundation.md). Les tests ciblés ont réussi sur une instance PostgreSQL 18.7 temporaire ; la revue reste nécessaire avant le jalon 4.2B.
+
+# Historique — Jalon 3 : qualification Android/Hermes du coffre — 14 novembre 2026
 
 **Historique du premier essai Noble, non validé :** les contrôles rapides (aléa natif, vecteur HKDF, ouverture du vecteur de publication par récupération et manifest) réussissent sur émulateur Android/Hermes. La dérivation Argon2id a été interrompue avant résultat après plusieurs observations ; le parcours complet et la persistance ne sont pas qualifiés. Voir le [rapport détaillé](android-vault-qualification.md). La configuration Metro cible l’entrée ESM du parseur après un échec runtime de l’entrée UMD. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. Aucun jalon suivant n’est commencé.
 
