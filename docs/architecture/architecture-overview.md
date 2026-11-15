@@ -70,7 +70,7 @@ PostgreSQL constitue la source de vérité des données persistantes du serveur.
 
 Redis pourra être introduit pour la présence, le cache, la limitation de débit, les files de traitement et d'autres besoins de performance.
 
-Le [jalon 4.4A](../development/email-registration.md) ajoute une identité e-mail vérifiée distincte de l’identifiant stable du compte et une intention temporaire de vérification, finalisée atomiquement avec le vérificateur serveur. Cette primitive interne ne crée ni session, ni coffre, ni autorisation d’appareil ; les parcours publics et l’amorçage restent à réaliser.
+Le [jalon 4.4A](../development/email-registration.md) ajoute une identité e-mail vérifiée distincte de l’identifiant stable du compte et une intention temporaire de vérification, finalisée atomiquement avec le vérificateur serveur. Cette primitive interne ne crée ni session, ni coffre, ni autorisation d’appareil ; les parcours publics restent à réaliser. Le [jalon 4.4B](../development/initial-device-bootstrap.md) ajoute une composition interne pour publier le premier coffre et autoriser son appareil dans un commit PostgreSQL unique, avec mot de passe vérifié et association durable aux reçus.
 
 ### Mobile
 
@@ -260,7 +260,7 @@ Les appareils de confiance d'un même compte partagent une identité cryptograph
 
 Un compte peut disposer au maximum de cinq appareils de confiance.
 
-Un nouvel appareil s'authentifie puis obtient une autorisation individuelle par lien e-mail à usage unique lié à sa demande, avant tout accès aux données protégées. Il peut ensuite déverrouiller localement le coffre avec le mot de passe et restaurer l'identité sans ancien appareil. Une archive chiffrée indépendante des sessions de transport est à étudier pour l'historique ; sa conception et sa récupération ne sont pas démontrées. Le transfert par QR code est facultatif et reporté.
+Un appareil supplémentaire s'authentifie puis obtient une autorisation individuelle par lien e-mail à usage unique lié à sa demande, avant tout accès aux données protégées. Il peut ensuite déverrouiller localement le coffre avec le mot de passe et restaurer l'identité sans ancien appareil. Une archive chiffrée indépendante des sessions de transport est à étudier pour l'historique ; sa conception et sa récupération ne sont pas démontrées. Le transfert par QR code est facultatif et reporté. Le premier appareil d’un compte jamais initialisé suit l’amorçage 4.4B : e-mail déjà vérifié à l’inscription, session valide et mot de passe récent, sans seconde preuve e-mail automatique. Une perte totale d’appareils ne réouvre jamais cet amorçage.
 
 La distribution des messages doit tenir compte :
 

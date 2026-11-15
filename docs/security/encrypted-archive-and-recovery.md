@@ -68,7 +68,7 @@ La conception exacte de la hiérarchie de clés devra être validée avec le SDK
 
 ## 5. Ajout d'un nouvel appareil
 
-Le parcours cible ne nécessite pas d'ancien appareil :
+Le parcours cible d’un appareil supplémentaire ne nécessite pas d’ancien appareil :
 
 1. Il installe Bunny Talks sur son nouvel appareil.
 2. Il se connecte avec son e-mail et son mot de passe et initie une demande identifiable d'ajout.
@@ -79,6 +79,8 @@ Le parcours cible ne nécessite pas d'ancien appareil :
 Aucun accès aux données protégées ne doit précéder l'autorisation requise. La liaison de la demande à l'appareil, l'anti-rejeu, l'activation finale et la gestion des cinq places restent à concevoir et à tester. La comparaison historique d'ordre dans CRYPTO-004 est remplacée par cette décision.
 
 L'association par QR code est facultative et reportée. Si elle est mise en œuvre, le QR code ne doit jamais contenir directement de clé privée durable et son parcours devra être évalué séparément.
+
+L’amorçage unique du premier appareil est distinct : [4.4B](../development/initial-device-bootstrap.md) exige le compte déjà vérifié par 4.4A, une session valide et le mot de passe revérifié, sans seconde vérification e-mail automatique. Il publie uniquement un coffre créé côté client ; la validation serveur ne prouve ni possession de l’identité ni déchiffrement. Une perte totale d’appareils ne permet jamais un nouvel amorçage.
 
 ## 6. Récupération après perte de tous les appareils
 

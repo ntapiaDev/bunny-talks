@@ -1,6 +1,10 @@
-# Jalon 4.4A — Identité e-mail et inscription sécurisée
+# Jalon 4.4B — Amorçage sécurisé du premier appareil
 
-Implémenté pour revue : identité e-mail vérifiée distincte du compte stable, intentions et preuves expirantes persistées, finalisation atomique avec vérificateur Argon2id, reçu durable sans droit de connexion et date SQL de modification du vérificateur. Voir [audit, politique d’adresse/mot de passe, transactions, reprises et préconditions de 4.4B](email-registration.md). Aucun endpoint, session, appareil autorisé ou coffre n’est créé par l’inscription. Transport d’e-mail et liste de compromission de production absents : les ports échouent explicitement lorsqu’ils ne sont pas configurés. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. Modifications non commitées ; attendre la revue critique avant toute suite. **4.4B n’est pas commencé.**
+Implémentation interne non commitée pour revue critique : session et mot de passe effectivement vérifiés, revalidation sous verrou, publication initiale et autorisation du premier appareil atomiques, association immuable aux reçus et récupération sans création après réponse perdue. Voir [audit, états, migration, garanties, tests et limites](initial-device-bootstrap.md). Aucun endpoint HTTP, appareil supplémentaire ou parcours de récupération n’est livré. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. Attendre la revue avant toute suite ; **4.4C n’est pas commencé**.
+
+# Historique — Jalon 4.4A : identité e-mail et inscription sécurisée
+
+Terminé et commité avec la correction d’unicité e-mail insensible à la casse (`46d6681`). Voir [politique et qualification](email-registration.md). L’inscription crée le compte vérifié et son vérificateur, sans session, coffre ni autorisation. Les ports de transport d’e-mail et de liste de compromission de production restent à configurer.
 
 # Historique — Jalon 4.3C : preuves de réauthentification transactionnelles
 
@@ -8,15 +12,15 @@ Jalon terminé et commité : liaison au PHC préparé exact, contrôle sous verr
 
 # Historique — Jalon 4.3B : sessions persistantes et états des appareils
 
-Jalon validé, corrections des UUID et verrou exclusif conservé : [contrat, migration, expirations et limites](persistent-sessions.md). SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. Aucun accès E2EE automatique ni preuve de réauthentification. Ce paragraphe décrit la fin de 4.3B.
+Jalon terminé et commité (`4bb702d`), corrections des UUID et verrou exclusif conservé : [contrat, migration, expirations et limites](persistent-sessions.md). SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. Aucun accès E2EE automatique ni preuve de réauthentification. Ce paragraphe décrit la fin de 4.3B.
 
 # Historique — Jalon 4.3A : primitives de mot de passe serveur
 
-Jalon validé : vérificateur Argon2id serveur asynchrone, profil borné et limite locale de concurrence. Voir [fournisseur, contrat, mesures et limites](../security/server-password-verifiers.md). Ce paragraphe décrit la situation à la fin de 4.3A. SEC-CRYPTO-003 reste ouvert.
+Jalon terminé et commité (`a6c0a21`) : vérificateur Argon2id serveur asynchrone, profil borné et limite locale de concurrence. Voir [fournisseur, contrat, mesures et limites](../security/server-password-verifiers.md). Ce paragraphe décrit la situation à la fin de 4.3A. SEC-CRYPTO-003 reste ouvert.
 
 # Historique — Jalon 4.2B : repository transactionnel PostgreSQL
 
-Implémenté et validé : activation initiale, réenveloppement interne atomique, CAS, reçus durables et empreinte HMAC. Voir le [contrat interne, la politique de clés et la qualification PostgreSQL](transactional-vault-repository.md). Les tests réels sur PostgreSQL 18.7 couvrent concurrence, rollbacks, réponse perdue, timeout et relecture après recréation du client Prisma. Aucun endpoint, authentification ou mécanisme d'autorisation d'appareil n'est ajouté. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. Ce paragraphe décrit le jalon 4.2B avant le début de 4.3A.
+Terminé et commité (`90d8507`) : activation initiale, réenveloppement interne atomique, CAS, reçus durables et empreinte HMAC. Voir le [contrat interne, la politique de clés et la qualification PostgreSQL](transactional-vault-repository.md). Les tests réels sur PostgreSQL 18.7 couvrent concurrence, rollbacks, réponse perdue, timeout et relecture après recréation du client Prisma. Aucun endpoint, authentification ou mécanisme d'autorisation d'appareil n'est ajouté. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. Ce paragraphe décrit le jalon 4.2B avant le début de 4.3A.
 
 Correction historique : une enveloppe liée à une ancienne révision d'authentification reste lisible après une réinitialisation simulée ; le changement ordinaire est refusé jusqu'à une réparation future. Les services de réinitialisation et de réparation restent à concevoir.
 
@@ -30,25 +34,25 @@ La fondation et ses limites sont décrites dans [PostgreSQL et Prisma](postgresq
 
 **Actualisation expérimentale :** un fournisseur Argon2id natif a réussi des vecteurs courts et un essai complet sur cet émulateur ; cet essai isolé précédait l’intégration expérimentale ci-dessous et ne vaut pas approbation de production. Les limites de provenance, de mémoire et de qualification iOS sont précisées dans le [rapport natif](native-argon2-qualification.md). Le jalon 3 reste ouvert.
 
-**Intégration native pour revue :** le fournisseur explicite est désormais transmis aux API et vérifications internes du coffre ; les anciens appels gardent Noble comme référence. Sur émulateur Android/Hermes, les deux réenveloppements, les deux accès, les rejets et la reprise après arrêt forcé ont réussi. Un coordinateur partagé rejette les KDF concurrents. Voir les [résultats et limites](native-argon2-qualification.md#intégration-expérimentale-dans-les-api-du-coffre). Le jalon 3 reste expérimental, iOS et appareils physiques à qualifier, sans approbation de production.
+**Intégration native commitée (`1321045`) :** le fournisseur explicite est désormais transmis aux API et vérifications internes du coffre ; les anciens appels gardent Noble comme référence. Sur émulateur Android/Hermes, les deux réenveloppements, les deux accès, les rejets et la reprise après arrêt forcé ont réussi. Un coordinateur partagé rejette les KDF concurrents. Voir les [résultats et limites](native-argon2-qualification.md#intégration-expérimentale-dans-les-api-du-coffre). Le jalon 3 reste expérimental, iOS et appareils physiques à qualifier, sans approbation de production.
 
-**Jalon 4.1 pour revue :** les contrats de publication et les transitions structurelles pures sont décrits dans [leur documentation](vault-publication-contracts.md). Aucune transaction PostgreSQL ni autorisation réelle ne sont implémentées ; SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts.
+**Jalon 4.1 terminé et commité (`fa2ac7f`) :** les contrats de publication et les transitions structurelles pures sont décrits dans [leur documentation](vault-publication-contracts.md). Aucune transaction PostgreSQL ni autorisation réelle ne sont implémentées ; SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts.
 
 ## Historique — Jalon 2 du coffre E2EE
 
-**Implémenté pour revue :** création et ouverture d’une charge opaque par les deux voies, manifest HMAC-SHA-256 et réenveloppement local du mot de passe conservant exactement contenu chiffré et enveloppe récupération. Voir la [spécification V1](../security/account-vault-v1.md). Le profil Argon2id, Hermes et les plateformes natives restent à qualifier. Aucun backend, parcours de compte, import SDK ou archive n’est ajouté. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. Les modifications restent non commitées ; le jalon 3 n’est pas commencé.
+**Terminé et commité (`3b70df4`) :** création et ouverture d’une charge opaque par les deux voies, manifest HMAC-SHA-256 et réenveloppement local du mot de passe conservant exactement contenu chiffré et enveloppe récupération. Voir la [spécification V1](../security/account-vault-v1.md). Le profil Argon2id, Hermes et les plateformes natives restent à qualifier. Aucun backend, parcours de compte, import SDK ou archive n’est ajouté. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. Cette description historique précède le jalon 3.
 
 ## Historique — Migration de sécurité OpenE2EE 14.5.0
 
-**Jalon 1 du coffre récupérable :** les primitives et deux enveloppes de clé maîtresse sont implémentées pour revue dans `crypto-backup`. Voir les [formats, API et limites](../security/key-envelopes-v1.md). Le profil Argon2id à 64 Mio est expérimental et sa qualification Hermes reste ouverte. Le manifest est désormais ajouté par le jalon 2 ci-dessus ; contenu métier, parcours de compte, archive et restauration OpenE2EE restent hors périmètre. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. Les modifications sont laissées non commitées pour revue.
+**Jalon 1 du coffre récupérable, terminé et commité (`0cde61f`) :** les primitives et deux enveloppes de clé maîtresse sont implémentées dans `crypto-backup`. Voir les [formats, API et limites](../security/key-envelopes-v1.md). Le profil Argon2id à 64 Mio est expérimental et sa qualification Hermes reste ouverte. Le manifest est désormais ajouté par le jalon 2 ci-dessus ; contenu métier, parcours de compte, archive et restauration OpenE2EE restent hors périmètre. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. Ce paragraphe décrit la fin du jalon 1.
 
 **Actualisation :** la qualification Android est partiellement validée sur un émulateur Android 17 avec Hermes et SQLCipher, y compris après arrêt forcé. Le diagnostic renforcé et ses limites sont décrits dans le [rapport mobile](mobile-open-e2ee-qualification.md) ; iOS et la production restent à qualifier.
 
-La migration vers OpenE2EE 14.5.0 est le dernier jalon technique terminé et validé au niveau expérimental sous Node. La revue des tests adversariaux et de la migration SQLCipher est favorable ; le [rapport de migration](open-e2ee-14-5-migration.md) décrit leurs résultats et leurs limites. La qualification React Native/Expo reste partielle : Android a été testé sur un émulateur et iOS reste à qualifier. Aucun choix de production définitif n’est arrêté.
+La migration vers OpenE2EE 14.5.0 est terminée et validée au niveau expérimental sous Node. La revue des tests adversariaux et de la migration SQLCipher est favorable ; le [rapport de migration](open-e2ee-14-5-migration.md) décrit leurs résultats et leurs limites. La qualification React Native/Expo reste partielle : Android a été testé sur un émulateur et iOS reste à qualifier. Aucun choix de production définitif n’est arrêté.
 
 Le POC multi-appareils sous 14.4.0, dont les résultats historiques sont conservés ci-dessous, a reçu une revue favorable. La **recommandation B** demeure de poursuivre provisoirement l’évaluation d’OpenE2EE. Voir [l’audit consolidé](../architecture/e2ee-transition-audit.md) et [ADR-003](../architecture/decisions/003-open-e2ee-evaluation.md).
 
-Les décisions fonctionnelles actuelles retiennent un mot de passe unique, une clé maître de coffre indépendante et deux enveloppes, ainsi qu'une autorisation individuelle par e-mail avant accès protégé. Le coffre direct existant est expérimental ; aucun parcours complet de récupération ou d'autorisation n'est implémenté. Les bornes de registration ID et la sérialisation d'une session réelle ont été caractérisées sous Node ; les autres chemins, la révocation après compromission, l'archive et la compatibilité mobile restent à qualifier. **SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts et bloquants pour la production.**
+Les décisions fonctionnelles actuelles retiennent un mot de passe unique, une clé maître de coffre indépendante et deux enveloppes, ainsi qu’une autorisation individuelle par e-mail des appareils supplémentaires avant accès protégé. Le premier appareil suit l’amorçage 4.4B décrit en tête de page. Le coffre direct existant est expérimental ; aucun parcours complet de récupération ou d'autorisation n'est implémenté. Les bornes de registration ID et la sérialisation d'une session réelle ont été caractérisées sous Node ; les autres chemins, la révocation après compromission, l'archive et la compatibilité mobile restent à qualifier. **SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts et bloquants pour la production.**
 
 **Le POC est terminé et validé au niveau expérimental sous Node.** Les expériences démontrent l'identité commune, le fanout public, les sessions indépendantes et leur persistance. Dans la fixture et le SDK testés, un refus fiable `NOT_FOUND` clôt un envoi partiel avec des états par appareil. Cette validation ne vaut pas validation de production ; les garanties du transport réel et la stratégie d'archive restent à établir.
 

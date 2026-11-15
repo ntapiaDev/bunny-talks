@@ -1,6 +1,6 @@
 # Identité e-mail et inscription sécurisée — jalon 4.4A
 
-Statut : primitives internes pour revue, sans endpoint ni qualification de production. Aucun fournisseur d’e-mail ni corpus de mots de passe compromis de production n’est configuré. Le jalon 4.4B n’est pas commencé. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts.
+Statut historique : jalon terminé et commité (`46d6681`), sans endpoint ni qualification de production. Aucun fournisseur d’e-mail ni corpus de mots de passe compromis de production n’est configuré. L’[amorçage 4.4B](initial-device-bootstrap.md) est désormais implémenté pour revue séparée. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts.
 
 ## Audit et décisions conservées
 
@@ -93,7 +93,7 @@ Restent à implémenter et qualifier : TLS, limitation des demandes et essais av
 
 Le nettoyage futur doit supprimer par lots uniquement les intentions non consommées dont `expiresAt <= now`, avec coordination des transactions ; il ne doit pas supprimer les reçus sous prétexte que leur preuve a expiré. Le refus d’une preuve expirée et l’absence de réservation de l’adresse fonctionnent déjà sans tâche de nettoyage, mais la croissance des données et l’abus d’envoi ne sont pas contrôlés. Aucun ordonnanceur ni nettoyage des données locales de l’utilisateur n’est exécuté dans ce jalon.
 
-## Contrat à satisfaire par 4.4B
+## Contrat historique transmis à 4.4B
 
 Le futur amorçage devra authentifier le compte par mot de passe au moyen d’une session valide et obtenir une capacité spécifique, non substituable par le reçu d’inscription. Il devra verrouiller le compte dans une transaction couvrant publication et première autorisation et traiter explicitement :
 
@@ -107,7 +107,7 @@ Le futur amorçage devra authentifier le compte par mot de passe au moyen d’un
 | Tous les appareils perdus ou révoqués                             | Parcours distinct ; ne pas assimiler zéro appareil actuellement autorisé à « jamais amorcé ». Préserver l’historique et le coffre. |
 | État partiel ou incohérent                                        | Refuser l’activation automatique et diagnostiquer ; ne pas effacer pour recommencer.                                               |
 
-Le marqueur durable d’amorçage et son reçu restent à concevoir en 4.4B ; ce jalon ne prétend pas fournir cette capacité. Le repository bas niveau `publishInitial` de 4.2B reste interne et exige toujours un contrôle d’autorisation par son futur service appelant. Aucun transfert de clés, reset par e-mail, récupération de coffre ou approbation d’un appareil supplémentaire n’est ajouté.
+L’association durable d’amorçage est depuis implémentée en 4.4B, en réutilisant les reçus existants ; l’inscription seule ne fournit toujours pas cette capacité. Le repository bas niveau `publishInitial` de 4.2B reste interne et exige toujours un contrôle d’autorisation par son futur service appelant. Aucun transfert de clés, reset par e-mail, récupération de coffre ou approbation d’un appareil supplémentaire n’est ajouté.
 
 ## Vérifications et points de revue
 
@@ -134,4 +134,4 @@ Fichiers modifiés :
 - `packages/validation/src/schemas/email.schema.ts` et `packages/validation/tests/email.schema.test.ts`.
 - `docs/architecture/architecture-overview.md`, `docs/development/current-milestone.md` et `docs/security/server-password-verifiers.md`.
 
-Aucune dépendance ajoutée, aucun commit créé, aucun début d’implémentation 4.4B. Message recommandé après revue : `feat(auth): add verified email registration and verifier timestamps`.
+À la livraison de 4.4A : aucune dépendance ajoutée et aucun début d’implémentation 4.4B. Le commit est désormais créé ; message historique : `feat(auth): add verified email registration and verifier timestamps`.

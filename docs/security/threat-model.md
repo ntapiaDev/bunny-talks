@@ -401,6 +401,8 @@ Cette question doit être résolue avant la validation de l'architecture cryptog
 
 Un appareil révoqué peut conserver l'identité privée commune, les secrets d'archive ou la clé de récupération. Le refus des sessions par le serveur ne garantit ni l'effacement à distance ni l'impossibilité d'usurpation. Une compromission peut exiger de nouvelles clés indépendantes, une rotation exceptionnelle de l'identité et une nouvelle vérification par les correspondants ; leur orchestration reste à concevoir.
 
+Le [premier amorçage 4.4B](../development/initial-device-bootstrap.md) constitue un cas distinct : l’adresse est déjà vérifiée à l’inscription ; une session valide et un mot de passe revérifié autorisent une unique publication initiale atomique. Aucune seconde preuve e-mail n’est ajoutée automatiquement. Des identifiants compromis avant ce premier succès peuvent permettre à l’attaquant d’amorcer le compte en premier. Les associations immuables empêchent ensuite tout nouvel amorçage, y compris après révocation totale. `Device.authorizedAt` ne prouve ni possession de l’identité E2EE ni ouverture du coffre : SEC-CRYPTO-003 et SEC-CRYPTO-002 restent ouverts.
+
 ### 6.6. Sauvegardes et récupération
 
 Menaces :

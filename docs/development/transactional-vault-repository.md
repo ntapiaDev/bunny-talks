@@ -1,6 +1,6 @@
 # Repository transactionnel du coffre — jalon 4.2B
 
-Statut : implémenté pour revue, sans commit. Aucun endpoint HTTP, service d'authentification ou mécanisme d'autorisation d'appareil n'est livré. Le jalon 4.3 n'est pas commencé. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts et bloquants avant production.
+Statut historique : jalon terminé et commité (`90d8507`). Cette page décrit 4.2B ; les sessions et la réauthentification sont depuis livrées. L’[amorçage 4.4B](initial-device-bootstrap.md) compose désormais cette primitive interne, sans endpoint HTTP. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts et bloquants avant production.
 
 ## Audit et structure
 
@@ -131,4 +131,4 @@ Fichiers créés : les trois fichiers `apps/api/src/postgres-vault-repository.ts
 
 Fichiers modifiés : `apps/api/package.json`, `apps/api/tsconfig.json`, `apps/api/tests/tsconfig.json`, `pnpm-lock.yaml`, `docs/architecture/architecture-overview.md`, `docs/development/current-milestone.md`, `docs/development/postgresql-prisma-foundation.md` et `docs/development/vault-publication-contracts.md`. Le schéma et la migration restent ceux de 4.2A.
 
-Message de commit recommandé : `feat(api): add transactional PostgreSQL vault repository`. Aucun commit n'est créé ; attendre la revue avant toute suite.
+Message de commit recommandé : `feat(api): add transactional PostgreSQL vault repository`. Ce jalon est désormais commité ; les résultats ci-dessus décrivent sa qualification initiale.

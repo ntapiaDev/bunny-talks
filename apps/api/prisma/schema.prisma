@@ -76,6 +76,7 @@ model VaultPublication {
 }
 
 model VaultOperation {
+  bootstrap                  InitialBootstrapOperation?
   accountId                  String  @db.VarChar(128)
   operationId                String  @db.Uuid
   kind                       String  @db.VarChar(32)
@@ -93,6 +94,7 @@ model VaultOperation {
 }
 
 model Device {
+  bootstrapOperations InitialBootstrapOperation[]
   authorizedAt DateTime? @db.Timestamptz(3)
   id        String    @id @db.Uuid
   accountId String    @db.VarChar(128)
@@ -100,6 +102,16 @@ model Device {
   account   Account   @relation(fields: [accountId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   sessions  Session[]
   @@unique([accountId, id])
+}
+
+// The receipt remains the sole source of the terminal outcome, including rejections.
+model InitialBootstrapOperation {
+  accountId String @db.VarChar(128)
+  operationId String @db.Uuid
+  deviceId String @db.Uuid
+  operation VaultOperation @relation(fields: [accountId, operationId], references: [accountId, operationId], onDelete: Restrict, onUpdate: Restrict, map: "Bootstrap_operation_fkey")
+  device Device @relation(fields: [accountId, deviceId], references: [accountId, id], onDelete: Restrict, onUpdate: Restrict, map: "Bootstrap_device_fkey")
+  @@id([accountId, operationId])
 }
 
 model Session {

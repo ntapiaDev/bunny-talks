@@ -1,6 +1,6 @@
 # Sessions persistantes et appareils — jalon 4.3B
 
-Statut : implémentation interne pour revue. Aucun serveur HTTP, login, preuve de réauthentification ou procédure d'autorisation E2EE. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts ; aucune qualification de production.
+Statut historique : jalon terminé et commité (`4bb702d`). Les capacités mentionnées ci-dessous décrivent la fin de 4.3B ; voir l’[amorçage 4.4B](initial-device-bootstrap.md) pour la première autorisation serveur. Aucun serveur HTTP, login, preuve de réauthentification ou procédure d'autorisation E2EE. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts ; aucune qualification de production.
 
 ## Audit et migration
 

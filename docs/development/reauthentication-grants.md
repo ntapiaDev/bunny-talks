@@ -1,6 +1,6 @@
 # Réauthentification transactionnelle — jalon 4.3C
 
-Implémentation interne pour revue, sans endpoint ni autorisation E2EE. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. La réauthentification prouve la connaissance du mot de passe serveur ; elle ne prouve pas la possession de l'identité cryptographique commune.
+Jalon terminé et commité (`7548633`), sans endpoint ni autorisation E2EE. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. La réauthentification prouve la connaissance du mot de passe serveur ; elle ne prouve pas la possession de l'identité cryptographique commune.
 
 ## Audit et composition
 
@@ -32,7 +32,7 @@ Un grant consommé permet exclusivement de retrouver le reçu exact de son opér
 
 La future couche HTTP devra lier durablement l'intention authentifiée aux données préparées pour reprendre après panne, limiter les tentatives avant Argon2id et maîtriser les erreurs et la divulgation des secrets. Il manque encore les endpoints, la préparation applicative complète, les règles de rétention et de limitation des grants et la qualification opérationnelle des horloges. Aucune procédure de révocation d'appareils n'est activée par ces grants ; un nouveau type nécessitera un contrat d'intention explicite, des contraintes et des tests propres.
 
-Une session et un grant ne rendent jamais un appareil autorisé. `authorizedAt` reste un état serveur nécessaire mais ne prouve pas la possession cryptographique de l'identité E2EE ; SEC-CRYPTO-003 n'est pas implémenté. Les fixtures de succès renseignent ce champ uniquement dans les tests, sans procédure fictive de production. La limite atomique de cinq appareils de confiance et les rotations cryptographiques restent à SEC-CRYPTO-003. Le changement ordinaire conserve les autres sessions et appareils ; le reset par e-mail a une politique encore ouverte. La date de modification du vérificateur reste à ajouter avant l'intégration applicative complète, en distinguant renouvellement technique et changement effectif du mot de passe.
+Une session et un grant ne rendent jamais un appareil autorisé. `authorizedAt` reste un état serveur nécessaire mais ne prouve pas la possession cryptographique de l'identité E2EE ; SEC-CRYPTO-003 n'est pas implémenté. Les fixtures de succès renseignent ce champ uniquement dans les tests, sans procédure fictive de production. La limite atomique de cinq appareils de confiance et les rotations cryptographiques restent à SEC-CRYPTO-003. Le changement ordinaire conserve les autres sessions et appareils ; le reset par e-mail a une politique encore ouverte. La date de modification du vérificateur est depuis ajoutée par 4.4A ; son trigger suit les changements effectifs du PHC.
 
 ## Tests
 

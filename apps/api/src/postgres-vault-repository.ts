@@ -200,11 +200,14 @@ export class PostgresVaultRepository {
   }
 
   public async publishInitial(request: unknown, candidateDigest: unknown): Promise<TerminalResult> {
+    return this.execute(this.prepareInitialPublication(request, candidateDigest));
+  }
+
+  /** Trusted composition only; snapshots and validates before any asynchronous boundary. */
+  public prepareInitialPublication(request: unknown, candidateDigest: unknown): Mutation {
     const parsed = initialVaultPublicationSchema.safeParse(request);
     if (!parsed.success) throw new VaultRepositoryError('INVALID_INPUT');
-    return this.execute(
-      mutation(parsed.data, prepareCandidate(parsed.data, candidateDigest), null),
-    );
+    return mutation(parsed.data, prepareCandidate(parsed.data, candidateDigest), null);
   }
 
   public async rewrapPassword(
