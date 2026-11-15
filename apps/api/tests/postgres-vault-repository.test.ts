@@ -379,6 +379,7 @@ describe('transactional vault repository on PostgreSQL 18.7', () => {
         sessions: {
           create: {
             id: randomUUID(),
+            createdAt: new Date('2026-01-01T00:00:00Z'),
             revokedAt: new Date('2026-01-01T00:00:00Z'),
           },
         },
