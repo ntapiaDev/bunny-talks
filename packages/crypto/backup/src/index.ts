@@ -3,6 +3,7 @@ export {
   createRecoveryKeyEnvelope,
   derivePasswordWrappingKey,
   deriveRecoveryWrappingKey,
+  encodeEnvelopePassword,
   generateMasterKey,
   generateRecoveryKey,
   generateVaultId,

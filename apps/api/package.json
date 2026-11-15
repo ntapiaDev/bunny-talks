@@ -10,7 +10,7 @@
     "test:persistence": "vitest run tests/postgres.test.mjs tests/postgres-vault-repository.test.ts",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tests/tsconfig.json",
-    "test": "vitest run tests/publication-digest.test.ts tests/vault-request-fingerprint.test.ts tests/postgres-test-database.test.ts tests/local-env.test.mjs"
+    "test": "vitest run tests/publication-digest.test.ts tests/vault-request-fingerprint.test.ts tests/postgres-test-database.test.ts tests/local-env.test.mjs tests/password-verifier.test.ts tests/password-verifier-native.test.ts"
   },
   "dependencies": {
     "@bunny-talks/contracts": "workspace:*",

@@ -1,6 +1,6 @@
 """Public V1 composition vector, independent of Noble and the TypeScript implementation.
 
-Requires Node 24 native Argon2, Python cryptography and system libsodium.
+Requires Node 24.7.0 or later native Argon2, Python cryptography and system libsodium.
 Run without arguments to verify, with --write to regenerate public test data.
 """
 import base64

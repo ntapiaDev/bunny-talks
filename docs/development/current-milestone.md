@@ -1,6 +1,10 @@
+# Jalon 4.3A — Primitives de mot de passe serveur
+
+Implémentées pour revue : vérificateur Argon2id serveur asynchrone, profil borné et limite locale de concurrence. Voir [fournisseur, contrat, mesures et limites](../security/server-password-verifiers.md). Aucune session, preuve de réauthentification, connexion HTTP ou autorisation d’appareil n’est implémentée. SEC-CRYPTO-003 reste ouvert. Attendre la revue avant 4.3B et 4.3C.
+
 # Jalon 4.2B — Repository transactionnel PostgreSQL
 
-Implémenté et testé pour revue, sans commit : activation initiale, réenveloppement interne atomique, CAS, reçus durables et empreinte HMAC. Voir le [contrat interne, la politique de clés et la qualification PostgreSQL](transactional-vault-repository.md). Les tests réels sur PostgreSQL 18.7 couvrent concurrence, rollbacks, réponse perdue, timeout et relecture après recréation du client Prisma. Aucun endpoint, authentification ou mécanisme d'autorisation d'appareil n'est ajouté. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. Le jalon 4.3 n'est pas commencé ; attendre la revue avant toute suite.
+Implémenté et testé pour revue, sans commit : activation initiale, réenveloppement interne atomique, CAS, reçus durables et empreinte HMAC. Voir le [contrat interne, la politique de clés et la qualification PostgreSQL](transactional-vault-repository.md). Les tests réels sur PostgreSQL 18.7 couvrent concurrence, rollbacks, réponse perdue, timeout et relecture après recréation du client Prisma. Aucun endpoint, authentification ou mécanisme d'autorisation d'appareil n'est ajouté. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. Ce paragraphe décrit le jalon 4.2B avant le début de 4.3A.
 
 Correction pour revue : une enveloppe liée à une ancienne révision d'authentification reste lisible après une réinitialisation simulée ; le changement ordinaire est refusé jusqu'à une réparation future. Les services de réinitialisation et de réparation restent à concevoir.
 

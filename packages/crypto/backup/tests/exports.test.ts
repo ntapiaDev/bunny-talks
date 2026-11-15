@@ -26,6 +26,7 @@ describe('backup package entry points', () => {
         'createRecoveryKeyEnvelope',
         'derivePasswordWrappingKey',
         'deriveRecoveryWrappingKey',
+        'encodeEnvelopePassword',
         'generateMasterKey',
         'generateRecoveryKey',
         'generateVaultId',
