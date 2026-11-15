@@ -1,6 +1,10 @@
-# Jalon 4.3C — Preuves de réauthentification transactionnelles
+# Jalon 4.4A — Identité e-mail et inscription sécurisée
 
-Corrections pour revue : liaison au PHC préparé exact, contrôle sous verrou de l’état serveur d’autorisation de l’appareil et récupération sans écriture. Voir [grants, intention, transaction et rejeu](reauthentication-grants.md). SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. Attendre la revue avant tout jalon suivant.
+Implémenté pour revue : identité e-mail vérifiée distincte du compte stable, intentions et preuves expirantes persistées, finalisation atomique avec vérificateur Argon2id, reçu durable sans droit de connexion et date SQL de modification du vérificateur. Voir [audit, politique d’adresse/mot de passe, transactions, reprises et préconditions de 4.4B](email-registration.md). Aucun endpoint, session, appareil autorisé ou coffre n’est créé par l’inscription. Transport d’e-mail et liste de compromission de production absents : les ports échouent explicitement lorsqu’ils ne sont pas configurés. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. Modifications non commitées ; attendre la revue critique avant toute suite. **4.4B n’est pas commencé.**
+
+# Historique — Jalon 4.3C : preuves de réauthentification transactionnelles
+
+Jalon terminé et commité : liaison au PHC préparé exact, contrôle sous verrou de l’état serveur d’autorisation de l’appareil et récupération sans écriture. Voir [grants, intention, transaction et rejeu](reauthentication-grants.md). SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts.
 
 # Historique — Jalon 4.3B : sessions persistantes et états des appareils
 

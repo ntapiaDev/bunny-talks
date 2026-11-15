@@ -15,13 +15,37 @@ model Account {
   publications       VaultPublication[]
   operations         VaultOperation[]
   devices            Device[]
+  emailIdentity      EmailIdentity?
+  registration       EmailRegistration?
 }
 
 model PasswordCredential {
   accountId String  @id @db.VarChar(128)
   verifier  String
   revision  BigInt  @default(1)
+  verifierUpdatedAt DateTime? @default(dbgenerated("statement_timestamp()")) @db.Timestamptz(3)
   account   Account @relation(fields: [accountId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+}
+
+model EmailIdentity {
+  accountId String @id @db.VarChar(128)
+  canonical String @unique @db.VarChar(254)
+  display String @db.VarChar(254)
+  verifiedAt DateTime @db.Timestamptz(3)
+  account Account @relation(fields: [accountId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+}
+
+model EmailRegistration {
+  id String @id @db.Uuid
+  canonical String @db.VarChar(254)
+  display String @db.VarChar(254)
+  tokenHash Bytes
+  createdAt DateTime @db.Timestamptz(3)
+  expiresAt DateTime @db.Timestamptz(3)
+  completedAt DateTime? @db.Timestamptz(3)
+  accountId String? @unique @db.VarChar(128)
+  account Account? @relation(fields: [accountId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  @@index([expiresAt])
 }
 
 model VaultState {

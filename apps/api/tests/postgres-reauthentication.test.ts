@@ -144,6 +144,9 @@ describe('transactional reauthentication on PostgreSQL 18.7', () => {
         .verifier,
     ).toBe(newVerifier);
     const committed = await snapshot(f.account);
+    expect(committed.credential!.verifierUpdatedAt!.getTime()).toBeGreaterThan(
+      before.credential!.verifierUpdatedAt!.getTime(),
+    );
     expect(await service.changePassword(f.session.token, grant, f.request, f.prepared)).toEqual(
       result,
     );

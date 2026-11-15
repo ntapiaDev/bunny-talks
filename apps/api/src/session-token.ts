@@ -25,7 +25,7 @@ export function parseSessionToken(value: unknown): { id: string; hash: Buffer } 
 }
 export function parseOpaqueToken(
   value: unknown,
-  expectedVersion: 's1' | 'r1',
+  expectedVersion: 's1' | 'r1' | 'e1',
 ): { id: string; hash: Buffer } {
   if (typeof value !== 'string' || value.length !== 83) throw new SessionError('INVALID_SESSION');
   const [version, id, secret] = value.split('.');
@@ -50,7 +50,7 @@ export function parseOpaqueToken(
 export function generateSessionToken(): { id: string; token: string; hash: Buffer } {
   return generateOpaqueToken('s1');
 }
-export function generateOpaqueToken(version: 's1' | 'r1'): {
+export function generateOpaqueToken(version: 's1' | 'r1' | 'e1'): {
   id: string;
   token: string;
   hash: Buffer;

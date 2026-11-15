@@ -70,6 +70,8 @@ PostgreSQL constitue la source de vérité des données persistantes du serveur.
 
 Redis pourra être introduit pour la présence, le cache, la limitation de débit, les files de traitement et d'autres besoins de performance.
 
+Le [jalon 4.4A](../development/email-registration.md) ajoute une identité e-mail vérifiée distincte de l’identifiant stable du compte et une intention temporaire de vérification, finalisée atomiquement avec le vérificateur serveur. Cette primitive interne ne crée ni session, ni coffre, ni autorisation d’appareil ; les parcours publics et l’amorçage restent à réaliser.
+
 ### Mobile
 
 - React Native.
