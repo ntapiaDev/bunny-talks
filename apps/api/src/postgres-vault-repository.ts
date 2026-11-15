@@ -211,6 +211,11 @@ export class PostgresVaultRepository {
     request: unknown,
     prepared: PreparedPasswordChange,
   ): Promise<TerminalResult> {
+    return this.execute(this.preparePasswordChange(request, prepared));
+  }
+
+  /** Trusted composition only; does not authenticate or acquire a lock. */
+  public preparePasswordChange(request: unknown, prepared: PreparedPasswordChange): Mutation {
     const parsed = ordinaryPasswordChangeSchema.safeParse(request);
     if (
       !parsed.success ||
@@ -229,9 +234,7 @@ export class PostgresVaultRepository {
       expectedGeneration: prepared.expectedGeneration,
       candidateDigest: prepared.candidateDigest,
     };
-    return this.execute(
-      mutation(parsed.data, prepareCandidate(parsed.data, snapshot.candidateDigest), snapshot),
-    );
+    return mutation(parsed.data, prepareCandidate(parsed.data, snapshot.candidateDigest), snapshot);
   }
 
   public async readActive(account: string): Promise<VaultReadState | null> {
@@ -286,56 +289,67 @@ export class PostgresVaultRepository {
   }
 
   private async execute(input: Mutation): Promise<TerminalResult> {
+    return this.withAccountLock(input.identity.account, (tx) =>
+      this.executeInTransaction(tx, input),
+    );
+  }
+
+  /** Caller must hold Account FOR UPDATE in this transaction. No nested transaction. */
+  public async executeInTransaction(
+    tx: Prisma.TransactionClient,
+    input: Mutation,
+    replayOnly = false,
+  ): Promise<TerminalResult> {
     const keyId = this.keys.activeKeyId;
-    // Hash the bounded candidate and prepared verifier before acquiring the lock.
+    // Fingerprint exact prepared data; the caller already owns the account lock.
     const fingerprint = fingerprintRequest(this.keys, keyId, input.fields);
-    return this.withAccountLock(input.identity.account, async (tx) => {
-      const existing = await tx.vaultOperation.findUnique({
-        where: {
-          accountId_operationId: {
-            accountId: input.identity.account,
-            operationId: input.identity.operationId,
-          },
-        },
-      });
-      if (existing) {
-        const previous = storedResult(existing);
-        const supplied = fingerprintRequest(this.keys, existing.fingerprintKeyId, input.fields);
-        // HMAC covers every identity field; compare its bytes rather than the pure helper's strings.
-        const sameIdentity = Object.entries(input.identity).every(
-          ([name, value]) => previous.identity[name as keyof PublicIdentity] === value,
-        );
-        const sameFingerprint = equalFingerprints(supplied, existing.fingerprint);
-        return !sameIdentity || !sameFingerprint
-          ? this.rejected(input, 'IDEMPOTENCY_MISMATCH')
-          : previous;
-      }
-      const result = await this.apply(tx, input);
-      await tx.vaultOperation.create({
-        data: {
+
+    const existing = await tx.vaultOperation.findUnique({
+      where: {
+        accountId_operationId: {
           accountId: input.identity.account,
           operationId: input.identity.operationId,
-          kind: input.identity.kind,
-          expectedStorageRevision:
-            input.identity.expectedStorageRevision === null
-              ? null
-              : BigInt(input.identity.expectedStorageRevision),
-          expectedCredentialRevision: BigInt(input.identity.expectedCredentialRevision),
-          fingerprintKeyId: keyId,
-          fingerprint,
-          status: result.status === 'committed' ? 'COMMITTED' : 'REJECTED',
-          ...(result.status === 'committed'
-            ? {
-                resultStorageRevision: BigInt(result.cas.storageRevision),
-                resultCredentialRevision: BigInt(result.cas.credentialRevision),
-                publicationDigest: Buffer.from(result.publicationDigest, 'base64url'),
-              }
-            : { rejectionCode: result.code }),
         },
-      });
-      // Returning a rejection commits its receipt; throwing would roll it back.
-      return result;
+      },
     });
+    if (existing) {
+      const previous = storedResult(existing);
+      const supplied = fingerprintRequest(this.keys, existing.fingerprintKeyId, input.fields);
+      // HMAC covers every identity field; compare its bytes rather than the pure helper's strings.
+      const sameIdentity = Object.entries(input.identity).every(
+        ([name, value]) => previous.identity[name as keyof PublicIdentity] === value,
+      );
+      const sameFingerprint = equalFingerprints(supplied, existing.fingerprint);
+      return !sameIdentity || !sameFingerprint
+        ? this.rejected(input, 'IDEMPOTENCY_MISMATCH')
+        : previous;
+    }
+    if (replayOnly) throw new VaultRepositoryError('INVALID_INPUT');
+    const result = await this.apply(tx, input);
+    await tx.vaultOperation.create({
+      data: {
+        accountId: input.identity.account,
+        operationId: input.identity.operationId,
+        kind: input.identity.kind,
+        expectedStorageRevision:
+          input.identity.expectedStorageRevision === null
+            ? null
+            : BigInt(input.identity.expectedStorageRevision),
+        expectedCredentialRevision: BigInt(input.identity.expectedCredentialRevision),
+        fingerprintKeyId: keyId,
+        fingerprint,
+        status: result.status === 'committed' ? 'COMMITTED' : 'REJECTED',
+        ...(result.status === 'committed'
+          ? {
+              resultStorageRevision: BigInt(result.cas.storageRevision),
+              resultCredentialRevision: BigInt(result.cas.credentialRevision),
+              publicationDigest: Buffer.from(result.publicationDigest, 'base64url'),
+            }
+          : { rejectionCode: result.code }),
+      },
+    });
+    // Returning a rejection commits its receipt; throwing would roll it back.
+    return result;
   }
 
   private rejected(input: Mutation, code: VaultOperationError): TerminalResult {

@@ -79,6 +79,8 @@ model Device {
 }
 
 model Session {
+  grants ReauthenticationGrant[]
+  @@unique([accountId, id, deviceId])
   tokenHash Bytes?
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   expiresAt DateTime @default(now()) @db.Timestamptz(3)
@@ -90,4 +92,20 @@ model Session {
   revokedAt DateTime? @db.Timestamptz(3)
   @@index([accountId])
   device    Device    @relation(fields: [accountId, deviceId], references: [accountId, id], onDelete: Restrict, onUpdate: Restrict)
+}
+
+model ReauthenticationGrant {
+  id String @id @db.Uuid
+  tokenHash Bytes
+  accountId String @db.VarChar(128)
+  sessionId String @db.Uuid
+  deviceId String @db.Uuid
+  kind String @db.VarChar(32)
+  operationId String @db.Uuid
+  intentHash Bytes
+  credentialRevision BigInt
+  createdAt DateTime @db.Timestamptz(3)
+  expiresAt DateTime @db.Timestamptz(3)
+  consumedAt DateTime? @db.Timestamptz(3)
+  session Session @relation(fields: [accountId, sessionId, deviceId], references: [accountId, id, deviceId], onDelete: Restrict, onUpdate: Restrict)
 }

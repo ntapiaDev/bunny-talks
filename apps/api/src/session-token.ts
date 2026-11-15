@@ -21,10 +21,16 @@ export function generateDeviceId(): string {
 }
 
 export function parseSessionToken(value: unknown): { id: string; hash: Buffer } {
+  return parseOpaqueToken(value, 's1');
+}
+export function parseOpaqueToken(
+  value: unknown,
+  expectedVersion: 's1' | 'r1',
+): { id: string; hash: Buffer } {
   if (typeof value !== 'string' || value.length !== 83) throw new SessionError('INVALID_SESSION');
   const [version, id, secret] = value.split('.');
   if (
-    version !== 's1' ||
+    version !== expectedVersion ||
     !id ||
     !uuidPattern.test(id) ||
     !secret ||
@@ -42,13 +48,20 @@ export function parseSessionToken(value: unknown): { id: string; hash: Buffer } 
 }
 
 export function generateSessionToken(): { id: string; token: string; hash: Buffer } {
+  return generateOpaqueToken('s1');
+}
+export function generateOpaqueToken(version: 's1' | 'r1'): {
+  id: string;
+  token: string;
+  hash: Buffer;
+} {
   let bytes: Buffer | undefined;
   try {
     const id = randomUUID();
     bytes = randomBytes(32);
     return {
       id,
-      token: `s1.${id}.${bytes.toString('base64url')}`,
+      token: `${version}.${id}.${bytes.toString('base64url')}`,
       hash: createHash('sha256').update(bytes).digest(),
     };
   } catch {

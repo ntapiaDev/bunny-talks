@@ -1,4 +1,6 @@
-import { timingSafeEqual } from 'node:crypto';
+import { requireSessionInTransaction } from './session-authentication.js';
+import { sessionIsActive } from './session-lifecycle.js';
+export { sessionIsActive } from './session-lifecycle.js';
 import type { Prisma, PrismaClient, Session } from '../generated/prisma/client.js';
 import {
   generateDeviceId,
@@ -34,24 +36,6 @@ function state(row: Session, authorizedAt: Date | null): SessionState {
     deviceState: authorizedAt ? 'authorized' : 'pending',
   };
 }
-export function sessionIsActive(
-  row: Pick<
-    Session,
-    'tokenHash' | 'revokedAt' | 'createdAt' | 'expiresAt' | 'lastSeenAt' | 'idleTimeoutMs'
-  >,
-  now: Date,
-): boolean {
-  const t = now.getTime();
-  return (
-    row.tokenHash !== null &&
-    row.revokedAt === null &&
-    t >= row.createdAt.getTime() &&
-    t >= row.lastSeenAt.getTime() &&
-    t < row.expiresAt.getTime() &&
-    (row.idleTimeoutMs === null || t - row.lastSeenAt.getTime() < row.idleTimeoutMs)
-  );
-}
-
 /** Trusted infrastructure only. Never expose this repository as an HTTP controller. */
 export class PostgresSessionRepository {
   private readonly policy: SessionPolicy;
@@ -162,21 +146,8 @@ export class PostgresSessionRepository {
       });
       if (!selector) throw new SessionError('INVALID_SESSION');
       return await this.locked(selector.accountId, async (tx) => {
-        const row = await tx.session.findUnique({
-          where: { id: parsed.id },
-          include: { device: true },
-        });
         const now = this.now();
-        if (
-          !row ||
-          row.accountId !== selector.accountId ||
-          !row.tokenHash ||
-          row.tokenHash.length !== 32 ||
-          !timingSafeEqual(parsed.hash, row.tokenHash) ||
-          !sessionIsActive(row, now) ||
-          row.device.revokedAt !== null
-        )
-          throw new SessionError('INVALID_SESSION');
+        const row = await requireSessionInTransaction(tx, selector.accountId, parsed, now);
         return work(tx, row, row.device.authorizedAt, now);
       });
     } catch (error) {

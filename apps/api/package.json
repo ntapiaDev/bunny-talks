@@ -7,10 +7,10 @@
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",
     "prisma:migrate": "prisma migrate deploy",
-    "test:persistence": "vitest run tests/postgres.test.mjs tests/postgres-vault-repository.test.ts tests/postgres-session-repository.test.ts tests/session-migration.test.mjs",
+    "test:persistence": "vitest run tests/postgres.test.mjs tests/postgres-vault-repository.test.ts tests/postgres-session-repository.test.ts tests/session-migration.test.mjs tests/postgres-reauthentication.test.ts",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tests/tsconfig.json",
-    "test": "vitest run tests/publication-digest.test.ts tests/vault-request-fingerprint.test.ts tests/postgres-test-database.test.ts tests/local-env.test.mjs tests/password-verifier.test.ts tests/password-verifier-native.test.ts tests/session-token.test.ts"
+    "test": "vitest run tests/publication-digest.test.ts tests/vault-request-fingerprint.test.ts tests/postgres-test-database.test.ts tests/local-env.test.mjs tests/password-verifier.test.ts tests/password-verifier-native.test.ts tests/session-token.test.ts tests/reauthentication-token.test.ts"
   },
   "dependencies": {
     "@bunny-talks/contracts": "workspace:*",

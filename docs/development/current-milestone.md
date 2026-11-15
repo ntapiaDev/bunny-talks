@@ -1,6 +1,10 @@
-# Jalon 4.3B — Sessions persistantes et états des appareils
+# Jalon 4.3C — Preuves de réauthentification transactionnelles
 
-Corrections des UUID et analyse du verrou appliquées pour revue : [contrat, migration, expirations et limites](persistent-sessions.md). SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. Aucun accès E2EE automatique ni preuve de réauthentification. Attendre la revue avant 4.3C.
+Corrections pour revue : liaison au PHC préparé exact, contrôle sous verrou de l’état serveur d’autorisation de l’appareil et récupération sans écriture. Voir [grants, intention, transaction et rejeu](reauthentication-grants.md). SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. Attendre la revue avant tout jalon suivant.
+
+# Historique — Jalon 4.3B : sessions persistantes et états des appareils
+
+Jalon validé, corrections des UUID et verrou exclusif conservé : [contrat, migration, expirations et limites](persistent-sessions.md). SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. Aucun accès E2EE automatique ni preuve de réauthentification. Ce paragraphe décrit la fin de 4.3B.
 
 # Historique — Jalon 4.3A : primitives de mot de passe serveur
 
