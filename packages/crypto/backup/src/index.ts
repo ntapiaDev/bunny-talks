@@ -37,3 +37,8 @@ export type { AccountVaultAccess, OpenAccountVaultResult } from './account-vault
 
 export type { Argon2idParameters, Argon2idProvider } from './argon2-provider.js';
 export { ARGON2ID_V1, nobleArgon2idProvider } from './argon2-provider.js';
+export {
+  evaluateInitialVaultPublication,
+  evaluatePasswordVaultTransition,
+} from './vault-publication-transition.js';
+export { classifyVaultOperationReplay } from './vault-publication-transition.js';

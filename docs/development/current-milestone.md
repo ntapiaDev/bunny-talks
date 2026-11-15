@@ -6,6 +6,8 @@
 
 **Intégration native pour revue :** le fournisseur explicite est désormais transmis aux API et vérifications internes du coffre ; les anciens appels gardent Noble comme référence. Sur émulateur Android/Hermes, les deux réenveloppements, les deux accès, les rejets et la reprise après arrêt forcé ont réussi. Un coordinateur partagé rejette les KDF concurrents. Voir les [résultats et limites](native-argon2-qualification.md#intégration-expérimentale-dans-les-api-du-coffre). Le jalon 3 reste expérimental, iOS et appareils physiques à qualifier, sans approbation de production.
 
+**Jalon 4.1 pour revue :** les contrats de publication et les transitions structurelles pures sont décrits dans [leur documentation](vault-publication-contracts.md). Aucune transaction PostgreSQL ni autorisation réelle ne sont implémentées ; SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts.
+
 ## Historique — Jalon 2 du coffre E2EE
 
 **Implémenté pour revue :** création et ouverture d’une charge opaque par les deux voies, manifest HMAC-SHA-256 et réenveloppement local du mot de passe conservant exactement contenu chiffré et enveloppe récupération. Voir la [spécification V1](../security/account-vault-v1.md). Le profil Argon2id, Hermes et les plateformes natives restent à qualifier. Aucun backend, parcours de compte, import SDK ou archive n’est ajouté. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. Les modifications restent non commitées ; le jalon 3 n’est pas commencé.

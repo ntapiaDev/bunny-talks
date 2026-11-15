@@ -12,6 +12,9 @@ describe('backup package entry points', () => {
       [
         'ARGON2ID_V1',
         'nobleArgon2idProvider',
+        'classifyVaultOperationReplay',
+        'evaluateInitialVaultPublication',
+        'evaluatePasswordVaultTransition',
         'KeyEnvelopeError',
         'AccountVaultError',
         'createAccountVault',
