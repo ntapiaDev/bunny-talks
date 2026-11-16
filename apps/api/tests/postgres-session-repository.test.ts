@@ -167,6 +167,20 @@ describe('persistent sessions on PostgreSQL 18.7', () => {
     await expect(repository.validate(second.token)).rejects.toThrow('INVALID_SESSION');
     await expect(repository.validate(a.token)).resolves.toBeDefined();
   });
+  it('revalidates and revokes only the current session, never accepting an incorrect secret', async () => {
+    const f = await fixture();
+    const second = await repository.createAfterAuthentication(f.account, f.session.deviceId);
+    const wrong = `${f.token.slice(0, 40)}${Buffer.alloc(32, 9).toString('base64url')}`;
+    await expect(repository.revokeCurrent(wrong)).rejects.toThrow('INVALID_SESSION');
+    await expect(repository.read(f.token)).resolves.toBeDefined();
+    await repository.revokeCurrent(f.token);
+    await expect(repository.read(f.token)).rejects.toThrow('INVALID_SESSION');
+    await expect(repository.revokeCurrent(f.token)).rejects.toThrow('INVALID_SESSION');
+    await expect(repository.read(second.token)).resolves.toBeDefined();
+    const device = await client.device.findUniqueOrThrow({ where: { id: f.session.deviceId } });
+    expect(device.revokedAt).toBeNull();
+    expect(device.authorizedAt).toBeNull();
+  });
   it('distinguishes authorized devices and invalidates all sessions of a revoked device', async () => {
     const f = await fixture();
     const other = await repository.createAfterAuthentication(f.account);

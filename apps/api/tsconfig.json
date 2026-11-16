@@ -4,6 +4,7 @@
     "rootDir": ".",
     "outDir": "./dist",
     "declaration": true,
+    "experimentalDecorators": true,
     "noEmit": false,
     "types": ["node"]
   },

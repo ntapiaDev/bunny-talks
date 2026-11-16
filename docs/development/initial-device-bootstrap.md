@@ -1,6 +1,6 @@
 # Amorçage sécurisé du premier appareil — jalon 4.4B
 
-Statut : implémentation interne non commitée, soumise à revue critique. Aucun endpoint HTTP, ajout d’appareil supplémentaire, récupération de compte ou transfert OpenE2EE. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. Le jalon 4.4C n’est pas commencé.
+Statut historique : jalon terminé, validé expérimentalement et commité (`767ed84`). À sa clôture : aucun endpoint HTTP, ajout d’appareil supplémentaire, récupération de compte ou transfert OpenE2EE. La [fondation HTTP 4.4C1](http-sessions.md) ne publie pas cet amorçage. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts ; aucune qualification de production.
 
 ## Audit initial et réutilisation
 

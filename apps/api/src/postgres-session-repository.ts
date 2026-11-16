@@ -188,6 +188,12 @@ export class PostgresSessionRepository {
       });
     });
   }
+  /** Revalidates the bearer under the account lock and revokes only that session. */
+  public async revokeCurrent(token: unknown): Promise<void> {
+    return this.authenticated(token, async (tx, caller, _authorizedAt, now) => {
+      await tx.session.update({ where: { id: caller.id }, data: { revokedAt: now } });
+    });
+  }
   /** Storage primitive only: caller must authorize the sensitive action (4.3C/SEC-CRYPTO-003).
    * A transaction revokes selected devices and all their sessions, without rotating E2EE keys.
    */

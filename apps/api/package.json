@@ -4,23 +4,32 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "pnpm build && pnpm start",
+    "start": "node server.mjs",
+    "test:http": "pnpm build && vitest run tests/http-postgres.test.ts",
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",
     "prisma:migrate": "prisma migrate deploy",
     "test:persistence": "vitest run tests/postgres.test.mjs tests/postgres-vault-repository.test.ts tests/postgres-session-repository.test.ts tests/session-migration.test.mjs tests/postgres-reauthentication.test.ts tests/postgres-email-registration.test.ts tests/email-registration-migration.test.mjs tests/postgres-initial-device-bootstrap.test.ts tests/initial-bootstrap-migration.test.mjs",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tests/tsconfig.json",
-    "test": "vitest run tests/publication-digest.test.ts tests/vault-request-fingerprint.test.ts tests/postgres-test-database.test.ts tests/local-env.test.mjs tests/password-verifier.test.ts tests/password-verifier-native.test.ts tests/session-token.test.ts tests/reauthentication-token.test.ts tests/registration-policy.test.ts tests/initial-publication-preparation.test.ts"
+    "test": "vitest run tests/publication-digest.test.ts tests/vault-request-fingerprint.test.ts tests/postgres-test-database.test.ts tests/local-env.test.mjs tests/password-verifier.test.ts tests/password-verifier-native.test.ts tests/session-token.test.ts tests/reauthentication-token.test.ts tests/registration-policy.test.ts tests/initial-publication-preparation.test.ts tests/http.test.ts"
   },
   "dependencies": {
     "@bunny-talks/contracts": "workspace:*",
     "@bunny-talks/crypto-backup": "workspace:*",
     "@bunny-talks/validation": "workspace:*",
+    "@nestjs/common": "12.5.0",
+    "@nestjs/core": "12.5.0",
+    "@nestjs/platform-express": "12.5.0",
     "@prisma/adapter-pg": "7.10.1",
     "@prisma/client": "7.10.1",
-    "pg": "8.23.1"
+    "pg": "8.23.1",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2"
   },
   "devDependencies": {
+    "@types/express": "5.0.6",
     "@types/node": "24.19.2",
     "prisma": "7.10.1"
   }

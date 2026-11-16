@@ -1,6 +1,10 @@
-# Jalon 4.4B — Amorçage sécurisé du premier appareil
+# Jalon 4.4C1 — Fondation HTTP NestJS et sessions
 
-Implémentation interne non commitée pour revue critique : session et mot de passe effectivement vérifiés, revalidation sous verrou, publication initiale et autorisation du premier appareil atomiques, association immuable aux reçus et récupération sans création après réponse perdue. Voir [audit, états, migration, garanties, tests et limites](initial-device-bootstrap.md). Aucun endpoint HTTP, appareil supplémentaire ou parcours de récupération n’est livré. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. Attendre la revue avant toute suite ; **4.4C n’est pas commencé**.
+Implémentation locale non commitée pour revue critique : liveness publique, lecture de la session courante et révocation transactionnelle par Bearer opaque, sans endpoint sensible supplémentaire. Voir [contrat HTTP, architecture, configuration, protections et vérifications](http-sessions.md). L’état `authorized` ne démontre pas la possession E2EE. Cette API n’est pas qualifiée pour des utilisateurs réels ; SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. **Attendre la revue critique avant toute suite ; 4.4C2 n’est pas commencé.**
+
+# Historique — Jalon 4.4B : amorçage sécurisé du premier appareil
+
+Terminé, validé expérimentalement et commité (`767ed84`) : session et mot de passe effectivement vérifiés, revalidation sous verrou, publication initiale et autorisation du premier appareil atomiques, association immuable aux reçus et récupération sans création après réponse perdue. Voir [audit, états, migration, garanties, tests et limites](initial-device-bootstrap.md). À la clôture de 4.4B : aucun endpoint HTTP, appareil supplémentaire ou parcours de récupération livré. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts.
 
 # Historique — Jalon 4.4A : identité e-mail et inscription sécurisée
 

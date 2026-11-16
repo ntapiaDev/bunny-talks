@@ -42,6 +42,7 @@ export async function createTestDatabase(url: string | undefined = process.env.T
     throw error;
   }
   return {
+    url: parsed.toString(),
     admin,
     dispose,
     createClient(name: string = randomUUID()) {

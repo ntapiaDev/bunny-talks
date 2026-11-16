@@ -24,14 +24,14 @@ L'architecture retenue est un **monolithe modulaire organisé en monorepo**, ave
 
 ### 2.1. Applications
 
-Les applications suivantes ont des responsabilités distinctes. `apps/mobile` contient une fondation Expo de diagnostic partiellement qualifiée sur un émulateur Android ; `apps/api` contient la persistance Prisma/PostgreSQL et un repository transactionnel interne sans endpoint ; `apps/crypto-lab` reste vide. La qualification iOS et celle des appareils physiques restent ouvertes.
+Les applications suivantes ont des responsabilités distinctes. `apps/mobile` contient une fondation Expo de diagnostic partiellement qualifiée sur un émulateur Android ; `apps/api` contient la persistance Prisma/PostgreSQL et la fondation HTTP NestJS limitée aux sessions et à la liveness ; `apps/crypto-lab` reste vide. La qualification iOS et celle des appareils physiques restent ouvertes.
 
-| Application       | Responsabilité                                            | Technologie                      | Statut                                                    |
-| ----------------- | --------------------------------------------------------- | -------------------------------- | --------------------------------------------------------- |
-| `apps/api`        | API, comptes, relations, communications, espaces partagés | NestJS prévu ; Prisma/PostgreSQL | Persistance interne ; HTTP et authentification à venir    |
-| `apps/mobile`     | Application principale iOS et Android                     | React Native, Expo               | Fondation expérimentale ; qualification Android partielle |
-| `apps/crypto-lab` | Banc d'essai et démonstration cryptographique             | À déterminer                     | Prévu, non implémenté                                     |
-| `apps/web`        | Application web future                                    | À déterminer                     | Différée                                                  |
+| Application       | Responsabilité                                            | Technologie                | Statut                                                                         |
+| ----------------- | --------------------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------ |
+| `apps/api`        | API, comptes, relations, communications, espaces partagés | NestJS ; Prisma/PostgreSQL | HTTP expérimental : liveness et session courante ; services sensibles internes |
+| `apps/mobile`     | Application principale iOS et Android                     | React Native, Expo         | Fondation expérimentale ; qualification Android partielle                      |
+| `apps/crypto-lab` | Banc d'essai et démonstration cryptographique             | À déterminer               | Prévu, non implémenté                                                          |
+| `apps/web`        | Application web future                                    | À déterminer               | Différée                                                                       |
 
 L'application mobile est prévue comme premier client du produit.
 
@@ -141,7 +141,7 @@ Les répertoires sont initialisés progressivement, au moment où leurs responsa
 
 ### 5.1. Monolithe modulaire
 
-Le backend sera une application NestJS unique, organisée par domaines fonctionnels.
+Le backend est une application NestJS unique, organisée par domaines fonctionnels. La [fondation HTTP 4.4C1](../development/http-sessions.md) compose un module principal, un module de sessions, un guard global avec exemption publique explicite et un filtre d’erreurs assaini. Seuls `GET /health/live`, `GET /v1/session` et `DELETE /v1/session` sont exposés. Les contrôleurs dépendent d’une capacité de session étroite, sans accès à Prisma ni aux mutations privilégiées du coffre. Les exigences TLS public, d’anti-abus et d’autorisation E2EE restent à qualifier avant production.
 
 Les domaines envisagés comprennent notamment :
 
