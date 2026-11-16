@@ -1,8 +1,8 @@
 # Bunny Talks — Architecture technique
 
-**Version : 1.0 — Novembre 2026**
+**Version : 1.1 — Novembre 2026**
 
-**Statut : architecture de référence initiale**
+**Statut : architecture de référence, harmonisée en 4.4C1 bis**
 
 ## 1. Objectifs architecturaux
 
@@ -104,8 +104,8 @@ L'arborescence ci-dessous présente la cible, avec les statuts actuels. Un répe
 ```text
 bunny-talks/
 ├── apps/
-│   ├── api/                     # persistance interne Prisma/PostgreSQL
-│   ├── mobile/                  # prévu ; répertoire local vide
+│   ├── api/                     # NestJS HTTP et persistance interne Prisma/PostgreSQL
+│   ├── mobile/                  # diagnostics Expo/Hermes ; Android partiellement qualifié
 │   ├── crypto-lab/              # prévu ; répertoire local vide
 │   └── web/                     # différé
 │
@@ -166,66 +166,85 @@ Ces domaines ne doivent pas devenir automatiquement des services indépendants.
 
 Ils restent des modules d'un même backend tant qu'une raison technique ou opérationnelle ne justifie pas leur séparation.
 
-### 5.2. Clean Architecture
+### 5.2. Clean Architecture pragmatique
 
-Chaque module backend doit respecter une séparation claire des responsabilités.
+Domain, Application, Infrastructure et Presentation désignent des **responsabilités et des règles de dépendance**, pas quatre dossiers obligatoires dans chaque fonctionnalité.
 
-**Domain**
+- **Domain** : règles pures, invariants et types métier, indépendants de NestJS, Express, Prisma et des fournisseurs extérieurs.
+- **Application** : orchestration des opérations, préconditions d’authentification et d’autorisation, coordination des capacités nécessaires.
+- **Infrastructure** : transactions, repositories PostgreSQL, client Prisma, pools et adaptateurs de services externes.
+- **Presentation** : contrôleurs, guards, parsing et validation HTTP, projection des réponses et traitement assaini des erreurs.
 
-Contient :
+Une classe peut combiner explicitement orchestration et transaction lorsque les séparer n’apporterait aucune frontière utile : les compositions internes `PostgresReauthentication` et `PostgresInitialDeviceBootstrap` conservent ainsi leurs garanties atomiques. Elles sont du code applicatif dépendant de PostgreSQL, et ne sont pas présentées comme un domaine pur.
 
-- Entités métier.
-- Value Objects.
-- Règles métier.
-- Contrats des repositories.
-- Invariants du domaine.
+Les fonctions pures restent des fonctions. Les contrôleurs reçoivent des capacités applicatives étroites et ne consultent ni Prisma ni les repositories privilégiés. Les entités internes ne sont pas retournées directement : le DTO de session est projeté explicitement.
 
-Le domaine ne dépend pas de NestJS, Prisma, Redis ou d'un fournisseur externe.
+### 5.3. Organisation effective et composition NestJS
 
-**Application**
+```text
+apps/api/
+├── src/
+│   ├── app.module.ts, application.ts, config.ts, main.ts
+│   ├── auth/
+│   │   ├── password-verifier.ts
+│   │   ├── registration/        # identité e-mail, politique de mot de passe
+│   │   ├── sessions/            # jetons, règles, repository et transport de session
+│   │   ├── reauthentication/    # intention et composition transactionnelle
+│   │   └── bootstrap/           # amorçage unique du premier appareil
+│   ├── vault/                   # persistance, empreinte, digest et préparation
+│   └── shared/
+│       ├── database/            # propriétaire Prisma/pool et module de composition
+│       └── http/                # transport, erreurs et contrôle de politique d’entrée
+├── tests/
+│   ├── unit/{auth,vault,shared}/
+│   ├── persistence/{auth,vault,shared}/
+│   ├── http/                    # Nest/PostgreSQL réels et qualification ESM
+│   └── support/                 # base de test dédiée et contrôleur JSON de qualification
+├── generated/prisma/            # client généré, ignoré par Git
+└── prisma/                      # schéma et migrations existantes
+```
 
-Contient :
+Le [rapport 4.4C1 bis](../development/backend-architecture-harmonization.md) détaille l’inventaire, les déplacements et les vérifications. Les sous-dossiers d’authentification regroupent des responsabilités déjà implémentées ; `password-verifier.ts` reste directement dans `auth` car un dossier pour ce seul fichier serait superflu. Un dossier `vault` ne suppose pas l’existence d’un module NestJS de coffre.
 
-- Cas d'utilisation.
-- Orchestration.
-- Ports.
-- DTO internes.
-- Coordination des opérations métier.
+`AppModule` compose une unique instance dynamique de `DatabaseModule`, la transmet explicitement à `SessionModule`, puis enregistre les guards globaux d’entrée et d’authentification. `DatabaseModule` possède le seul fournisseur `Database`, lequel ferme le client Prisma et son pool via le cycle de vie Nest. Aucun module global, singleton de base caché ou client créé par contrôleur. `SessionModule` exporte uniquement `SessionHttpService`, jamais `Database` ; sa factory limite le repository aux opérations nécessaires au transport. Les modules Nest organisent l’injection et les politiques HTTP, sans imposer Nest aux fonctions internes ni aux packages.
 
-**Infrastructure**
+Les noms de fichiers restent en kebab-case, les classes en PascalCase, les fonctions et variables en camelCase. Les suffixes `.controller.ts`, `.module.ts` et `.guard.ts` identifient les composants Nest ; `postgres-` distingue le code lié à PostgreSQL. Les imports relatifs NodeNext utilisent `.js` et `import type` distingue les dépendances de types. Aucun barrel `index.ts` n’est ajouté au backend ; les entrées publiques existantes des packages partagés sont conservées.
 
-Contient :
+### 5.4. Dépendances et abstractions
 
-- Implémentations Prisma.
-- Adaptateurs PostgreSQL.
-- Adaptateurs Redis.
-- Services externes.
-- Implémentations techniques des ports.
+Une interface ou un port se justifie pour une dépendance extérieure, une frontière de confiance ou un besoin de test significatif. Les ports existants de transport e-mail, liste de compromission, aléa et KDF remplissent ce rôle. Il n’existe aucune obligation d’ajouter une interface devant chaque repository ou une classe injectable devant chaque règle pure. Le service de session reçoit un `Pick` de deux opérations du repository ; le type structurel de durée de session ne dépend plus du modèle Prisma. Le type `PreparedPasswordChange`, partagé avec la réauthentification, est défini indépendamment du repository et y reste réexporté pour conserver son contrat.
 
-**Presentation**
+Dépendances effectives des workspaces :
 
-Contient :
+```text
+api ────────> contracts, validation, crypto-backup
+mobile ─────> crypto-engine, crypto-backup
+crypto-engine ──> crypto-core, SDK OpenE2EE
+validation ──> Zod
+crypto-backup ──> bibliothèques cryptographiques et de sérialisation
+contracts, crypto-core ──> aucun autre workspace
+```
 
-- Contrôleurs HTTP.
-- Gateways WebSocket.
-- Guards.
-- Pipes.
-- Présentation des réponses de l'API.
+Les packages ne dépendent pas des applications ni de Nest, Express ou Prisma. `crypto/core` ne dépend pas du SDK. Le mobile de diagnostic utilise encore directement certaines entrées publiques du SDK et des vecteurs JSON de qualification des packages ; cela décrit une fondation expérimentale, pas un parcours produit terminé. Cette exception existante n’est pas étendue par ce jalon.
 
-Les entités métier internes ne sont jamais exposées directement aux clients.
+Au sein de l’API, les compositions d’amorçage et de réauthentification dépendent explicitement des sessions et du coffre ; le coffre ne dépend pas de l’authentification. Le filtre HTTP traduit l’erreur publique de session, sans importer son repository. Les modules fonctionnels utilisent `shared/database` ; la base partagée ne dépend ni d’un domaine ni de la configuration HTTP. Les cycles sont interdits et contrôlés par un test du graphe des imports locaux, types et entrées des packages compris. Les appels directs à une capacité transactionnelle d’un autre domaine sont réservés aux compositions internes déjà identifiées, avec préconditions d’autorisation explicites ; les contrôleurs n’en héritent pas.
 
-### 5.3. Communication entre modules
+### 5.5. Tests et extension
 
-Les modules doivent communiquer au moyen d'interfaces et de contrats explicites.
+- `pnpm test` : tests rapides des packages et du mobile, et `tests/unit` de l’API, sans connexion PostgreSQL. La suite API contrôle aussi les frontières d’import et l’affectation de chaque fichier de test à une seule suite.
+- `test:persistence` de l’API : `tests/persistence`, PostgreSQL 18.7 réel, migrations historiques, concurrence, rollback et idempotence.
+- `test:http` de l’API : build propre puis `tests/http`, serveur Nest réel, PostgreSQL réel, import de tous les modules ESM émis, démarrage et arrêt par SIGTERM.
+- `tests/support` : support partagé, pas une suite autonome. Les vecteurs cryptographiques restent à leur emplacement d’origine.
 
-Il faut éviter :
+Les schémas aléatoires sont créés uniquement dans la base locale dédiée `bunny_talks_test`, puis supprimés. Les garde-fous existants restent en place. Le build nettoie seulement `apps/api/dist` avant compilation afin de retirer les anciens chemins ; il émet `dist/src` et `dist/generated/prisma`, sans tests.
 
-- Les dépendances circulaires.
-- L'accès direct aux repositories internes d'un autre module.
-- Les imports incontrôlés d'entités métier.
-- Les appels directs à l'infrastructure d'un autre domaine.
+Pour une nouvelle route, composer explicitement dans le module fonctionnel les méthodes, le parseur borné et la politique corps/query, puis valider les données avec les schémas Zod et les pipes natifs Nest. Les protections globales restent indépendantes : en-têtes sûrs, refus des en-têtes ambigus, timeouts, erreurs et politique proxy. Les routes actuelles utilisent `jsonBodyPolicy()` puis `noInputPolicy(...)`, avant authentification, avec 8 Kio et les mêmes statuts qu’en 4.4C1. Le guard global `HttpInputGuard` refuse un handler dont aucun middleware d’entrée n’a accepté la requête, même public. `acceptHttpInput` constate ce passage ; il ne valide aucun schéma et n’accorde aucune identité. Pour une route avec corps, il ne remplace jamais un schéma et un pipe de validation. Le contrôle de schéma reste à examiner dans chaque nouvelle route.
 
-Les événements internes pourront être introduits lorsqu'un besoin réel de découplage apparaîtra.
+La comparaison du build 4.4C1 révèle des variantes de casse et de slash final déjà acceptées par le routeur, malgré les réglages Express explicites. Leurs statuts et méthodes restent caractérisés sans changement dans ce jalon ; les contrôles de méthodes ci-dessus concernent les chemins canoniques. Voir l’[écart préexistant et sa qualification](../development/backend-architecture-harmonization.md#écart-de-routage-préexistant-découvert). Un durcissement sera une décision distincte.
+
+Une fixture non émise dans le build démontre `@Body({ schema, pipes: [new StandardSchemaValidationPipe()] })` avec un schéma Zod partagé, une limite de 16 Kio et un refus de query. Il n’existe ni registre de routes maison ni moteur de validation supplémentaire. Une limite de publication E2EE sera décidée avec son endpoint et ses contraintes, sans modifier silencieusement celles des sessions. Aucune route d’inscription ni de connexion n’est ajoutée ici.
+
+Restent différés : nouveaux modules Nest d’inscription/coffre/messagerie, organisation plus fine justifiée par leur volume futur, événements internes, infrastructure générique de ports, limites des publications, quotas et budgets Argon2id/anti-abus de 4.4C2. Les exigences TLS, qualification mobile et sécurité E2EE existantes demeurent ouvertes.
 
 ## 6. Architecture des communications
 

@@ -3,7 +3,7 @@ import { loadLocalEnv } from './local-env.mjs';
 
 try {
   loadLocalEnv();
-  const { startHttpServer } = await import('./dist/src/http/main.js');
+  const { startHttpServer } = await import('./dist/src/main.js');
   await startHttpServer();
 } catch {
   process.stderr.write('HTTP server startup failed\n');

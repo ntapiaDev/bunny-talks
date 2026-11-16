@@ -1,6 +1,10 @@
-# Jalon 4.4C1 — Fondation HTTP NestJS et sessions
+# Jalon 4.4C1 bis — Harmonisation architecturale
 
-Implémentation locale non commitée pour revue critique : liveness publique, lecture de la session courante et révocation transactionnelle par Bearer opaque, sans endpoint sensible supplémentaire. Voir [contrat HTTP, architecture, configuration, protections et vérifications](http-sessions.md). L’état `authorized` ne démontre pas la possession E2EE. Cette API n’est pas qualifiée pour des utilisateurs réels ; SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. **Attendre la revue critique avant toute suite ; 4.4C2 n’est pas commencé.**
+Implémentation locale non commitée pour revue critique : audit du monorepo, organisation du backend par domaines, composition PostgreSQL partagée explicite, politiques d’entrée HTTP attachées aux routes et suites de tests séparées. Voir [inventaire, choix, graphes, résultats et points de revue](backend-architecture-harmonization.md). Les contrats cryptographiques, migrations et opérations transactionnelles sont conservés. Aucun parcours HTTP d’inscription ou de connexion n’est ajouté. **Attendre la revue critique avant toute suite ; 4.4C2 n’est pas commencé.**
+
+# Historique — Jalon 4.4C1 : fondation HTTP NestJS et sessions
+
+Terminé et commité (`8967823`) : liveness publique, lecture de la session courante et révocation transactionnelle par Bearer opaque, sans endpoint sensible supplémentaire. Voir [contrat HTTP, architecture, configuration, protections et vérifications](http-sessions.md). L’état `authorized` ne démontre pas la possession E2EE. Cette API n’est pas qualifiée pour des utilisateurs réels ; SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. **Attendre la revue critique avant toute suite ; 4.4C2 n’est pas commencé.**
 
 # Historique — Jalon 4.4B : amorçage sécurisé du premier appareil
 

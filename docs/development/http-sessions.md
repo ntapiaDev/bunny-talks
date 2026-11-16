@@ -1,5 +1,7 @@
 # Fondation HTTP et sessions — jalon 4.4C1
 
+**Actualisation 4.4C1 bis :** les chemins et la composition présentés ci-dessous décrivent le jalon historique 4.4C1. L’[harmonisation architecturale](backend-architecture-harmonization.md) déplace le transport de session dans `src/auth/sessions`, le fournisseur dans `src/shared/database`, les protections transversales dans `src/shared/http` et le démarrage à la racine de `src`. Les tests sont répartis entre `tests/unit`, `tests/persistence` et `tests/http`. La politique sans entrée s’applique désormais aux routes concernées, avec les mêmes contrats et limites ; le filtre et le guard d’authentification conservent leur rôle. Les résultats ci-dessous sont historiques, les nouveaux passages figurent dans le rapport d’harmonisation.
+
 Statut : implémentation locale non commitée pour revue critique. Seuls la liveness, la consultation de la session courante et sa révocation sont exposés. Aucun utilisateur réel ne doit être accueilli avec cette seule fondation. **SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. 4.4C2 n’est pas commencé.**
 
 ## Audit initial et versions
