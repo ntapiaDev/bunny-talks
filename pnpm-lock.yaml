@@ -58,6 +58,9 @@ importers:
       express:
         specifier: 5.3.0
         version: 5.3.0
+      nodemailer:
+        specifier: 10.6.0
+        version: 10.6.0
       pg:
         specifier: 8.23.1
         version: 8.23.1
@@ -77,6 +80,9 @@ importers:
       prisma:
         specifier: 7.10.1
         version: 7.10.1(@types/node@24.19.2)(@types/react@19.2.18)(react-dom@19.3.1(react@19.2.3))(react@19.2.3)(typescript@6.0.3)
+      smtp-server:
+        specifier: 3.21.6
+        version: 3.21.6
 
   apps/mobile:
     dependencies:
@@ -4859,6 +4865,13 @@ packages:
       }
     engines: { node: '>=18' }
 
+  nodemailer@10.6.0:
+    resolution:
+      {
+        integrity: sha512-jWanL7D9GD3jvUDYKmoC5rWTiG8MnBgnN2yV68bgMKip1zUJhiSTyz7Eg+18y8sk5OvdVDzws5nZK5arSI4f5Q==,
+      }
+    engines: { node: '>=20.0.0' }
+
   npm-package-arg@11.0.3:
     resolution:
       {
@@ -5265,6 +5278,13 @@ packages:
         integrity: sha512-5nnx0yGyVUcY6t9RnWcARWtwT9F1D8O9rt08htPvnd49W1IgZtmLkhu9WfMzQj1cFxjHIO6connUNVW5k7AVyQ==,
       }
     engines: { node: '>= 0.10' }
+
+  punycode.js@2.3.1:
+    resolution:
+      {
+        integrity: sha512-uxFIHU0YlHYhDQtV4R9J6a52SLx28BCjT+4ieh7IGbgwVJWO+km431c4yRlREUAsAmt/uMjQUyQHNEPf0M39CA==,
+      }
+    engines: { node: '>=6' }
 
   punycode@2.3.1:
     resolution:
@@ -5687,6 +5707,13 @@ packages:
         integrity: sha512-vZ7rfeehZui7wQs438JXBckYLkIIdfHOXsaVEUMyS5fHo1483l1bMdo0EDSWYclY0yZKFOipDy4KHuKs6ssvdg==,
       }
     engines: { node: '>=8.0.0' }
+
+  smtp-server@3.21.6:
+    resolution:
+      {
+        integrity: sha512-QlCb8T8eS6qpiehMRdrDrKUwg4CBCQBSzfNEUQudQUau3xfRUp93X19oOuvjKyryFuEYh1cPEdYhYa09XuePvg==,
+      }
+    engines: { node: '>=20.0.0' }
 
   source-map-js@1.2.2:
     resolution:
@@ -9694,6 +9721,8 @@ snapshots:
 
   node-releases@2.0.64: {}
 
+  nodemailer@10.6.0: {}
+
   npm-package-arg@11.0.3:
     dependencies:
       hosted-git-info: 7.0.2
@@ -9917,6 +9946,8 @@ snapshots:
     dependencies:
       forwarded: 0.2.0
       ipaddr.js: 1.9.1
+
+  punycode.js@2.3.1: {}
 
   punycode@2.3.1: {}
 
@@ -10224,6 +10255,11 @@ snapshots:
   sisteransi@1.0.5: {}
 
   slugify@1.6.9: {}
+
+  smtp-server@3.21.6:
+    dependencies:
+      nodemailer: 10.6.0
+      punycode.js: 2.3.1
 
   source-map-js@1.2.2: {}
 

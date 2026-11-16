@@ -1,10 +1,13 @@
 import { isIP } from 'node:net';
+import type { RegistrationConfig } from './auth/registration/registration-config.js';
+import { readRegistrationConfig } from './auth/registration/registration-config.js';
 
 export interface HttpConfig {
   readonly databaseUrl: string;
   readonly host: string;
   readonly port: number;
   readonly mode: 'development' | 'test' | 'production';
+  readonly registration?: RegistrationConfig;
 }
 
 /** Never include environment values in configuration errors. */
@@ -51,5 +54,12 @@ export function readHttpConfig(env: Readonly<Record<string, string | undefined>>
   } catch {
     fail();
   }
-  return { databaseUrl: databaseUrl!, host, port, mode: mode as HttpConfig['mode'] };
+  const registration = readRegistrationConfig(env);
+  return {
+    databaseUrl: databaseUrl!,
+    host,
+    port,
+    mode: mode as HttpConfig['mode'],
+    ...(registration ? { registration } : {}),
+  };
 }

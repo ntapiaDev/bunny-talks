@@ -148,6 +148,20 @@ describe('real Nest HTTP and PostgreSQL 18.7', () => {
   it('rejects missing authentication', async () => {
     await unauthorized(await call());
   });
+  it('keeps registration unavailable without SMTP configuration while preserving public input validation', async () => {
+    for (const [action, body] of [
+      ['request', { email: 'a@example.com' }],
+      ['complete', { email: 'a@example.com', token: 'invalid', password: 'long enough password' }],
+    ] as const) {
+      const response = await call(`/v1/auth/registration/${action}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({ error: { code: 'SERVICE_UNAVAILABLE' } });
+    }
+  });
   it.each(['Basic bad', 'Bearer malformed', 'Bearer  s1.bad.bad', 'Bearer\ts1.bad.bad'])(
     'rejects malformed Bearer: %s',
     async (header) => {
@@ -742,9 +756,26 @@ describe('real Nest HTTP and PostgreSQL 18.7', () => {
   });
   it('closes its server and leaves no PostgreSQL connections after shutdown', async () => {
     const database = app.get(Database);
-    const [backend] = await database.client.$queryRaw<
-      { pid: number }[]
-    >`SELECT pg_backend_pid() AS pid`;
+    let ready = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    // Occupy all eight pool slots to identify their PIDs without counting other Nest test apps.
+    const backends = await Promise.all(
+      Array.from({ length: 8 }, () =>
+        database.client.$transaction(
+          async (tx) => {
+            const [backend] = await tx.$queryRaw<{ pid: number }[]>`SELECT pg_backend_pid() AS pid`;
+            if (++ready === 8) release();
+            await gate;
+            return backend!.pid;
+          },
+          { maxWait: 5000, timeout: 5000 },
+        ),
+      ),
+    );
+    expect(new Set(backends).size).toBe(8);
     const disconnect = vi.spyOn(database.client, '$disconnect');
     await app.close();
     expect(disconnect).toHaveBeenCalledTimes(1);
@@ -753,7 +784,7 @@ describe('real Nest HTTP and PostgreSQL 18.7', () => {
     await expect(fetch(`${base}/health/live`)).rejects.toThrow();
     const rows = await client.$queryRaw<
       { count: bigint }[]
-    >`SELECT count(*) FROM pg_stat_activity WHERE pid = ${backend!.pid} OR application_name = 'bunny-talks-http'`;
+    >`SELECT count(*) FROM pg_stat_activity WHERE pid = ANY(${backends}::int[])`;
     expect(rows[0]!.count).toBe(0n);
   });
 });

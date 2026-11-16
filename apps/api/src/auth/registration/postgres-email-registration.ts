@@ -3,11 +3,13 @@ import { canonicalizeLoginEmail } from '@bunny-talks/validation';
 import type { EmailRegistration, Prisma, PrismaClient } from '../../../generated/prisma/client.js';
 import { createPasswordVerifier, PasswordVerifierError } from '../password-verifier.js';
 import { generateOpaqueToken, parseOpaqueToken } from '../sessions/session-token.js';
+import type { PostgresRegistrationLimits } from './postgres-registration-limits.js';
 import type { PasswordBlocklist } from './registration-policy.js';
 import { checkRegistrationPassword, RegistrationError } from './registration-policy.js';
 
 /** Only this trusted port receives the raw proof; never include it in a client response. */
 export interface RegistrationEmailTransport {
+  checkAvailability?(): Promise<void>;
   submitVerification(
     message: Readonly<{ to: string; token: string; expiresAt: Date }>,
   ): Promise<void>;
@@ -58,6 +60,7 @@ export class PostgresEmailRegistration {
     private readonly transport?: RegistrationEmailTransport,
     private readonly blocklist?: PasswordBlocklist,
     private readonly clock: () => Date = () => new Date(),
+    private readonly limits?: PostgresRegistrationLimits,
   ) {}
 
   private now() {
@@ -81,16 +84,36 @@ export class PostgresEmailRegistration {
     }
     try {
       try {
-        await this.client.emailRegistration.create({
-          data: {
-            id: token.id,
-            ...identity,
-            tokenHash: Uint8Array.from(token.hash),
-            createdAt: now,
-            expiresAt,
-          },
-        });
-      } catch {
+        const data = {
+          id: token.id,
+          ...identity,
+          tokenHash: Uint8Array.from(token.hash),
+          createdAt: now,
+          expiresAt,
+        };
+        if (this.limits) {
+          const limits = this.limits;
+          const admitted = await limits.transaction(async (tx) => {
+            if (!(await limits.admitEmail(tx, identity.canonical))) return false;
+            if (await tx.emailIdentity.findUnique({ where: { canonical: identity.canonical } }))
+              return false;
+            if (
+              await tx.emailRegistration.findFirst({
+                where: {
+                  canonical: identity.canonical,
+                  completedAt: null,
+                  expiresAt: { gt: now },
+                },
+              })
+            )
+              return false;
+            await tx.emailRegistration.create({ data });
+            return true;
+          });
+          if (!admitted) return { status: 'verification-requested' };
+        } else await this.client.emailRegistration.create({ data });
+      } catch (error) {
+        if (error instanceof RegistrationError && error.code === 'RATE_LIMITED') throw error;
         throw new RegistrationError('OUTCOME_UNKNOWN');
       }
       try {
@@ -134,6 +157,7 @@ export class PostgresEmailRegistration {
       if (previous) return previous;
       this.requireUnexpired(before);
       await checkRegistrationPassword(request.password, this.blocklist);
+      await this.limits?.hash();
       // Never hold a database transaction or row lock during Argon2id or adapter I/O.
       const verifier = await createPasswordVerifier(request.password);
       return await this.client.$transaction<RegistrationReceipt>(

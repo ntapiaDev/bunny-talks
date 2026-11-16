@@ -1,5 +1,7 @@
 # Identité e-mail et inscription sécurisée — jalon 4.4A
 
+**Actualisation 4.4C2A :** le [parcours HTTP d’inscription](http-email-registration.md) ajoute des adaptateurs réels SMTP/Pwned Passwords et des protections distribuées. Le présent document conserve les résultats et limites historiques de la primitive 4.4A.
+
 Statut historique : jalon terminé et commité (`46d6681`), sans endpoint ni qualification de production. Aucun fournisseur d’e-mail ni corpus de mots de passe compromis de production n’est configuré. L’[amorçage 4.4B](initial-device-bootstrap.md) est désormais implémenté pour revue séparée. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts.
 
 ## Audit et décisions conservées

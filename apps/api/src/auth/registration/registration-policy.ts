@@ -11,7 +11,9 @@ export class RegistrationError extends Error {
       | 'BLOCKED_PASSWORD'
       | 'POLICY_UNAVAILABLE'
       | 'DELIVERY_UNAVAILABLE'
-      | 'OUTCOME_UNKNOWN',
+      | 'OUTCOME_UNKNOWN'
+      | 'RATE_LIMITED'
+      | 'UNAVAILABLE',
   ) {
     super(code);
     this.name = 'RegistrationError';

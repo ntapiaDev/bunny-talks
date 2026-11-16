@@ -1,6 +1,10 @@
-# Jalon 4.4C1 bis — Harmonisation architecturale
+# Jalon 4.4C2A — Inscription HTTP et vérification e-mail
 
-Implémentation locale non commitée pour revue critique : audit du monorepo, organisation du backend par domaines, composition PostgreSQL partagée explicite, politiques d’entrée HTTP attachées aux routes et suites de tests séparées. Voir [inventaire, choix, graphes, résultats et points de revue](backend-architecture-harmonization.md). Les contrats cryptographiques, migrations et opérations transactionnelles sont conservés. Aucun parcours HTTP d’inscription ou de connexion n’est ajouté. **Attendre la revue critique avant toute suite ; 4.4C2 n’est pas commencé.**
+Implémentation locale pour revue critique : deux POST versionnés, validation Zod stricte, SMTP réel avec TLS obligatoire, Pwned Passwords par k-anonymité, budgets et baux PostgreSQL partagés, anti-énumération et réponse minimale de reprise. L’inscription reste désactivée par défaut. Voir [contrats, configuration, garanties, limites et résultats](http-email-registration.md). Aucune session, aucun appareil ni coffre créé. **Attendre la revue critique avant toute suite ; 4.4C2B n’est pas commencé.** SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts.
+
+# Historique — Jalon 4.4C1 bis — Harmonisation architecturale
+
+Terminé et commité avant 4.4C2A : audit du monorepo, organisation du backend par domaines, composition PostgreSQL partagée explicite, politiques d’entrée HTTP attachées aux routes et suites de tests séparées. Voir [inventaire, choix, graphes, résultats et points de revue](backend-architecture-harmonization.md). Les contrats cryptographiques, migrations et opérations transactionnelles sont conservés. Aucun parcours HTTP d’inscription ou de connexion n’est ajouté. **Attendre la revue critique avant toute suite ; 4.4C2 n’est pas commencé.**
 
 # Historique — Jalon 4.4C1 : fondation HTTP NestJS et sessions
 

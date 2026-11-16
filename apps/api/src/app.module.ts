@@ -1,6 +1,7 @@
 import type { DynamicModule, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { Controller, Get, Module, RequestMethod } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
+import { RegistrationModule } from './auth/registration/registration.module.js';
 import { PublicRoute, SessionGuard } from './auth/sessions/session.guard.js';
 import { SessionModule } from './auth/sessions/session.module.js';
 import type { HttpConfig } from './config.js';
@@ -24,7 +25,11 @@ export class AppModule implements NestModule {
     const databaseModule = DatabaseModule.register(config.databaseUrl);
     return {
       module: AppModule,
-      imports: [databaseModule, SessionModule.register(databaseModule)],
+      imports: [
+        databaseModule,
+        SessionModule.register(databaseModule),
+        RegistrationModule.register(databaseModule, config.registration),
+      ],
       controllers: [HealthController],
       providers: [
         { provide: APP_GUARD, useClass: HttpInputGuard },

@@ -3,6 +3,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
+import { RegistrationModule } from '../../../src/auth/registration/registration.module.js';
 import { SessionModule } from '../../../src/auth/sessions/session.module.js';
 import { Database } from '../../../src/shared/database/database.js';
 import { DatabaseModule } from '../../../src/shared/database/database.module.js';
@@ -138,6 +139,12 @@ describe('architectural dependency boundaries', () => {
     expect(database.exports).toEqual([Database]);
     expect(session.exports).not.toContain(Database);
     expect(session.providers).not.toContainEqual(expect.objectContaining({ provide: Database }));
+    const registration = RegistrationModule.register(database);
+    expect(registration.imports).toEqual([database]);
+    expect(registration.exports).toEqual([]);
+    expect(registration.providers).not.toContainEqual(
+      expect.objectContaining({ provide: Database }),
+    );
   });
 
   it('assigns every API test file to exactly one pnpm suite', () => {

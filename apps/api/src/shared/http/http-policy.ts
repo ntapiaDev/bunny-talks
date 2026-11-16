@@ -1,4 +1,9 @@
-import { BadRequestException, HttpException, UnsupportedMediaTypeException } from '@nestjs/common';
+import {
+  BadRequestException,
+  HttpException,
+  NotFoundException,
+  UnsupportedMediaTypeException,
+} from '@nestjs/common';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import { json } from 'express';
 import { acceptHttpInput } from './http-input.guard.js';
@@ -71,6 +76,30 @@ export function noInputPolicy(
     }
     // Preserve 4.4C1's method policy: router aliases did not use the canonical method table.
     if (request.path === canonicalPath && !allowedMethods.includes(request.method)) {
+      response.setHeader('Allow', allowedMethods.join(', '));
+      next(new HttpException('', 405));
+      return;
+    }
+    acceptHttpInput(request);
+    next();
+  };
+}
+
+/** Exact sensitive routes: reject router aliases and query strings before any handler runs. */
+export function exactJsonRoutePolicy(
+  canonicalPath: string,
+  allowedMethods: readonly string[],
+): RequestHandler {
+  return (request, response, next) => {
+    if (request.path !== canonicalPath) {
+      next(new NotFoundException());
+      return;
+    }
+    if (request.originalUrl.includes('?')) {
+      next(new BadRequestException());
+      return;
+    }
+    if (!allowedMethods.includes(request.method)) {
       response.setHeader('Allow', allowedMethods.join(', '));
       next(new HttpException('', 405));
       return;

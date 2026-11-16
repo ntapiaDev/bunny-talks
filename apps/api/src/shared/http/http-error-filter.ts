@@ -1,6 +1,8 @@
 import type { ArgumentsHost, ExceptionFilter } from '@nestjs/common';
 import { Catch, HttpException } from '@nestjs/common';
 import type { Response } from 'express';
+import { PasswordVerifierError } from '../../auth/password-verifier.js';
+import { RegistrationError } from '../../auth/registration/registration-policy.js';
 import { SessionError } from '../../auth/sessions/session-token.js';
 
 const errorCodes: Readonly<Record<number, string>> = {
@@ -16,6 +18,34 @@ const errorCodes: Readonly<Record<number, string>> = {
 };
 
 export function classifyHttpError(error: unknown): { status: number; code: string } {
+  if (error instanceof RegistrationError) {
+    switch (error.code) {
+      case 'INVALID_EMAIL':
+      case 'INVALID_REQUEST':
+        return { status: 400, code: 'BAD_REQUEST' };
+      case 'INVALID_PROOF':
+      case 'EMAIL_UNAVAILABLE':
+        return { status: 400, code: 'INVALID_VERIFICATION' };
+      case 'INVALID_PASSWORD':
+      case 'BLOCKED_PASSWORD':
+        return { status: 422, code: 'PASSWORD_REJECTED' };
+      case 'RATE_LIMITED':
+        return { status: 429, code: 'TOO_MANY_REQUESTS' };
+      case 'DELIVERY_UNAVAILABLE':
+        return { status: 503, code: 'DELIVERY_UNAVAILABLE' };
+      case 'POLICY_UNAVAILABLE':
+        return { status: 503, code: 'PASSWORD_CHECK_UNAVAILABLE' };
+      case 'OUTCOME_UNKNOWN':
+        return { status: 503, code: 'OUTCOME_UNKNOWN' };
+      case 'UNAVAILABLE':
+        return { status: 503, code: 'SERVICE_UNAVAILABLE' };
+    }
+  }
+  if (error instanceof PasswordVerifierError) {
+    if (error.code === 'INVALID_PASSWORD') return { status: 422, code: 'PASSWORD_REJECTED' };
+    if (error.code === 'BUSY') return { status: 429, code: 'TOO_MANY_REQUESTS' };
+    return { status: 503, code: 'SERVICE_UNAVAILABLE' };
+  }
   let status = 500;
   if (error instanceof SessionError) {
     status = error.code === 'INVALID_SESSION' ? 401 : error.code === 'INVALID_INPUT' ? 400 : 503;

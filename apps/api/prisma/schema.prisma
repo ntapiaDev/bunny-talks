@@ -145,3 +145,18 @@ model ReauthenticationGrant {
   consumedAt DateTime? @db.Timestamptz(3)
   session Session @relation(fields: [accountId, sessionId, deviceId], references: [accountId, id, deviceId], onDelete: Restrict, onUpdate: Restrict)
 }
+
+model RegistrationBudget {
+  key String @id @db.Char(64)
+  startedAt DateTime @db.Timestamptz(3)
+  expiresAt DateTime @db.Timestamptz(3)
+  hits Int
+  @@index([expiresAt])
+}
+
+model RegistrationLease {
+  id String @id @db.Uuid
+  kind String @db.VarChar(8)
+  expiresAt DateTime @db.Timestamptz(3)
+  @@index([expiresAt])
+}
