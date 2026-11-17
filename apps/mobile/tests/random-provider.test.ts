@@ -29,7 +29,7 @@ describe('native randomness installation', () => {
       },
       configurable: true,
     });
-    await import('../src/random-provider');
+    await import('../src/infrastructure/crypto/random-provider');
     const bytes = new Uint8Array(4);
     expect(globalThis.crypto.getRandomValues(bytes)).toBe(bytes);
     expect(bytes).toEqual(new Uint8Array([42, 42, 42, 42]));
@@ -40,7 +40,7 @@ describe('native randomness installation', () => {
     native.getRandomValues.mockImplementationOnce(() => {
       throw new Error('native unavailable');
     });
-    await import('../src/random-provider');
+    await import('../src/infrastructure/crypto/random-provider');
     expect(() => globalThis.crypto.getRandomValues(new Uint8Array(8))).toThrow(
       'native unavailable',
     );

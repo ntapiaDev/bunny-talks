@@ -7,9 +7,9 @@ import {
   openAccountVaultWithRecoveryKey,
   rewrapAccountVaultPassword,
 } from '@bunny-talks/crypto-backup';
-import vector from '../../../packages/crypto/backup/tests/fixtures/account-vault-v1.json';
-import nativeVector from '../../../packages/crypto/backup/tests/fixtures/native-vault-v1.json';
-import type { DiagnosticEntry } from './diagnostics';
+import vector from '../../../../../packages/crypto/backup/tests/fixtures/account-vault-v1.json';
+import nativeVector from '../../../../../packages/crypto/backup/tests/fixtures/native-vault-v1.json';
+import type { DiagnosticEntry } from './diagnostic-entry';
 
 const encode = new TextEncoder();
 const decode = new TextDecoder();

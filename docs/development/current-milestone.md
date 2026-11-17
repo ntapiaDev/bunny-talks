@@ -1,3 +1,7 @@
+# Jalon 4.5B0 — harmonisation mobile
+
+Refactorisation de la composition, de la présentation des diagnostics et des adaptateurs natifs pour revue. Voir [architecture et limites](mobile-architecture.md). La vérification des stores après redémarrage Android reste à effectuer séparément ; les qualifications historiques ci-dessous ne sont pas modifiées. Le diagnostic HTTP 4.5B1 n’est pas commencé.
+
 # Jalon 4.5A — PostgreSQL local persistant
 
 Le jalon 4.5A est validé. PostgreSQL permanent est opérationnel sur `127.0.0.1:15432`, avec healthcheck `healthy` et neuf migrations appliquées. Le démarrage local recommandé devient `pnpm db:up` : prévalidation des identifiants et de la configuration Compose, attente du healthcheck et vérification des trois authentifications. Le correctif de démarrage reste en attente de revue humaine. Voir [procédures et limites](postgresql-prisma-foundation.md). La qualification Android/E2EE n'est pas commencée dans ce correctif.

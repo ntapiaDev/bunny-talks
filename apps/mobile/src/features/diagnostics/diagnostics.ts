@@ -14,6 +14,7 @@ import { CryptoDigestAlgorithm, digestStringAsync, getRandomValues } from 'expo-
 import * as SecureStore from 'expo-secure-store';
 import { openDatabaseAsync } from 'expo-sqlite';
 import { importIdentity, validateExportedIdentity } from '@bunny-talks/crypto-engine';
+import type { DiagnosticEntry } from './diagnostic-entry';
 import { assertFreshDiagnosticStores } from './initial-state';
 import { checkWitness } from './witness';
 
@@ -24,11 +25,6 @@ type Device = {
   deviceId: number;
   registrationId: number;
   store: ExpoSignalProtocolStore;
-};
-export type DiagnosticEntry = {
-  label: string;
-  status: 'pass' | 'fail' | 'info';
-  durationMs?: number;
 };
 
 const witnessKey = 'bunny.diagnostic.witness.v1';

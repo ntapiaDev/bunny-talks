@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyVaultDiagnosticRecords } from '../src/vault-diagnostic-state';
+import { classifyVaultDiagnosticRecords } from '../src/features/diagnostics/vault-diagnostic-state';
 
 describe('vault diagnostic record state', () => {
   it('distinguishes a fresh installation and complete records', () => {

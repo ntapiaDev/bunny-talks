@@ -299,6 +299,8 @@ Les URL publiques permanentes ne sont pas autorisées pour les médias privés.
 
 ## 7. Architecture mobile
 
+L’organisation effective, les frontières et les limites de la fondation de diagnostic sont décrites dans [l’architecture mobile](../development/mobile-architecture.md).
+
 L'application mobile doit séparer les responsabilités de présentation, de logique applicative et d'accès aux services.
 
 Les composants visuels ne doivent pas contenir directement :

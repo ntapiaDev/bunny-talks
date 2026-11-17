@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createNativeArgon2Provider } from '../src/native-argon2';
+import { createNativeArgon2Provider } from '../src/infrastructure/crypto/native-argon2';
 
 vi.mock('@sonnetstationsolutions/expo-argon2', () => ({ argon2id: vi.fn() }));
 

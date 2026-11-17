@@ -14,9 +14,9 @@ import {
   rewrapAccountVaultPassword,
   validateAccountVault,
 } from '@bunny-talks/crypto-backup';
-import vector from '../../../packages/crypto/backup/tests/fixtures/account-vault-v1.json';
-import recoveryVector from '../../../packages/crypto/backup/tests/fixtures/key-envelope-recovery.json';
-import type { DiagnosticEntry } from './diagnostics';
+import vector from '../../../../../packages/crypto/backup/tests/fixtures/account-vault-v1.json';
+import recoveryVector from '../../../../../packages/crypto/backup/tests/fixtures/key-envelope-recovery.json';
+import type { DiagnosticEntry } from './diagnostic-entry';
 import { classifyVaultDiagnosticRecords } from './vault-diagnostic-state';
 
 const prefix = 'bunny.vault.diagnostic.v1.';

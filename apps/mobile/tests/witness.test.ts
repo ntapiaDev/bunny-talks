@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkWitness } from '../src/witness';
+import { checkWitness } from '../src/features/diagnostics/witness';
 
 const digest = 'a'.repeat(64);
 const marker = JSON.stringify({ process: 'first-process', state: digest });

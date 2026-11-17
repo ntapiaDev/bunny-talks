@@ -1,15 +1,24 @@
 import { useState } from 'react';
 import { Button, SafeAreaView, ScrollView, Text } from 'react-native';
-import { applicationVaultArgon2Provider } from './crypto-composition';
-import type { DiagnosticEntry } from './diagnostics';
-import { runDiagnostics } from './diagnostics';
-import { createNativeVaultDiagnostics } from './native-vault-diagnostics';
-import { runVaultDiagnostics } from './vault-diagnostics';
+import type { DiagnosticEntry } from './diagnostic-entry';
 
-export default function App() {
-  const [vaultDiagnostic] = useState(() =>
-    createNativeVaultDiagnostics(applicationVaultArgon2Provider),
-  );
+type Report = (entry: DiagnosticEntry) => void;
+type DiagnosticsScreenProps = {
+  createNativeVaultDiagnostics: () => {
+    label: () => string;
+    next: (report: Report) => Promise<void>;
+    reopen: (report: Report) => Promise<void>;
+  };
+  runDiagnostics: (report: Report) => Promise<void>;
+  runVaultDiagnostics: (report: Report, full: boolean) => Promise<void>;
+};
+
+export function DiagnosticsScreen({
+  createNativeVaultDiagnostics,
+  runDiagnostics,
+  runVaultDiagnostics,
+}: DiagnosticsScreenProps) {
+  const [vaultDiagnostic] = useState(createNativeVaultDiagnostics);
   const [pulse, setPulse] = useState(0);
   const [entries, setEntries] = useState<DiagnosticEntry[]>([]);
   const [running, setRunning] = useState(false);

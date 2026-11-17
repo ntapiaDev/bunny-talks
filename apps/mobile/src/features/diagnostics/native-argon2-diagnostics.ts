@@ -1,7 +1,7 @@
 import { hkdf } from '@noble/hashes/hkdf.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import type { DiagnosticEntry } from './diagnostics';
-import type { NativeArgon2Provider } from './native-argon2';
+import type { NativeArgon2Provider } from '../../infrastructure/crypto/native-argon2';
+import type { DiagnosticEntry } from './diagnostic-entry';
 
 const fromHex = (value: string) => Uint8Array.from(value.match(/../g)!, (s) => parseInt(s, 16));
 const toHex = (value: Uint8Array) =>
