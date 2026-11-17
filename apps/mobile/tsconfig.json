@@ -1,6 +1,10 @@
 {
   "extends": "../../tsconfig.bundler.json",
-  "compilerOptions": { "lib": ["ES2023", "DOM"], "types": ["react", "react-native"] },
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM"],
+    "types": ["react", "react-native", "node"],
+    "allowImportingTsExtensions": true
+  },
   "include": ["**/*.ts", "**/*.tsx"],
   "exclude": ["node_modules", "dist"]
 }

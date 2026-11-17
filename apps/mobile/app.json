@@ -5,8 +5,21 @@
     "scheme": "bunnytalks",
     "version": "0.1.0",
     "orientation": "portrait",
-    "android": { "package": "fr.bunnytalks.mobile" },
-    "ios": { "bundleIdentifier": "fr.bunnytalks.mobile" },
-    "plugins": [["expo-sqlite", { "useSQLCipher": true }], "expo-secure-store"]
+    "android": {
+      "package": "fr.bunnytalks.mobile"
+    },
+    "ios": {
+      "bundleIdentifier": "fr.bunnytalks.mobile"
+    },
+    "plugins": [
+      [
+        "expo-sqlite",
+        {
+          "useSQLCipher": true
+        }
+      ],
+      "expo-secure-store",
+      "./plugins/with-qualification-ca.cjs"
+    ]
   }
 }

@@ -123,6 +123,9 @@ importers:
         specifier: 0.86.3
         version: 0.86.3(@babel/core@7.29.13)(@types/react@19.2.18)(react@19.2.3)
     devDependencies:
+      '@types/node':
+        specifier: 24.19.2
+        version: 24.19.2
       '@types/react':
         specifier: ~19.2.0
         version: 19.2.18

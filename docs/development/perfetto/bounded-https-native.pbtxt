@@ -1,0 +1,28 @@
+buffers {
+  size_kb: 16384
+  fill_policy: RING_BUFFER
+}
+
+duration_ms: @DURATION_MS@
+write_into_file: true
+file_write_period_ms: 1000
+flush_period_ms: 5000
+max_file_size_bytes: 67108864
+
+data_sources {
+  config {
+    name: "android.heapprofd"
+    target_buffer: 0
+    heapprofd_config {
+      pid: @PID@
+      no_startup: true
+      heaps: "libc.malloc"
+      sampling_interval_bytes: 4096
+      shmem_size_bytes: 8388608
+      block_client: false
+      continuous_dump_config {
+        dump_interval_ms: 5000
+      }
+    }
+  }
+}
