@@ -1,6 +1,6 @@
 # Fondation PostgreSQL et Prisma — jalon 4.2A
 
-## Environnement local — 4.5A en revue
+## Environnement local — 4.5A validé
 
 PostgreSQL 18.7, Prisma CLI/client/adaptateur 7.10.1 et pg 8.23.1 sont conservés. Le backend NestJS existe désormais ; les descriptions des fondations ci-dessous restent historiques.
 
@@ -10,15 +10,18 @@ Trois identités sont utilisées : `bunny_admin` initialise les ressources, `bun
 
 Ne pas écraser `apps/api/.env` existant. Copier l'exemple uniquement si le fichier est absent, puis adapter les valeurs manuellement : `POSTGRES_USER=bunny_admin`, `POSTGRES_DB=postgres`, trois mots de passe distincts (au moins 16 caractères pour chacun, valeurs `replace_with_` refusées), et les deux URL avec les rôles applicatifs correspondants. Encoder les caractères réservés dans les URL. Les variables de processus priment sur le fichier local ; ne pas afficher les URL ou la configuration Compose résolue.
 
-Après revue du jalon et autorisation de démarrer l'environnement permanent :
+Pour démarrer ou reprendre l’environnement local :
 
 ```sh
-docker compose --env-file apps/api/.env config --quiet
-docker compose --env-file apps/api/.env up -d
+pnpm db:up
 pnpm --filter @bunny-talks/api prisma:generate
 pnpm --filter @bunny-talks/api prisma:validate
 pnpm --filter @bunny-talks/api prisma:migrate
 ```
+
+`pnpm db:up` vérifie d'abord les identités, les mots de passe, les URL et la configuration effectivement résolue par Compose, puis attend le healthcheck et teste les trois authentifications TCP. `docker compose config --quiet` vérifie la syntaxe mais ne détecte ni les valeurs d'exemple ni la cohérence des mots de passe avec les URL. Une commande Compose directe contourne cette prévalidation. Les variables déjà présentes dans le shell ont priorité. Les valeurs validées par Node sont transmises identiquement à la résolution et au démarrage Compose ; la comparaison tient compte du doublement des caractères `$` dans le JSON produit par Compose.
+
+Si l'authentification échoue sur un volume existant, son mot de passe administrateur enregistré peut différer de `POSTGRES_PASSWORD` dans le fichier courant : changer ce fichier ne modifie pas le rôle PostgreSQL. Vérifier les identifiants précédemment utilisés et les variables du shell, sans les afficher ni les remplacer automatiquement. Une installation incomplète doit être inspectée selon la procédure ci-dessous ; ne pas supprimer le volume pour corriger les identifiants. La commande ne provisionne pas les rôles et n'applique aucune migration.
 
 Le volume nommé est monté sur `/var/lib/postgresql`, avec PGDATA PostgreSQL 18 sous `/var/lib/postgresql/18/docker`. Son nom physique dépend du projet Compose : conserver le même projet pour retrouver les données. Le healthcheck TCP est borné ; il ne prouve ni les migrations ni la disponibilité fonctionnelle de l'API. Le port hôte reste `127.0.0.1:15432`.
 
@@ -83,7 +86,7 @@ Les neuf migrations historiques ont été appliquées avec `bunny_dev` via le fl
 
 Après les suites, le témoin dev vaut toujours 45, les neuf migrations sont terminées et aucun schéma temporaire `test_<32 caractères hexadécimaux>` ne subsiste. Lors de la préparation, un témoin créé avant les premières migrations avait provoqué P3005 : seule cette table de test du volume neuf a été retirée, puis les migrations ont réussi avant recréation du témoin. Aucune migration historique ni aucun test n'a été modifié pour contourner ce refus.
 
-Le jalon attend la revue humaine. Le premier démarrage permanent et la configuration réelle de son `.env` restent à effectuer après validation ; la qualification Android/E2EE est hors périmètre. Les limites transactionnelles du provisionnement et celles du healthcheck décrites plus haut restent applicables.
+Ces résultats décrivent la qualification jetable initiale ; la base permanente a depuis été démarrée et les neuf migrations appliquées. La qualification Android/E2EE reste hors périmètre. Les limites transactionnelles du provisionnement et celles du healthcheck décrites plus haut restent applicables.
 
 ## Modèle et contraintes
 

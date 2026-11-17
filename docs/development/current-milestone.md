@@ -1,8 +1,6 @@
 # Jalon 4.5A — PostgreSQL local persistant
 
-Corrections finales implémentées, **en attente de revue humaine** : initialisation indépendante par script exécutable (755), migration locale initialement réservée au port 55432 avec contrôle PostgreSQL 18.7, garde-fou exigeant un volume jetable valide et sans montage superposé. La qualification Compose vierge a atteint `healthy` avec le healthcheck du dépôt. Résultats du 17 novembre 2026 : neuf migrations appliquées avec `bunny_dev`, 49 tests unitaires ciblés, 174 tests de persistance et la suite HTTP complète (144 tests) réussis ; typecheck, lint et formatage réussis. Le témoin de développement reste intact après les suites ; aucun schéma temporaire de test ne subsiste. Voir [procédures et résultats](postgresql-prisma-foundation.md). Le jalon 4.5A reste en attente de validation ; aucune base permanente ni qualification Android/E2EE n'a été démarrée.
-
-Le port hôte local retenu pour PostgreSQL est désormais `15432` : Windows réserve une plage contenant l'ancien port `55432`. Le port interne reste `5432`. Le changement de port attend sa revue ; la disponibilité depuis Windows et Docker Desktop reste à vérifier lors du démarrage autorisé.
+Le jalon 4.5A est validé. PostgreSQL permanent est opérationnel sur `127.0.0.1:15432`, avec healthcheck `healthy` et neuf migrations appliquées. Le démarrage local recommandé devient `pnpm db:up` : prévalidation des identifiants et de la configuration Compose, attente du healthcheck et vérification des trois authentifications. Le correctif de démarrage reste en attente de revue humaine. Voir [procédures et limites](postgresql-prisma-foundation.md). La qualification Android/E2EE n'est pas commencée dans ce correctif.
 
 # Historique — Jalon 4.4C3 — Amorçage initial E2EE par HTTP
 
