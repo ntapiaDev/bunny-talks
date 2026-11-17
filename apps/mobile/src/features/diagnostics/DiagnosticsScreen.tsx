@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Button, SafeAreaView, ScrollView, Text } from 'react-native';
 import type { DiagnosticEntry } from './diagnostic-entry';
 
@@ -9,12 +9,14 @@ type DiagnosticsScreenProps = {
     next: (report: Report) => Promise<void>;
     reopen: (report: Report) => Promise<void>;
   };
+  runApiDiagnostic: (report: Report) => Promise<void>;
   runDiagnostics: (report: Report) => Promise<void>;
   runVaultDiagnostics: (report: Report, full: boolean) => Promise<void>;
 };
 
 export function DiagnosticsScreen({
   createNativeVaultDiagnostics,
+  runApiDiagnostic,
   runDiagnostics,
   runVaultDiagnostics,
 }: DiagnosticsScreenProps) {
@@ -22,40 +24,33 @@ export function DiagnosticsScreen({
   const [pulse, setPulse] = useState(0);
   const [entries, setEntries] = useState<DiagnosticEntry[]>([]);
   const [running, setRunning] = useState(false);
-  const run = async () => {
+  const runningRef = useRef(false);
+  const runExclusive = async (action: (report: Report) => Promise<void>) => {
+    if (runningRef.current) return;
+    runningRef.current = true;
     setRunning(true);
     setEntries([]);
     try {
-      await runDiagnostics((entry) => setEntries((current) => [...current, entry]));
+      await action((entry) => setEntries((current) => [...current, entry]));
     } finally {
+      runningRef.current = false;
       setRunning(false);
     }
   };
-  const runVault = async (full: boolean) => {
-    setRunning(true);
-    setEntries([]);
-    try {
-      await runVaultDiagnostics((entry) => setEntries((current) => [...current, entry]), full);
-    } finally {
-      setRunning(false);
-    }
-  };
-  const runNative = async (reopen = false) => {
-    setRunning(true);
-    setEntries([]);
-    try {
-      await vaultDiagnostic[reopen ? 'reopen' : 'next']((entry) =>
-        setEntries((current) => [...current, entry]),
-      );
-    } finally {
-      setRunning(false);
-    }
-  };
+  const run = () => runExclusive(runDiagnostics);
+  const runVault = (full: boolean) => runExclusive((report) => runVaultDiagnostics(report, full));
+  const runNative = (reopen = false) =>
+    runExclusive((report) => vaultDiagnostic[reopen ? 'reopen' : 'next'](report));
   return (
     <SafeAreaView style={{ flex: 1, padding: 20 }}>
       <ScrollView>
         <Text>Diagnostic local OpenE2EE</Text>
         <Text>Les données de test restent dans des stores distincts sur cet appareil.</Text>
+        <Button
+          title="Tester connexion API"
+          disabled={running}
+          onPress={() => void runExclusive(runApiDiagnostic)}
+        />
         <Button title="Exécuter le diagnostic" disabled={running} onPress={() => void run()} />
         <Button
           title="Contrôles rapides du coffre"
