@@ -10,6 +10,7 @@ Les documents marqués « référence » décrivent les décisions ou contrats a
 - Coffre implémenté à deux enveloppes : [enveloppes V1](security/key-envelopes-v1.md), [composition authentifiée V1](security/account-vault-v1.md) et [contrats de publication](development/vault-publication-contracts.md). Ces formats expérimentaux ne constituent pas un parcours complet de récupération.
 - Compte et appareils : [sessions persistantes](development/persistent-sessions.md), [preuves de réauthentification](development/reauthentication-grants.md), [inscription](development/email-registration.md) et [premier amorçage](development/initial-device-bootstrap.md). L'autorisation serveur ne prouve pas la possession de l'identité E2EE.
 - API : [sessions HTTP](development/http-sessions.md), [inscription HTTP](development/http-email-registration.md), [connexion HTTP](development/http-login.md), [amorçage HTTP](development/http-initial-device-bootstrap.md), [repository transactionnel](development/transactional-vault-repository.md) et [vérificateurs de mot de passe](security/server-password-verifiers.md).
+- Mobile : [fondation HTTP applicative](development/mobile-application-http.md).
 - Environnement : [PostgreSQL, migrations et suites dédiées](development/postgresql-prisma-foundation.md), [prérequis de qualification mobile](development/mobile-qualification-prerequisites.md).
 
 ## Évaluations expérimentales et qualifications

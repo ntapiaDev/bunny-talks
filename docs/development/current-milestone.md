@@ -1,8 +1,10 @@
-# État courant — jalon 4.5B1
+# État courant — jalon 4.5B2A
 
-Le premier diagnostic HTTP mobile local est proposé à la revue humaine. Il vérifie `/health/live` depuis un Development Build sur émulateur Android reconnu, sans authentification ni données sensibles. Sa composition, ses restrictions et la procédure de qualification sont décrites dans [l'architecture mobile](mobile-architecture.md). Sur l'émulateur Android 17, le développeur a confirmé depuis React Native une connexion réussie lorsque NestJS est disponible et un échec compréhensible lorsque l'API est arrêtée. Les 36 tests mobiles simulés, les vérifications du monorepo et l'export Metro Android ont réussi. Ces résultats ne constituent pas une qualification de production.
+Le diagnostic 4.5B1 est validé pour la connectivité HTTP locale depuis React Native sur l’émulateur Android 17 : le développeur a observé le succès avec NestJS disponible et un échec compréhensible lorsque l’API est arrêtée. Cette observation ne qualifie ni la production ni l’annulation native. Les résultats historiques et les limites du diagnostic figurent dans [l’architecture mobile](mobile-architecture.md).
 
-Restent à vérifier : l'annulation effective de la requête au niveau natif, le comportement Android pendant une requête volontairement lente et, si nécessaire, le manifeste détaillé de l'APK installé. La sécurité et la configuration du futur client HTTP de production restent à définir et qualifier.
+Le jalon courant 4.5B2A fournit une [fondation HTTP applicative](mobile-application-http.md) HTTPS, testée avec un transport simulé mais non composée dans l’application. Aucun transport natif n’est qualifié. La copie des morceaux reçus protège leur contenu contre la réutilisation des buffers par le transport ; les limites de taille, les délais et le refus des réponses incorrectes sont testés en simulation. L’export Metro ne qualifie pas cette fondation non composée.
+
+Avant de transmettre des secrets, il reste à choisir et qualifier sur Android et iOS un transport qui refuse les redirections avant leur suivi, vérifie TLS, omet les identifiants ambiants et fournit une lecture bornée avec annulation. Il faut aussi définir la configuration et les certificats de développement, valider les réponses métier et concevoir le stockage sécurisé des sessions. Aucun secret ne doit emprunter le HTTP local du diagnostic. L’annulation native et le comportement Android pendant une requête lente restent à vérifier pour le diagnostic.
 
 Les stores et le coffre restent à requalifier sur Android après arrêt forcé, sans réinitialiser les données existantes. Les observations antérieures sont conservées dans les rapports [OpenE2EE](mobile-open-e2ee-qualification.md) et [Argon2id](native-argon2-qualification.md).
 
