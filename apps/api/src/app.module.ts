@@ -9,6 +9,7 @@ import type { HttpConfig } from './config.js';
 import { DatabaseModule } from './shared/database/database.module.js';
 import { HttpInputGuard } from './shared/http/http-input.guard.js';
 import { jsonBodyPolicy, noInputPolicy } from './shared/http/http-policy.js';
+import { VaultModule } from './vault/vault.module.js';
 
 @Controller('health/live')
 class HealthController {
@@ -24,6 +25,8 @@ export class AppModule implements NestModule {
   public static register(config: HttpConfig): DynamicModule {
     if (config.mode === 'production' && config.login)
       throw new Error('Invalid login configuration');
+    if (config.mode === 'production' && config.bootstrap)
+      throw new Error('Invalid vault bootstrap configuration');
     // Share this exact module instance with every consumer; never register it per domain.
     const databaseModule = DatabaseModule.register(config.databaseUrl);
     return {
@@ -33,6 +36,7 @@ export class AppModule implements NestModule {
         SessionModule.register(databaseModule),
         LoginModule.register(databaseModule, config.login),
         RegistrationModule.register(databaseModule, config.registration),
+        VaultModule.register(databaseModule, config.bootstrap),
       ],
       controllers: [HealthController],
       providers: [

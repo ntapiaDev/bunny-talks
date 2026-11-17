@@ -3,6 +3,8 @@ import type { LoginConfig } from './auth/login/login-config.js';
 import { readLoginConfig } from './auth/login/login-config.js';
 import type { RegistrationConfig } from './auth/registration/registration-config.js';
 import { readRegistrationConfig } from './auth/registration/registration-config.js';
+import type { BootstrapConfig } from './vault/bootstrap-config.js';
+import { readBootstrapConfig } from './vault/bootstrap-config.js';
 
 export interface HttpConfig {
   readonly databaseUrl: string;
@@ -11,6 +13,7 @@ export interface HttpConfig {
   readonly mode: 'development' | 'test' | 'production';
   readonly registration?: RegistrationConfig;
   readonly login?: LoginConfig;
+  readonly bootstrap?: BootstrapConfig;
 }
 
 /** Never include environment values in configuration errors. */
@@ -59,6 +62,7 @@ export function readHttpConfig(env: Readonly<Record<string, string | undefined>>
   }
   const registration = readRegistrationConfig(env);
   const login = readLoginConfig(env);
+  const bootstrap = readBootstrapConfig(env);
   return {
     databaseUrl: databaseUrl!,
     host,
@@ -66,5 +70,6 @@ export function readHttpConfig(env: Readonly<Record<string, string | undefined>>
     mode: mode as HttpConfig['mode'],
     ...(registration ? { registration } : {}),
     ...(login ? { login } : {}),
+    ...(bootstrap ? { bootstrap } : {}),
   };
 }

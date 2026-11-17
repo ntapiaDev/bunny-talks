@@ -174,3 +174,17 @@ model LoginLease {
   expiresAt DateTime @db.Timestamptz(3)
   @@index([expiresAt])
 }
+
+model BootstrapBudget {
+  key String @id @db.Char(64)
+  startedAt DateTime @db.Timestamptz(3)
+  expiresAt DateTime @db.Timestamptz(3)
+  hits Int
+  @@index([expiresAt])
+}
+
+model BootstrapLease {
+  id String @id @db.Uuid
+  expiresAt DateTime @db.Timestamptz(3)
+  @@index([expiresAt])
+}

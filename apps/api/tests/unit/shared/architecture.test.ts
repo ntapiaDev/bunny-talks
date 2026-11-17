@@ -8,6 +8,7 @@ import { RegistrationModule } from '../../../src/auth/registration/registration.
 import { SessionModule } from '../../../src/auth/sessions/session.module.js';
 import { Database } from '../../../src/shared/database/database.js';
 import { DatabaseModule } from '../../../src/shared/database/database.module.js';
+import { VaultModule } from '../../../src/vault/vault.module.js';
 
 const apiRoot = fileURLToPath(new URL('../../../', import.meta.url));
 const repoRoot = resolve(apiRoot, '../..');
@@ -154,6 +155,13 @@ describe('architectural dependency boundaries', () => {
     }
   });
 
+  it('keeps vault independent of HTTP login and session module composition', () => {
+    for (const [path, dependencies] of graph) {
+      if (!path.startsWith(join(apiRoot, 'src/vault') + '/')) continue;
+      expect(dependencies.join('\n')).not.toMatch(/auth\/login\/|session\.module/);
+    }
+  });
+
   it('composes one explicit database module and exports only session HTTP capabilities', () => {
     const database = DatabaseModule.register('postgresql://fixture:fixture@127.0.0.1/test');
     const session = SessionModule.register(database);
@@ -171,6 +179,10 @@ describe('architectural dependency boundaries', () => {
     expect(registration.providers).not.toContainEqual(
       expect.objectContaining({ provide: Database }),
     );
+    const vault = VaultModule.register(database);
+    expect(vault.imports).toEqual([database]);
+    expect(vault.exports).toEqual([]);
+    expect(vault.providers).not.toContainEqual(expect.objectContaining({ provide: Database }));
   });
 
   it('assigns every API test file to exactly one pnpm suite', () => {

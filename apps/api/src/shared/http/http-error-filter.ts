@@ -2,13 +2,16 @@ import type { ArgumentsHost, ExceptionFilter } from '@nestjs/common';
 import { Catch, HttpException } from '@nestjs/common';
 import type { Response } from 'express';
 import { AuthenticationError } from '../../auth/authentication-error.js';
+import { InitialBootstrapError } from '../../auth/bootstrap/initial-bootstrap-error.js';
 import { PasswordVerifierError } from '../../auth/password-verifier.js';
 import { RegistrationError } from '../../auth/registration/registration-policy.js';
 import { SessionError } from '../../auth/sessions/session-token.js';
+import { VaultRepositoryError } from '../../vault/vault-repository-error.js';
 
 const errorCodes: Readonly<Record<number, string>> = {
   400: 'BAD_REQUEST',
   401: 'UNAUTHORIZED',
+  403: 'FORBIDDEN',
   404: 'NOT_FOUND',
   405: 'METHOD_NOT_ALLOWED',
   413: 'PAYLOAD_TOO_LARGE',
@@ -19,6 +22,20 @@ const errorCodes: Readonly<Record<number, string>> = {
 };
 
 export function classifyHttpError(error: unknown): { status: number; code: string } {
+  if (error instanceof InitialBootstrapError) {
+    if (error.code === 'OUTCOME_UNKNOWN') return { status: 503, code: 'OUTCOME_UNKNOWN' };
+    if (error.code === 'INVALID_AUTHENTICATION') return { status: 401, code: 'UNAUTHORIZED' };
+    return { status: 403, code: 'FORBIDDEN' };
+  }
+  if (error instanceof VaultRepositoryError) {
+    if (error.code === 'INVALID_INPUT' || error.code === 'INVALID_PUBLICATION')
+      return { status: 400, code: 'BAD_REQUEST' };
+    return {
+      status: 503,
+      code:
+        error.code === 'TRANSACTION_OUTCOME_UNKNOWN' ? 'OUTCOME_UNKNOWN' : 'SERVICE_UNAVAILABLE',
+    };
+  }
   if (error instanceof AuthenticationError) {
     const status =
       error.code === 'INVALID_CREDENTIALS' ? 401 : error.code === 'RATE_LIMITED' ? 429 : 503;

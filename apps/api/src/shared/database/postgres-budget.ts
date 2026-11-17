@@ -3,13 +3,17 @@ import { Prisma } from '../../../generated/prisma/client.js';
 /** Fixed table allowlist; keys are already domain-separated HMACs. */
 export async function takePostgresBudget(
   tx: Prisma.TransactionClient,
-  tableName: 'RegistrationBudget' | 'LoginBudget',
+  tableName: 'RegistrationBudget' | 'LoginBudget' | 'BootstrapBudget',
   key: string,
   windowMs: number,
   limit: number,
 ): Promise<boolean> {
   const table = Prisma.raw(
-    tableName === 'RegistrationBudget' ? '"RegistrationBudget"' : '"LoginBudget"',
+    {
+      RegistrationBudget: '"RegistrationBudget"',
+      LoginBudget: '"LoginBudget"',
+      BootstrapBudget: '"BootstrapBudget"',
+    }[tableName],
   );
   const rows = await tx.$queryRaw<{ key: string }[]>(Prisma.sql`
     INSERT INTO ${table} ("key", "startedAt", "expiresAt", "hits")

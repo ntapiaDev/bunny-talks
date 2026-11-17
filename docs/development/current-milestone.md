@@ -1,10 +1,16 @@
-# Jalon 4.4C2B — Connexion HTTP et sessions sur appareils en attente
+# Jalon 4.4C3 — Amorçage initial E2EE par HTTP
 
-Implémentation initiale présente dans `79dfa5b`, puis revue corrective locale non commitée pour revalidation : `POST /v1/auth/login`, vérification Argon2id réelle hors transaction, substitution anti-énumération, budgets PostgreSQL dédiés, revalidation exacte du credential sous verrou et création atomique d’une session `s1` sur un nouvel appareil `pending`. Aucune autorisation E2EE ni reprise d’appareil historique. Voir [contrat, audit, configuration, tests et limites](http-login.md).
+Implémentation locale pour revue, non commitée : `POST /v1/vault/bootstrap` et `POST /v1/vault/bootstrap/receipt`, protégés par le guard existant. Composition des primitives 4.4B inchangées, enveloppes strictes, limite JSON de 192 Kio propre aux deux routes, budgets et baux PostgreSQL dédiés, trousseau HMAC stable et activation indépendante désactivée par défaut, interdite en production. Voir [audit, contrat, garanties, limites et vérifications](http-initial-device-bootstrap.md).
+
+Les résultats distinguent `committed`, `rejected` et `unknown`. La relecture ne crée ni reçu ni autorisation. La session d’origine est conservée ; le suivi d’activité normal du guard reste applicable. L’autorisation serveur ne prouve pas la possession des clés privées. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. **Attendre la revue critique ; ne pas commencer le jalon suivant.**
+
+# Historique — Jalon 4.4C2B — Connexion HTTP et sessions sur appareils en attente
+
+Implémentation et corrections validées et commitées dans `509a80e` : `POST /v1/auth/login`, vérification Argon2id réelle hors transaction, substitution anti-énumération, budgets PostgreSQL dédiés, revalidation exacte du credential sous verrou et création atomique d’une session `s1` sur un nouvel appareil `pending`. Aucune autorisation E2EE ni reprise d’appareil historique. Voir [contrat, audit, configuration, tests et limites](http-login.md).
 
 La correction ajoute une preuve runtime enregistrée dans une `WeakMap` privée, une photographie immuable et des contrats partagés à la racine de `auth`, sans dépendance de `sessions` vers `login`. Le contrat HTTP et les revalidations PostgreSQL sont conservés. Qualification corrective : 172 tests PostgreSQL et 114 tests HTTP/SMTP/ESM réussis, ainsi que les tests unitaires, d’architecture et les contrôles de types du monorepo.
 
-Login désactivé par défaut et activation **refusée en mode production** : les baux expirants ne garantissent pas un plafond physique absolu après suspension d’un processus. Conservation bornée sans purge des sessions/appareils, politique de rétention définitive à décider. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. **Attendre la revalidation de la revue corrective ; aucun jalon suivant n’est commencé.**
+Login désactivé par défaut et activation **refusée en mode production** : les baux expirants ne garantissent pas un plafond physique absolu après suspension d’un processus. Conservation bornée sans purge des sessions/appareils, politique de rétention définitive à décider. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. À sa clôture, aucun amorçage HTTP n’était exposé.
 
 # Historique — Jalon 4.4C2A — Inscription HTTP et vérification e-mail
 
