@@ -1,14 +1,22 @@
-# Jalon 4.4C2A — Inscription HTTP et vérification e-mail
+# Jalon 4.4C2B — Connexion HTTP et sessions sur appareils en attente
 
-Implémentation locale pour revue critique : deux POST versionnés, validation Zod stricte, SMTP réel avec TLS obligatoire, Pwned Passwords par k-anonymité, budgets et baux PostgreSQL partagés, anti-énumération et réponse minimale de reprise. L’inscription reste désactivée par défaut. Voir [contrats, configuration, garanties, limites et résultats](http-email-registration.md). Aucune session, aucun appareil ni coffre créé. **Attendre la revue critique avant toute suite ; 4.4C2B n’est pas commencé.** SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts.
+Implémentation initiale présente dans `79dfa5b`, puis revue corrective locale non commitée pour revalidation : `POST /v1/auth/login`, vérification Argon2id réelle hors transaction, substitution anti-énumération, budgets PostgreSQL dédiés, revalidation exacte du credential sous verrou et création atomique d’une session `s1` sur un nouvel appareil `pending`. Aucune autorisation E2EE ni reprise d’appareil historique. Voir [contrat, audit, configuration, tests et limites](http-login.md).
+
+La correction ajoute une preuve runtime enregistrée dans une `WeakMap` privée, une photographie immuable et des contrats partagés à la racine de `auth`, sans dépendance de `sessions` vers `login`. Le contrat HTTP et les revalidations PostgreSQL sont conservés. Qualification corrective : 172 tests PostgreSQL et 114 tests HTTP/SMTP/ESM réussis, ainsi que les tests unitaires, d’architecture et les contrôles de types du monorepo.
+
+Login désactivé par défaut et activation **refusée en mode production** : les baux expirants ne garantissent pas un plafond physique absolu après suspension d’un processus. Conservation bornée sans purge des sessions/appareils, politique de rétention définitive à décider. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. **Attendre la revalidation de la revue corrective ; aucun jalon suivant n’est commencé.**
+
+# Historique — Jalon 4.4C2A — Inscription HTTP et vérification e-mail
+
+Terminé, validé et commité (`f38025e`) : deux POST versionnés, validation Zod stricte, SMTP réel avec TLS obligatoire, Pwned Passwords par k-anonymité, budgets et baux PostgreSQL partagés, anti-énumération et réponse minimale de reprise. L’inscription reste désactivée par défaut. Voir [contrats, configuration, garanties, limites et résultats](http-email-registration.md). Aucune session, aucun appareil ni coffre créé. À sa clôture, 4.4C2B n’était pas commencé. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts.
 
 # Historique — Jalon 4.4C1 bis — Harmonisation architecturale
 
-Terminé et commité avant 4.4C2A : audit du monorepo, organisation du backend par domaines, composition PostgreSQL partagée explicite, politiques d’entrée HTTP attachées aux routes et suites de tests séparées. Voir [inventaire, choix, graphes, résultats et points de revue](backend-architecture-harmonization.md). Les contrats cryptographiques, migrations et opérations transactionnelles sont conservés. Aucun parcours HTTP d’inscription ou de connexion n’est ajouté. **Attendre la revue critique avant toute suite ; 4.4C2 n’est pas commencé.**
+Terminé et commité (`883c7e7`) avant 4.4C2A : audit du monorepo, organisation du backend par domaines, composition PostgreSQL partagée explicite, politiques d’entrée HTTP attachées aux routes et suites de tests séparées. Voir [inventaire, choix, graphes, résultats et points de revue](backend-architecture-harmonization.md). Les contrats cryptographiques, migrations et opérations transactionnelles sont conservés. Aucun parcours HTTP d’inscription ou de connexion n’est ajouté. À sa clôture, 4.4C2 n’était pas commencé.
 
 # Historique — Jalon 4.4C1 : fondation HTTP NestJS et sessions
 
-Terminé et commité (`8967823`) : liveness publique, lecture de la session courante et révocation transactionnelle par Bearer opaque, sans endpoint sensible supplémentaire. Voir [contrat HTTP, architecture, configuration, protections et vérifications](http-sessions.md). L’état `authorized` ne démontre pas la possession E2EE. Cette API n’est pas qualifiée pour des utilisateurs réels ; SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. **Attendre la revue critique avant toute suite ; 4.4C2 n’est pas commencé.**
+Terminé et commité (`b4e551f`) : liveness publique, lecture de la session courante et révocation transactionnelle par Bearer opaque, sans endpoint sensible supplémentaire. Voir [contrat HTTP, architecture, configuration, protections et vérifications](http-sessions.md). L’état `authorized` ne démontre pas la possession E2EE. Cette API n’est pas qualifiée pour des utilisateurs réels ; SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. À sa clôture, 4.4C2 n’était pas commencé.
 
 # Historique — Jalon 4.4B : amorçage sécurisé du premier appareil
 

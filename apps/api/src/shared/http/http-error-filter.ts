@@ -1,6 +1,7 @@
 import type { ArgumentsHost, ExceptionFilter } from '@nestjs/common';
 import { Catch, HttpException } from '@nestjs/common';
 import type { Response } from 'express';
+import { AuthenticationError } from '../../auth/authentication-error.js';
 import { PasswordVerifierError } from '../../auth/password-verifier.js';
 import { RegistrationError } from '../../auth/registration/registration-policy.js';
 import { SessionError } from '../../auth/sessions/session-token.js';
@@ -18,6 +19,14 @@ const errorCodes: Readonly<Record<number, string>> = {
 };
 
 export function classifyHttpError(error: unknown): { status: number; code: string } {
+  if (error instanceof AuthenticationError) {
+    const status =
+      error.code === 'INVALID_CREDENTIALS' ? 401 : error.code === 'RATE_LIMITED' ? 429 : 503;
+    return {
+      status,
+      code: error.code === 'OUTCOME_UNKNOWN' ? 'OUTCOME_UNKNOWN' : errorCodes[status]!,
+    };
+  }
   if (error instanceof RegistrationError) {
     switch (error.code) {
       case 'INVALID_EMAIL':

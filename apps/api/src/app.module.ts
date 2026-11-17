@@ -1,6 +1,7 @@
 import type { DynamicModule, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { Controller, Get, Module, RequestMethod } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
+import { LoginModule } from './auth/login/login.module.js';
 import { RegistrationModule } from './auth/registration/registration.module.js';
 import { PublicRoute, SessionGuard } from './auth/sessions/session.guard.js';
 import { SessionModule } from './auth/sessions/session.module.js';
@@ -21,6 +22,8 @@ class HealthController {
 @Module({})
 export class AppModule implements NestModule {
   public static register(config: HttpConfig): DynamicModule {
+    if (config.mode === 'production' && config.login)
+      throw new Error('Invalid login configuration');
     // Share this exact module instance with every consumer; never register it per domain.
     const databaseModule = DatabaseModule.register(config.databaseUrl);
     return {
@@ -28,6 +31,7 @@ export class AppModule implements NestModule {
       imports: [
         databaseModule,
         SessionModule.register(databaseModule),
+        LoginModule.register(databaseModule, config.login),
         RegistrationModule.register(databaseModule, config.registration),
       ],
       controllers: [HealthController],

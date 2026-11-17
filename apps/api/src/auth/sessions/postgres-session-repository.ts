@@ -1,7 +1,9 @@
+import type { Prisma, PrismaClient, Session } from '../../../generated/prisma/client.js';
+import { AuthenticationError } from '../authentication-error.js';
+import type { LoginCredential, VerifiedLogin } from '../verified-login.js';
+import { requireVerifiedLogin } from '../verified-login.js';
 import { requireSessionInTransaction } from './session-authentication.js';
 import { sessionIsActive } from './session-lifecycle.js';
-export { sessionIsActive } from './session-lifecycle.js';
-import type { Prisma, PrismaClient, Session } from '../../../generated/prisma/client.js';
 import {
   generateDeviceId,
   generateSessionToken,
@@ -9,6 +11,8 @@ import {
   SessionError,
   uuidPattern,
 } from './session-token.js';
+
+export { sessionIsActive } from './session-lifecycle.js';
 
 export interface SessionPolicy {
   readonly absoluteMs: number;
@@ -78,7 +82,7 @@ export class PostgresSessionRepository {
         { isolationLevel: 'ReadCommitted', maxWait: 2000, timeout: 5000 },
       );
     } catch (error) {
-      if (error instanceof SessionError) throw error;
+      if (error instanceof SessionError || error instanceof AuthenticationError) throw error;
       throw new SessionError('OUTCOME_UNKNOWN');
     }
   }
@@ -93,6 +97,30 @@ export class PostgresSessionRepository {
     accountId: string,
     deviceId?: string,
   ): Promise<{ token: string; session: SessionState }> {
+    return this.create(accountId, deviceId);
+  }
+
+  /** No client device selector; proof can only originate from actual password verification. */
+  public async createAfterLogin(
+    verified: VerifiedLogin,
+    leaseId: string,
+    maximumRecords: number,
+  ): Promise<{ token: string; session: SessionState }> {
+    const credential = requireVerifiedLogin(verified);
+    if (!uuidPattern.test(leaseId) || !Number.isSafeInteger(maximumRecords) || maximumRecords < 1)
+      throw new SessionError('INVALID_INPUT');
+    return this.create(credential.accountId, undefined, {
+      credential,
+      leaseId,
+      maximumRecords,
+    });
+  }
+
+  private async create(
+    accountId: string,
+    deviceId?: string,
+    login?: { credential: LoginCredential; leaseId: string; maximumRecords: number },
+  ): Promise<{ token: string; session: SessionState }> {
     if (
       !/^[!-~]{1,128}$/.test(accountId) ||
       (deviceId !== undefined && !uuidPattern.test(deviceId))
@@ -104,6 +132,33 @@ export class PostgresSessionRepository {
       if (newDeviceId === generated.id) throw new SessionError('UNAVAILABLE');
       return await this.locked(accountId, async (tx) => {
         const now = this.now();
+        if (login) {
+          const before = login.credential;
+          const identity = await tx.emailIdentity.findUnique({ where: { accountId } });
+          const credential = await tx.passwordCredential.findUnique({ where: { accountId } });
+          if (
+            !identity ||
+            !credential ||
+            identity.canonical !== before.canonical ||
+            identity.verifiedAt.getTime() !== before.verifiedAtMs ||
+            identity.verifiedAt > now ||
+            credential.verifier !== before.verifier ||
+            credential.revision !== before.revision ||
+            (credential.verifierUpdatedAt?.getTime() ?? null) !== before.verifierUpdatedAtMs
+          )
+            throw new AuthenticationError('INVALID_CREDENTIALS');
+          // Expired owners cannot publish a session, even if their native calculation resumes.
+          const leases = await tx.$queryRaw<{ id: string }[]>`
+            SELECT "id" FROM "LoginLease" WHERE "id" = ${login.leaseId}::uuid
+              AND "expiresAt" > clock_timestamp() FOR UPDATE`;
+          if (leases.length !== 1) throw new AuthenticationError('BUSY');
+          // Preserve audit/history: cap all retained records rather than deleting referenced ones.
+          if (
+            (await tx.session.count({ where: { accountId } })) >= login.maximumRecords ||
+            (await tx.device.count({ where: { accountId } })) >= login.maximumRecords
+          )
+            throw new AuthenticationError('RATE_LIMITED');
+        }
         const device =
           deviceId === undefined
             ? await tx.device.create({ data: { id: newDeviceId!, accountId } })
@@ -151,7 +206,7 @@ export class PostgresSessionRepository {
         return work(tx, row, row.device.authorizedAt, now);
       });
     } catch (error) {
-      if (error instanceof SessionError) throw error;
+      if (error instanceof SessionError || error instanceof AuthenticationError) throw error;
       throw new SessionError('UNAVAILABLE');
     } finally {
       parsed.hash.fill(0);

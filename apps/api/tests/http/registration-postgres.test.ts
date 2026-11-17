@@ -406,7 +406,6 @@ describe('registration HTTP with real Nest and PostgreSQL 18.7', () => {
       expect(cors.headers.get('access-control-allow-origin')).toBeNull();
     }
     for (const route of [
-      '/v1/auth/login',
       '/v1/auth/registration/finalize',
       '/v1/vault',
       '/v1/devices',

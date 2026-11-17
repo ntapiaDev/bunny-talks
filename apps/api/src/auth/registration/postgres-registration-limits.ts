@@ -1,5 +1,6 @@
 import { createHmac, randomUUID } from 'node:crypto';
 import type { Prisma, PrismaClient } from '../../../generated/prisma/client.js';
+import { takePostgresBudget } from '../../shared/database/postgres-budget.js';
 import type { RegistrationConfig } from './registration-config.js';
 import { RegistrationError } from './registration-policy.js';
 
@@ -25,16 +26,7 @@ export class PostgresRegistrationLimits {
     limit: number,
   ): Promise<boolean> {
     const key = this.key(scope, value);
-    const rows = await tx.$queryRaw<{ key: string }[]>`
-      INSERT INTO "RegistrationBudget" ("key", "startedAt", "expiresAt", "hits")
-      VALUES (${key}, clock_timestamp(), clock_timestamp() + ${windowMs} * interval '1 millisecond', 1)
-      ON CONFLICT ("key") DO UPDATE SET
-        "hits" = CASE WHEN "RegistrationBudget"."expiresAt" <= clock_timestamp() THEN 1 ELSE "RegistrationBudget"."hits" + 1 END,
-        "startedAt" = CASE WHEN "RegistrationBudget"."expiresAt" <= clock_timestamp() THEN clock_timestamp() ELSE "RegistrationBudget"."startedAt" END,
-        "expiresAt" = CASE WHEN "RegistrationBudget"."expiresAt" <= clock_timestamp() THEN clock_timestamp() + ${windowMs} * interval '1 millisecond' ELSE "RegistrationBudget"."expiresAt" END
-      WHERE "RegistrationBudget"."expiresAt" <= clock_timestamp() OR "RegistrationBudget"."hits" < ${limit}
-      RETURNING "key"`;
-    return rows.length === 1;
+    return takePostgresBudget(tx, 'RegistrationBudget', key, windowMs, limit);
   }
 
   public async transaction<T>(work: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {

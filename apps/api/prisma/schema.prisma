@@ -160,3 +160,17 @@ model RegistrationLease {
   expiresAt DateTime @db.Timestamptz(3)
   @@index([expiresAt])
 }
+
+model LoginBudget {
+  key String @id @db.Char(64)
+  startedAt DateTime @db.Timestamptz(3)
+  expiresAt DateTime @db.Timestamptz(3)
+  hits Int
+  @@index([expiresAt])
+}
+
+model LoginLease {
+  id String @id @db.Uuid
+  expiresAt DateTime @db.Timestamptz(3)
+  @@index([expiresAt])
+}

@@ -3,6 +3,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
+import { LoginModule } from '../../../src/auth/login/login.module.js';
 import { RegistrationModule } from '../../../src/auth/registration/registration.module.js';
 import { SessionModule } from '../../../src/auth/sessions/session.module.js';
 import { Database } from '../../../src/shared/database/database.js';
@@ -106,6 +107,8 @@ describe('architectural dependency boundaries', () => {
   it('keeps pure backend rules independent of Nest, Prisma and PostgreSQL repositories', () => {
     const pureFiles = [
       'auth/password-verifier.ts',
+      'auth/verified-login.ts',
+      'auth/authentication-error.ts',
       'auth/registration/registration-policy.ts',
       'auth/reauthentication/reauthentication-intent.ts',
       'auth/sessions/session-token.ts',
@@ -125,10 +128,29 @@ describe('architectural dependency boundaries', () => {
     for (const [path, dependencies] of graph) {
       if (!path.endsWith('.controller.ts')) continue;
       expect(dependencies.join('\n')).not.toMatch(/prisma|postgres-|\/database[/.]/);
+      expect(dependencies.join('\n')).not.toMatch(/verified-login/);
     }
     for (const [path, dependencies] of graph) {
       if (path.startsWith(join(apiRoot, 'src/shared/database') + '/'))
         expect(dependencies.join('\n')).not.toMatch(/\/auth\/|\/config\.js|\/http\//);
+    }
+  });
+
+  it('keeps session repositories independent of login orchestration and policy', () => {
+    for (const [path, dependencies] of graph) {
+      if (!path.startsWith(join(apiRoot, 'src/auth/sessions') + '/')) continue;
+      for (const dependency of dependencies) {
+        const target = localTarget(path, dependency);
+        expect(target ?? dependency).not.toContain('/auth/login/');
+      }
+    }
+    for (const file of ['auth/verified-login.ts', 'auth/authentication-error.ts']) {
+      const dependencies = graph.get(join(apiRoot, 'src', file));
+      expect(dependencies).toBeDefined();
+      for (const dependency of dependencies!)
+        expect(localTarget(join(apiRoot, 'src', file), dependency) ?? dependency).not.toMatch(
+          /\/auth\/(?:login|sessions)\//,
+        );
     }
   });
 
@@ -139,6 +161,10 @@ describe('architectural dependency boundaries', () => {
     expect(database.exports).toEqual([Database]);
     expect(session.exports).not.toContain(Database);
     expect(session.providers).not.toContainEqual(expect.objectContaining({ provide: Database }));
+    const login = LoginModule.register(database);
+    expect(login.imports).toEqual([database]);
+    expect(login.exports).toEqual([]);
+    expect(login.providers).not.toContainEqual(expect.objectContaining({ provide: Database }));
     const registration = RegistrationModule.register(database);
     expect(registration.imports).toEqual([database]);
     expect(registration.exports).toEqual([]);
