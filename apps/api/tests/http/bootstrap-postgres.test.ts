@@ -845,9 +845,13 @@ describe('bootstrap over real HTTP and PostgreSQL 18.7', () => {
     ).finally(() => isolated.close());
     expect(disconnect).toHaveBeenCalledOnce();
     const pids = [...new Set(rows.flatMap((r) => r.map((v) => v.pid)))];
-    expect(
-      await client.$queryRaw`SELECT pid FROM pg_stat_activity WHERE pid = ANY(${pids}::int[])`,
-    ).toHaveLength(0);
+    // Socket shutdown and removal from pg_stat_activity are observed asynchronously by the server.
+    await expect
+      .poll(
+        () => client.$queryRaw`SELECT pid FROM pg_stat_activity WHERE pid = ANY(${pids}::int[])`,
+        { timeout: 2000 },
+      )
+      .toHaveLength(0);
     expect(await client.bootstrapLease.count()).toBe(0);
   });
 });

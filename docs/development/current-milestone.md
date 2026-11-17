@@ -1,8 +1,14 @@
-# Jalon 4.4C3 — Amorçage initial E2EE par HTTP
+# Jalon 4.5A — PostgreSQL local persistant
 
-Implémentation locale pour revue, non commitée : `POST /v1/vault/bootstrap` et `POST /v1/vault/bootstrap/receipt`, protégés par le guard existant. Composition des primitives 4.4B inchangées, enveloppes strictes, limite JSON de 192 Kio propre aux deux routes, budgets et baux PostgreSQL dédiés, trousseau HMAC stable et activation indépendante désactivée par défaut, interdite en production. Voir [audit, contrat, garanties, limites et vérifications](http-initial-device-bootstrap.md).
+Corrections finales implémentées, **en attente de revue humaine** : initialisation indépendante par script exécutable (755), migration locale initialement réservée au port 55432 avec contrôle PostgreSQL 18.7, garde-fou exigeant un volume jetable valide et sans montage superposé. La qualification Compose vierge a atteint `healthy` avec le healthcheck du dépôt. Résultats du 17 novembre 2026 : neuf migrations appliquées avec `bunny_dev`, 49 tests unitaires ciblés, 174 tests de persistance et la suite HTTP complète (144 tests) réussis ; typecheck, lint et formatage réussis. Le témoin de développement reste intact après les suites ; aucun schéma temporaire de test ne subsiste. Voir [procédures et résultats](postgresql-prisma-foundation.md). Le jalon 4.5A reste en attente de validation ; aucune base permanente ni qualification Android/E2EE n'a été démarrée.
 
-Les résultats distinguent `committed`, `rejected` et `unknown`. La relecture ne crée ni reçu ni autorisation. La session d’origine est conservée ; le suivi d’activité normal du guard reste applicable. L’autorisation serveur ne prouve pas la possession des clés privées. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. **Attendre la revue critique ; ne pas commencer le jalon suivant.**
+Le port hôte local retenu pour PostgreSQL est désormais `15432` : Windows réserve une plage contenant l'ancien port `55432`. Le port interne reste `5432`. Le changement de port attend sa revue ; la disponibilité depuis Windows et Docker Desktop reste à vérifier lors du démarrage autorisé.
+
+# Historique — Jalon 4.4C3 — Amorçage initial E2EE par HTTP
+
+Validé et commité : `POST /v1/vault/bootstrap` et `POST /v1/vault/bootstrap/receipt`, protégés par le guard existant. Composition des primitives 4.4B inchangées, enveloppes strictes, limite JSON de 192 Kio propre aux deux routes, budgets et baux PostgreSQL dédiés, trousseau HMAC stable et activation indépendante désactivée par défaut, interdite en production. Voir [audit, contrat, garanties, limites et vérifications](http-initial-device-bootstrap.md).
+
+Les résultats distinguent `committed`, `rejected` et `unknown`. La relecture ne crée ni reçu ni autorisation. La session d’origine est conservée ; le suivi d’activité normal du guard reste applicable. L’autorisation serveur ne prouve pas la possession des clés privées. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts.
 
 # Historique — Jalon 4.4C2B — Connexion HTTP et sessions sur appareils en attente
 

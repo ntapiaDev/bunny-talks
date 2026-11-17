@@ -4,18 +4,18 @@ import { randomUUID } from 'node:crypto';
 import process from 'node:process';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../../generated/prisma/client.js';
+import { validateTestDatabaseUrl, verifyTestDatabase } from './test-database-guard.mjs';
 
 /** Never resets a database: only a fresh, randomly named schema can be removed. */
 export async function createTestDatabase(url: string | undefined = process.env.TEST_DATABASE_URL) {
-  assert.ok(url, 'TEST_DATABASE_URL is required');
-  const parsed = new URL(url);
-  assert.ok(['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname));
-  assert.equal(parsed.pathname, '/bunny_talks_test');
-  assert.ok(['postgres:', 'postgresql:'].includes(parsed.protocol));
-  assert.equal(parsed.search, '');
-  assert.equal(parsed.hash, '');
+  const parsed = validateTestDatabaseUrl(url);
   const schema = `test_${randomUUID().replaceAll('-', '')}`;
-  const admin = new PrismaClient({ adapter: new PrismaPg({ connectionString: url }) });
+  const admin = new PrismaClient({
+    adapter: new PrismaPg({
+      connectionString: parsed.toString(),
+      onConnect: verifyTestDatabase,
+    }),
+  });
   const clients: PrismaClient[] = [];
   let created = false;
   const dispose = async () => {
@@ -49,10 +49,11 @@ export async function createTestDatabase(url: string | undefined = process.env.T
       const client = new PrismaClient({
         adapter: new PrismaPg(
           {
-            connectionString: url,
+            connectionString: parsed.toString(),
             options: `-c search_path=${schema}`,
             application_name: name,
             max: 4,
+            onConnect: verifyTestDatabase,
           },
           { schema },
         ),

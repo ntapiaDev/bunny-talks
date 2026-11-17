@@ -4,21 +4,14 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import process from 'node:process';
 import { URL } from 'node:url';
-import pg from 'pg';
 import { test } from 'vitest';
 import { loadLocalEnv } from '../../../local-env.mjs';
+import { openTestDatabase } from '../../support/test-database-guard.mjs';
 
 loadLocalEnv();
 test('adds bootstrap bindings without inventing history or reauthorizing historical devices', async () => {
-  const url = new URL(process.env.TEST_DATABASE_URL);
-  assert.ok(['localhost', '127.0.0.1', '[::1]'].includes(url.hostname));
-  assert.ok(['postgres:', 'postgresql:'].includes(url.protocol));
-  assert.equal(url.pathname, '/bunny_talks_test');
-  assert.equal(url.search, '');
-  assert.equal(url.hash, '');
+  const { client } = await openTestDatabase(process.env.TEST_DATABASE_URL);
   const schema = `test_${randomUUID().replaceAll('-', '')}`;
-  const client = new pg.Client({ connectionString: url.toString() });
-  await client.connect();
   let created = false;
   try {
     assert.match(

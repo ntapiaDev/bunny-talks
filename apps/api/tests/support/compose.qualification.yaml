@@ -1,0 +1,10 @@
+# Merge with the root compose.yaml using an explicitly disposable project.
+services:
+  postgres:
+    labels:
+      bunny45a: temporary
+    ports: !override
+      - '127.0.0.1::5432'
+volumes:
+  bunny_postgres_data:
+    name: bunny45a-qualification-data

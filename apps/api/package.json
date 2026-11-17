@@ -9,7 +9,7 @@
     "test:http": "pnpm build && vitest run tests/http",
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",
-    "prisma:migrate": "prisma migrate deploy",
+    "prisma:migrate": "node migrate-local.mjs",
     "test:persistence": "vitest run tests/persistence",
     "build": "node build.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tests/tsconfig.json",

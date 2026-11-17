@@ -4,23 +4,16 @@ import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import process from 'node:process';
 import { URL } from 'node:url';
-import pg from 'pg';
 import { test } from 'vitest';
 import { loadLocalEnv } from '../../../local-env.mjs';
+import { openTestDatabase } from '../../support/test-database-guard.mjs';
 
 loadLocalEnv();
 
 const url = process.env.TEST_DATABASE_URL;
 test('migrations and PostgreSQL constraints', async () => {
-  assert.ok(url, 'TEST_DATABASE_URL is required');
-  const parsed = new URL(url);
-  assert.ok(['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname));
-  assert.equal(parsed.pathname, '/bunny_talks_test');
-  assert.ok(['postgres:', 'postgresql:'].includes(parsed.protocol));
-  assert.equal(parsed.search, '');
+  const { client } = await openTestDatabase(url);
   const schema = `test_${randomUUID().replaceAll('-', '')}`;
-  const client = new pg.Client({ connectionString: url });
-  await client.connect();
   let created = false;
   try {
     await client.query(`CREATE SCHEMA "${schema}"`);
