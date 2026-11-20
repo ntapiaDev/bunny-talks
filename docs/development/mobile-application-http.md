@@ -1,4 +1,4 @@
-# Fondation HTTP applicative mobile — jalon 4.5B2C1
+# Fondation HTTP applicative mobile — jalons 4.5B2C1 et 4.5B2C2
 
 ## Contrats serveur examinés
 
@@ -25,7 +25,7 @@ Le client contrôle la taille effectivement livrée avant décodage. Il refuse l
 
 Le délai JavaScript couvre la préparation, l’attente du résultat complet et la validation de la réponse. Un contrôle d’horloge monotone empêche d’accepter une réponse arrivée après l’échéance même si le timer JavaScript tarde à s’exécuter. Le décodage et l’analyse synchrones ne peuvent pas être interrompus pendant leur exécution. Un `AbortSignal` optionnel permet à l’appelant d’interrompre l’attente et de déclencher le signal du transport. Une annulation déjà demandée empêche l’envoi. Le client ignore les livraisons tardives après annulation ou expiration.
 
-## Obligations du futur transport natif
+## Obligations du transport natif
 
 - Refuser les redirections avant tout suivi. Conserver la validation de la chaîne TLS de confiance et du nom d’hôte pour l’origine HTTPS, sans contournement.
 - Isoler le client des cookies, du stockage de `Set-Cookie` et des identifiants ambiants, y compris les défis d’authentification serveur ou proxy. Utiliser le Bearer uniquement depuis l’en-tête explicite. Empêcher les nouvelles tentatives automatiques, notamment celles déclenchées par la pile réseau sur incident de connexion.
@@ -33,10 +33,12 @@ Le délai JavaScript couvre la préparation, l’attente du résultat complet et
 - Appliquer le délai restant à l’opération de transport entière, de la mise en file à la livraison, lectures comprises. Arrêter réellement la requête et fermer ses ressources au délai ou sur annulation, y compris pendant les lectures, et libérer les ressources sur chaque issue. L’expiration de l’attente JavaScript ne prouve pas cet arrêt.
 - Livrer uniquement un résultat complet avec des octets stables ou un code `network`, `timeout`, `redirect`, `response` ou `size`, sans données d’exception ni fragments. Assainir également les diagnostics du module, du pont et de la pile réseau.
 
-## Vérification et préparation de 4.5B2C2
+## Adaptateur et composition 4.5B2C2
 
-Les tests TypeScript injectent un adaptateur et vérifient le contrat à cette frontière. Ils couvrent les politiques et limites transmises, l’unique dispatch, la validation des octets et des statuts, l’assainissement des erreurs et le signal d’annulation. Le contrôle de taille en JavaScript intervient après livraison et ne prouve pas la borne native.
+Le module Expo local `ApplicationHttps` réserve une place et démarre son délai avant que l’appel asynchrone soit traité par le pont. Il lit une réponse complète dans une enveloppe binaire bornée et reçoit l’annulation par appel synchrone. La limite de deux opérations actives est commune aux plateformes. L’adaptateur transforme le résultat natif en `HttpTransport`. Le port public, la borne maximale et les catégories d’échec restent ceux de 4.5B2C1. [Module natif](../../apps/mobile/modules/application-https) · [Adaptateur TypeScript](../../apps/mobile/src/infrastructure/http/native-https-transport.ts)
 
-Après revue, sélectionner l’adaptateur, les origines et la politique de confiance par environnement. Reprendre la fixture HTTPS avec des données factices pour qualifier Android et iOS. Vérifier les redirections avant suivi pour GET, POST et DELETE, TLS et nom d’hôte, l’isolation des identifiants, l’absence de rejeu, les tailles exactes et dépassées après décompression, les corps tronqués et les 204. Observer les délais, les annulations en file ou en cours de lecture, la libération des ressources et les cycles de vie en arrière-plan. Vérifier `URL`, le décodage UTF-8 fatal, le signal et les délais sur Hermes, ainsi que les variantes release et les appareils visés. [Fixture et bilan du prototype](native-https-transport-evaluation.md)
+La composition `createMobileApplicationHttpClient` fournit l’injection Android à partir d’une origine HTTPS explicite. La composition iOS reste bloquée par le rejeu possible dans URLSession. Le banc utilise le port applicatif avec des origines et valeurs factices. Les parcours d’inscription, de connexion, de session et de coffre restent au stade précédent. [Composition](../../apps/mobile/src/composition/http-composition.ts) · [Preuves et procédure 4.5B2C2](native-https-transport.md)
 
-La borne de 1 048 576 octets porte sur un corps décodé. Les buffers natifs, la copie lors du passage du pont, la chaîne décodée, le résultat JSON, la concurrence et les files ont chacun un coût qui reste à caractériser pour l’adaptateur retenu. La fondation reste hors composition jusqu’à qualification du transport. Les parcours réels exigent aussi une validation métier, la gestion de leurs issues incertaines et le stockage sécurisé des sessions avant l’usage d’identifiants réels.
+La borne concerne le corps décodé par opération. Le budget mémoire dépend également des buffers de la pile native, des copies du pont, de la chaîne décodée, du résultat JSON et des références conservées par l’appelant. Les tests TypeScript vérifient le contrat injecté. La qualification sur appareil vérifie le module et le pont réellement exécutés. Les origines et la confiance TLS par environnement, les issues métier incertaines et le stockage sécurisé des sessions restent à traiter avant l’usage de secrets.
+
+Sur iOS 26.5, le troisième essai du profil expérimental a accepté un corps identity de 1 048 576 octets et refusé deux corps surdimensionnés dès le contrôle du transfert. La catégorie attendue `size` reste à démontrer à 1 048 577 octets, indépendamment sur longueur déclarée et sur lecture progressive. Le profil refuse aussi le JSON standard sans champ de codage. La composition iOS reste verrouillée. [Troisième essai](native-https-transport.md#troisième-essai-ios-et-cadrage-http)

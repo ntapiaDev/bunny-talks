@@ -16,6 +16,10 @@ coverage/
 # Expo
 .expo/
 .expo-shared/
+# Keep only the Expo custom build configuration in this build directory.
+!/apps/mobile/.eas/build/
+/apps/mobile/.eas/build/*
+!/apps/mobile/.eas/build/ios-https-qualification.yml
 
 # Expo Prebuild — generated native projects
 /apps/mobile/android/

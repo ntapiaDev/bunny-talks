@@ -1,0 +1,14 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+  <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+  <application android:networkSecurityConfig="@xml/bunny_https_qualification" android:allowBackup="false"
+      android:label="Bunny Talks HTTPS" tools:replace="android:allowBackup,android:label">
+    <meta-data android:name="EXDevClientEmbeddedBundle" android:value="true" />
+    <activity android:name="fr.bunnytalks.mobile.MainActivity">
+      <intent-filter tools:node="removeAll" />
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>

@@ -1,0 +1,5 @@
+{
+  "platforms": ["android", "ios"],
+  "android": { "modules": ["fr.bunnytalks.applicationhttps.ApplicationHttpsModule"] },
+  "ios": { "modules": ["ApplicationHttpsModule"] }
+}

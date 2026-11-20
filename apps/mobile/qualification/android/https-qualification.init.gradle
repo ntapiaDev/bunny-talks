@@ -1,0 +1,30 @@
+// This init script is loaded explicitly for the fixture Development Build.
+gradle.beforeProject { project ->
+  if (project.path != ':app') return
+  project.plugins.withId('com.android.application') {
+    project.extensions.getByName('androidComponents').finalizeDsl { android ->
+      if (System.getenv('EXPO_PUBLIC_BUNNY_HTTPS_QUALIFICATION') != '1') {
+        throw new GradleException('Enable the fixture entry explicitly')
+      }
+      def qualification = new File(project.rootDir.parentFile, 'qualification')
+      def generatedPath = project.findProperty('bunnyHttpsQualificationResources')
+      if (!generatedPath) throw new GradleException('Provide bunnyHttpsQualificationResources')
+      def generated = new File(generatedPath.toString())
+      if (!new File(generated, 'raw/bunny_https_qualification_ca.pem').isFile()) {
+        throw new GradleException('Provide the public fixture CA in the qualification resources')
+      }
+
+      android.buildTypes.getByName('debug').applicationIdSuffix = '.httpsqualification'
+      android.sourceSets.getByName('debug').manifest.srcFile(new File(qualification, 'android/AndroidManifest.xml'))
+      android.sourceSets.getByName('debug').res.srcDirs(new File(qualification, 'android/res'), generated)
+
+      def react = project.extensions.getByName('react')
+      react.entryFile.set(new File(qualification, 'native-https-entry.tsx'))
+      react.debuggableVariants.set([])
+      // The alternate JS entry is for the fixture APK only.
+      project.tasks.matching { it.name != 'createBundleDebugJsAndAssets' && it.name ==~ /createBundle.*JsAndAssets/ }.configureEach {
+        throw new GradleException('Build the standard variant without the fixture init script')
+      }
+    }
+  }
+}

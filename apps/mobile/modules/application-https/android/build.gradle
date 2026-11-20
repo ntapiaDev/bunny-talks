@@ -1,0 +1,35 @@
+apply plugin: 'com.android.library'
+apply plugin: 'expo-module-gradle-plugin'
+
+group = 'fr.bunnytalks.applicationhttps'
+version = '0.1.0'
+
+android {
+  namespace 'fr.bunnytalks.applicationhttps'
+  defaultConfig {
+    versionCode 1
+    versionName '0.1.0'
+  }
+}
+
+dependencies {
+  def okhttpVersion = '4.12.1'
+  def okioVersion = '3.16.4'
+
+  implementation('com.squareup.okhttp3:okhttp') {
+    version { strictly(okhttpVersion) }
+    because('Reject compromised eMudhra intermediate certificates')
+  }
+  constraints {
+    implementation('com.squareup.okhttp3:okhttp-urlconnection') {
+      version { strictly(okhttpVersion) }
+      because('Keep the React Native cookie adapter aligned with OkHttp')
+    }
+    implementation('com.squareup.okio:okio') {
+      version { strictly(okioVersion) }
+      because('Include the AsyncTimeout scheduling fix in the 3.16 line')
+    }
+  }
+  implementation('com.facebook.react:react-android')
+  testImplementation('junit:junit:4.13.2')
+}

@@ -2,6 +2,8 @@
 
 **Expérimentation terminée le 20 novembre 2026.** Le jalon a testé si un transport natif pouvait fermer la réponse, appliquer une borne avant le pont JavaScript et isoler les requêtes des redirections et des identifiants ambiants. `BoundedHttps` a servi de prototype Android sur émulateur. Le choix du transport définitif, sa qualification iOS et Android et sa mise en service restent à effectuer. [Contrat applicatif 4.5B2A](mobile-application-http.md)
 
+Le successeur applicatif et ses résultats sont suivis dans le [rapport 4.5B2C2](native-https-transport.md). Les observations ci-dessous restent celles de 4.5B2B.
+
 ## Choix examinés
 
 | Piste                          | Résultat de l’audit                                                                                                                                                                                                                                                                                                                                                                                                              |

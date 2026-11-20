@@ -1,0 +1,11 @@
+<network-security-config>
+  <base-config cleartextTrafficPermitted="false" />
+  <domain-config cleartextTrafficPermitted="true">
+    <domain>10.0.2.2</domain>
+  </domain-config>
+  <debug-overrides>
+    <trust-anchors>
+      <certificates src="@raw/bunny_https_qualification_ca" />
+    </trust-anchors>
+  </debug-overrides>
+</network-security-config>
