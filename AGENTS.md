@@ -1,181 +1,57 @@
-# Bunny Talks — Instructions de développement
+# Bunny Talks — Instructions permanentes pour Codex
 
-## Projet
+## Produit et communication
 
-Bunny Talks est une application sociale conçue d'abord pour le mobile, centrée sur les relations enrichissantes, la correspondance et les espaces partagés.
+Bunny Talks est une application sociale mobile centrée sur la correspondance, les relations réciproques et les espaces partagés. Ce n'est ni une application de rencontres amoureuses ni un réseau social fondé sur les abonnés. La confiance, la confidentialité et la conservation des échanges sont structurantes.
 
-L'application n'est pas une plateforme de rencontres amoureuses.
+- Communiquer avec le développeur, rédiger la documentation et les rapports en français.
+- Écrire les identifiants, le code et les commentaires techniques en anglais ; proposer les messages Conventional Commit en anglais.
+- Pour les écrans destinés aux utilisateurs, respecter la stratégie de localisation FR/EN du produit : la langue du code ne détermine pas les textes affichés. Ne pas ajouter une infrastructure i18n hors périmètre.
+- Respecter les conventions et contrats existants. Les manifests et configurations font foi pour les versions, les dépendances et les commandes disponibles.
 
-## Langue
+## Contexte et documentation — point d'entrée unique
 
-- Rédiger en français les instructions destinées à Codex et la documentation du projet.
-- Rédiger en anglais le code source, les identifiants et les commentaires techniques.
-- Communiquer avec le développeur et rédiger les rapports qui lui sont destinés en français.
-- Rédiger les messages Conventional Commits en anglais.
-- Respecter les conventions existantes du dépôt.
+Consulter **uniquement** les sources utiles à la mission. Ne pas parcourir tous les documents ni reconstruire tout le projet par défaut.
 
-## Architecture
+- **Reprise ou clôture d'un jalon** : `docs/development/current-milestone.md`. `docs/development/milestone-history.md` sert à retrouver une étape passée, pas à déterminer l'état courant.
+- **Produit / comportement attendu** : `docs/product/project-overview.md`.
+- **Architecture / frontières de modules** : `docs/architecture/architecture-overview.md`, puis les ADR pertinents de `docs/architecture/decisions/`.
+- **Sécurité / cryptographie / récupération** : `docs/security/threat-model.md`, puis les spécifications et rapports concernés dans `docs/security/` et `docs/development/`.
+- **API / données / mobile / tests natifs** : code, configuration et rapports ciblés de `docs/development/`.
 
-- Utiliser TypeScript avec une vérification stricte des types.
-- Suivre les principes de la Clean Architecture.
-- Garder la logique du domaine indépendante des frameworks et de l'infrastructure.
-- Utiliser des packages réutilisables au sein du monorepo pnpm.
-- Préférer des solutions simples et maintenables aux abstractions prématurées.
-- Respecter les décisions architecturales et produit documentées.
-- Ne pas modifier silencieusement une décision établie.
+Le jalon courant décrit **l’état déclaré du pilotage**, pas une preuve indépendante du code exécuté. Pour un fait implémenté, examiner le code et les tests ; pour une exigence ou une décision, consulter la documentation qui la définit ; pour un niveau de qualification, vérifier la preuve et son périmètre. En cas de désaccord entre ces sources, **signaler l'écart** sans réinterpréter silencieusement une décision. Mettre à jour les documents touchés par un changement de contrat, une nouvelle décision ou une qualification ; ne pas réécrire l'historique pour l'aligner rétroactivement.
 
-## Technologies
+## Architecture et implémentation
 
-- Node.js 24 et pnpm 10.34.9.
-- React Native et Expo Development Builds pour le mobile.
-- NestJS, Prisma et PostgreSQL pour le backend.
-- Vitest pour les tests automatisés.
-- Ubuntu WSL comme environnement de développement.
+- Utiliser TypeScript strict et les conventions effectivement imposées par ESLint, Prettier et TypeScript, notamment `import type`, les imports relatifs `.js` en NodeNext et l'ordre des imports à effets de bord.
+- Appliquer une Clean Architecture **pragmatique** : domaine sans dépendance aux frameworks ou à l'infrastructure ; orchestration applicative et adaptateurs distincts lorsqu'une frontière utile existe ; contrôleurs sans accès direct aux clients Prisma, connexions SQL ou implémentations concrètes de persistance ; ils délèguent aux capacités applicatives adaptées.
+- Ne pas créer automatiquement quatre dossiers par fonctionnalité, une interface par classe ou un nouveau package sans responsabilité distincte. Garder le backend NestJS modulaire et les packages partagés ciblés.
+- Préférer des modifications limitées, lisibles et maintenables. Isoler les expérimentations et ne pas présenter un POC comme une capacité de production.
 
-## Cryptographie
+## Invariants de sécurité
 
-La justesse cryptographique et la sécurité priment sur la vitesse.
+- Aucun algorithme ou primitive cryptographique maison ; ne jamais assouplir une garantie de sécurité pour satisfaire un test.
+- Préserver l'indépendance de `crypto-core` vis-à-vis du SDK. OpenE2EE reste **expérimental** ; ne pas confondre modèle cible, fonction implémentée, preuve expérimentale et aptitude à la production.
+- Respecter les orientations retenues : identité cryptographique durable commune aux appareils de confiance, état et sessions propres aux appareils, gestion sûre des autorisations/révocations, historique privé récupérable et coffre déverrouillable via mot de passe ou clé de récupération indépendante. Leur réalisation complète et leur qualification ne sont pas acquises.
+- Ne jamais exposer secrets, mots de passe, jetons, clés, URL de connexion ou contenus privés dans les sources, fixtures non protégées, logs, rapports, captures d’écran, traces réseau, dumps mémoire, artefacts de diagnostic ou échanges externes. Utiliser des valeurs factices et assainir les preuves conservées.
+- Aucun identifiant ni secret réel sur le diagnostic HTTP local ou sur un transport mobile HTTPS dont les propriétés de sécurité pertinentes ne sont pas qualifiées. Refuser une intégration qui présume ces garanties à partir d'une simple API JavaScript.
+- Contrôler authentification, autorisation et séparation des comptes/appareils aux frontières concernées. Un test Node, une compilation, un export Metro ou un succès sur émulateur ne prouvent ni la sûreté native ni la qualification iOS/release/production.
 
-- Ne jamais implémenter de primitives cryptographiques maison.
-- Considérer OpenE2EE 14.5.0 comme un SDK en cours d'évaluation.
-- Ne pas présumer de la compatibilité du SDK sans vérification.
-- Examiner le code source installé et les déclarations TypeScript publiques.
-- Préférer les API publiques documentées aux détails internes d'implémentation.
-- Garder le code spécifique au SDK isolé de crypto-core.
-- Ne jamais exposer de clés privées, de secrets de récupération ou de données sensibles en clair dans les logs.
-- Ne jamais affaiblir les exigences de sécurité pour faire passer un test.
-- Distinguer explicitement les comportements vérifiés des hypothèses.
+## Exécution et environnement
 
-Le modèle de compte visé comprend :
+- Mener à terme la **mission autorisée** : changements nécessaires, tests ciblés, corrections des régressions introduites et documentation affectée. Ne pas étendre le périmètre à une initiative indépendante.
+- Sélectionner d'abord les tests les plus discriminants et les moins coûteux ; élargir aux scripts de validation du dépôt seulement selon la portée et les risques. Inclure les cas d'échec pertinents ; ne pas relancer une campagne lourde lorsqu'une preuve existante reste applicable.
+- Avant une opération susceptible d’altérer un **état persistant non jetable** ou un **environnement partagé**, identifier la cible et l’impact. Les écritures temporaires isolées et les tests ordinaires dans le périmètre autorisé ne nécessitent pas d’approbation supplémentaire. Préserver les bases PostgreSQL, volumes Docker, keystores et données d’émulateur ; demander une décision avant toute suppression, réinitialisation, écrasement, migration destructive ou intervention risquant les données existantes.
+- Justifier les nouvelles dépendances et modifications d'environnement. Ne pas transmettre de données sensibles à des services externes.
+- Ne pas annoncer de vérification ou de qualification qui n'a pas été exécutée ; préciser ce qui demeure non vérifié.
 
-- Une identité cryptographique durable partagée entre les appareils de confiance.
-- Des sessions et identifiants d'enregistrement propres à chaque appareil.
-- L'association et la révocation sécurisées des appareils.
-- Un historique chiffré accessible aux appareils nouvellement autorisés.
-- Une récupération chiffrée indépendante après la perte de tous les appareils de confiance.
+## Autonomie et jalons
 
-Ces exigences ne sont pas encore validées par rapport au SDK.
+- Trancher les détails techniques ordinaires dans le jalon demandé, sans approbations répétitives. Demander une décision avant un changement architectural ou fonctionnel majeur **hors périmètre**, une dégradation de sécurité, une dépendance sensible non approuvée, une rupture de contrat public ou une action destructrice.
+- Terminer et soumettre chaque jalon à revue humaine avant de commencer le suivant. Les corrections issues de cette revue restent dans le jalon en cours. La clôture et l'acceptation des limites appartiennent au développeur.
 
-## Implémentation
+## Git et restitution
 
-- Toutes les expérimentations doivent produire du code réutilisable orienté production.
-- Éviter les prototypes jetables et les implémentations dupliquées.
-- Effectuer des modifications petites, cohérentes et faciles à examiner.
-- Préserver le travail existant et les modifications non commitées.
-- Ne pas installer de dépendances sans expliquer pourquoi.
-- Ne pas introduire de changements incompatibles sans approbation explicite.
-- Ne pas créer de commits sauf si cela est demandé.
-
-## Qualité
-
-### Organisation des imports TypeScript
-
-Dans tous les fichiers TypeScript et TSX du monorepo, organiser les imports par groupes, dans cet ordre :
-
-1. Modules natifs Node.js (`node:`).
-2. Dépendances externes, y compris les packages npm avec scope.
-3. Packages internes `@bunny-talks/*`.
-4. Alias internes éventuels (`@/*`, etc.).
-5. Imports relatifs, en privilégiant les chemins parents avant les chemins du dossier courant.
-
-Trier alphabétiquement les imports au sein de chaque groupe, sans imposer de ligne vide entre les groupes, et utiliser `import type` pour les dépendances utilisées uniquement comme types. Préserver impérativement l'ordre des imports à effets de bord lorsque leur exécution en dépend. Respecter les conventions TypeScript NodeNext ESM, notamment les extensions `.js` nécessaires aux imports relatifs.
-
-Lorsque cela est pertinent, exécuter :
-
-- pnpm typecheck
-- pnpm lint
-- pnpm test
-- pnpm format:check
-
-Ajouter des tests automatisés pour les nouveaux comportements, y compris les cas d'échec.
-Indiquer les vérifications exécutées et celles qui n'ont pas pu être effectuées.
-
-## Git
-
-- Utiliser les Conventional Commits.
-- Recommander un message de commit approprié à chaque jalon cohérent.
-- Ne jamais commiter de secrets, d'identifiants d'accès ou de données sensibles générées.
-- Ne jamais abandonner ou écraser des modifications existantes sans approbation.
-
-## Documentation
-
-Consulter ces fichiers avant tout changement architectural important :
-
-- docs/product/project-overview.md
-- docs/architecture/architecture-overview.md
-- docs/security/encrypted-archive-and-recovery.md
-- docs/security/threat-model.md
-
-Mettre à jour la documentation lorsque l'implémentation modifie un contrat technique établi ou introduit une décision architecturale importante.
-
-## Rapport
-
-À la fin de chaque tâche d'implémentation, résumer :
-
-1. Les changements apportés.
-2. Les fichiers concernés.
-3. Les tests et vérifications réussis ou échoués.
-4. Les risques ou questions restant en suspens.
-5. Le message Conventional Commit suggéré, lorsque cela est approprié.
-
-## Autonomie
-
-Prendre en charge l'implémentation technique dans le périmètre des missions approuvées. Explorer le dépôt et les dépendances, concevoir les détails d'implémentation, créer et modifier les fichiers nécessaires, écrire et exécuter les tests, diagnostiquer et corriger les erreurs, effectuer de petites refactorisations justifiées et mettre à jour la documentation pertinente de manière autonome.
-
-S'arrêter et demander une approbation avant :
-
-- Un changement architectural important.
-- Un changement fonctionnel non prévu.
-- Un compromis de sécurité ou un changement des exigences de sécurité.
-- L'introduction d'une dépendance sensible non approuvée.
-- Un changement incompatible d'un contrat public.
-- Une opération qui risque de détruire du travail existant.
-
-Ne pas demander d'approbation pour chaque détail technique ordinaire.
-
-## Contrôle Git — Obligatoire
-
-Le développeur humain conserve le contrôle exclusif de la validation et de la publication du code. Ne jamais exécuter les commandes suivantes sans autorisation explicite :
-
-- git add
-- git commit
-- git push
-- git reset
-- git rebase
-- git merge
-- git cherry-pick
-- git clean
-- Toute autre opération Git qui modifie l'historique, l'index ou les références.
-
-Les commandes Git en lecture seule sont autorisées. À chaque jalon cohérent, recommander un message Conventional Commit, mais ne jamais créer le commit soi-même. Ne jamais publier de code ou de données sur un dépôt distant sans autorisation.
-
-## Revue de code obligatoire
-
-Laisser les modifications du jalon non commitées pour permettre leur revue. Présenter :
-
-1. Les fichiers créés et modifiés.
-2. Le comportement implémenté.
-3. Les principales décisions techniques et leurs justifications.
-4. Les alternatives significatives envisagées et les raisons pour lesquelles elles n'ont pas été retenues.
-5. Les tests exécutés et leurs résultats.
-6. Les risques, les limites et les travaux restants.
-7. Les parties du code qui méritent une attention particulière pendant la revue.
-8. Le message de commit recommandé.
-
-Ne jamais affirmer qu'une fonctionnalité est validée si les tests correspondants n'ont pas été exécutés.
-
-## Pédagogie
-
-Expliquer les concepts importants, les choix techniques et les compromis afin que le développeur puisse comprendre et maîtriser le code. Privilégier les implémentations lisibles, explicites et maintenables, et ne pas ajouter de complexité uniquement pour démontrer des techniques avancées. Lorsqu'une décision est remise en question, fournir des arguments techniques, des exemples et, lorsque cela est utile, des tests. Signaler les nouvelles notions importantes sans donner d'explications élémentaires non sollicitées.
-
-## Efficacité et utilisation des ressources
-
-- Réutiliser les informations établies et éviter les recherches redondantes.
-- Cibler les fichiers pertinents avant d'élargir l'exploration et regrouper les travaux liés.
-- Exécuter d'abord les tests ciblés pendant le développement, puis les vérifications globales appropriées avant de présenter un jalon comme terminé.
-- Garder les rapports concis et éviter les propositions architecturales inutiles.
-- Ne jamais sacrifier les vérifications de sécurité pour économiser des ressources.
-
-## Jalons
-
-Travailler par jalons cohérents et faciles à examiner. Chaque jalon doit avoir un objectif clair, des critères d'acceptation, des tests appropriés, un résultat vérifiable et un point de revue avant commit. Poursuivre les tâches techniques nécessaires au sein d'un jalon, mais ne pas commencer automatiquement un nouveau jalon majeur sans approbation.
+- **Le développeur seul gère Git** : branches, index, commits et publication. N'exécuter **aucune commande Git**, même en lecture seule, sauf demande explicite. Ne pas demander de vérification de branche ou d'état Git par défaut. **Ne créer aucun commit.**
+- À la fin d’un travail, commencer par un verdict clair : **prêt pour revue** (périmètre demandé réalisé, vérifications pertinentes effectuées, pas de blocage connu), **partiellement vérifié** (travail réalisé ou avancé, preuves encore incomplètes), ou **bloqué** (anomalie, dépendance ou décision empêchant l’achèvement). **Prêt pour revue ne signifie ni accepté, ni qualifié en sécurité, ni prêt pour production.** Résumer modifications, vérifications effectives et risques/limites. Pour les tâches sensibles, séparer preuves et hypothèses, anomalies **bloquantes** et **facultatives**, avec emplacements et éléments vérifiables.
+- Proposer après **chaque travail**, y compris un jalon incomplet, un message Conventional Commit **indicatif** en anglais ; si aucun changement ne justifie encore un commit, le signaler. Ce message n’implique ni clôture du jalon ni recommandation de commiter immédiatement. Expliquer les décisions significatives de manière concise et pédagogique.
