@@ -5,11 +5,8 @@ import { createServer as createHttpsServer } from 'node:https';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 import { gzipSync } from 'node:zlib';
-import { fixtureJson } from './fixture-data.ts';
 
-export { fixtureJson } from './fixture-data.ts';
-
-const memoryGzip = gzipSync(JSON.stringify({ data: 'x'.repeat(768 * 1024) }));
+export const fixtureJson = JSON.stringify({ message: 'Bonjour 🐰 — 日本語 — العربية' });
 
 export async function startFixture(directory: string, basePort = 9443, host = '127.0.0.1') {
   const events: Array<{
@@ -74,9 +71,7 @@ export async function startFixture(directory: string, basePort = 9443, host = '1
             ? `https://10.0.2.2:${basePort + 1}`
             : `https://10.0.2.2:${basePort}`;
       res.writeHead(Number(match[1]), { Location: `${target}/destination` }).end();
-    } else if (
-      ['/slow', '/slow/cancel', '/slow/memory-timeout', '/slow/memory-cancel'].includes(path)
-    ) {
+    } else if (path === '/slow' || path === '/slow/cancel') {
       res.writeHead(200);
       res.flushHeaders();
       res.write('{"message":"', (error) => {
@@ -93,9 +88,6 @@ export async function startFixture(directory: string, basePort = 9443, host = '1
       res.write('{}');
       const timer = setTimeout(() => res.destroy(), 100);
       res.on('close', () => clearTimeout(timer));
-    } else if (path === '/memory/gzip') {
-      res.setHeader('Content-Encoding', 'gzip');
-      res.end(memoryGzip);
     } else if (path === '/gzip' || path === '/oversize') {
       res.setHeader('Content-Encoding', 'gzip');
       res.end(

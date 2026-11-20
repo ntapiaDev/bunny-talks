@@ -7,7 +7,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { afterAll, beforeAll, expect, it } from 'vitest';
-import { bytesMatchFixture, nativeErrorCategory } from '../qualification/fixture-data.js';
 import { fixtureJson, startFixture } from '../qualification/server.js';
 
 const directory = join(tmpdir(), `bunny-https-test-${crypto.randomUUID()}`);
@@ -122,19 +121,6 @@ it('truncates bodies detectably and records cancellation of slow connection', as
   });
 });
 
-it('compares exact bytes and only exposes allowlisted native error categories', () => {
-  const bytes = new TextEncoder().encode(fixtureJson);
-  expect(bytesMatchFixture(bytes)).toBe(true);
-  bytes[0] = 0;
-  expect(bytesMatchFixture(bytes)).toBe(false);
-  expect(nativeErrorCategory({ code: 'ERR_REDIRECT', message: 'secret' })).toBe(
-    'redirection refusée',
-  );
-  expect(nativeErrorCategory({ code: 'ERR_SIZE' })).toBe('taille dépassée');
-  expect(nativeErrorCategory({ code: 'ERR_NETWORK' })).toBe('erreur réseau');
-  expect(nativeErrorCategory({ code: 'secret', message: 'secret' })).toBe('erreur non classée');
-});
-
 it('records a flushed body before the client closes the slow connection', async () => {
   const control = async () =>
     (await (await fetch(`http://127.0.0.1:${port + 5}/events`)).json()) as {
@@ -196,10 +182,4 @@ it('scopes both artificial cookies to the current run and records only their pre
   expect(scoped[3]).toMatchObject({ expoFixtureCookie: true, nativeFixtureCookie: false });
   expect(scoped[4]).toMatchObject({ expoFixtureCookie: true, nativeFixtureCookie: true });
   expect(JSON.stringify(scoped)).not.toContain('example-value');
-});
-
-it('serves the large successful gzip response used for memory cycles', async () => {
-  const response = await get('/memory/gzip');
-  expect(response.status).toBe(200);
-  expect(gunzipSync(response.bytes).length).toBe(768 * 1024 + 11);
 });

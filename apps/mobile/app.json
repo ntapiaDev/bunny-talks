@@ -18,8 +18,7 @@
           "useSQLCipher": true
         }
       ],
-      "expo-secure-store",
-      "./plugins/with-qualification-ca.cjs"
+      "expo-secure-store"
     ]
   }
 }

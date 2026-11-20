@@ -1,3 +1,9 @@
+# Jalon 4.5B2B — expérimentation du transport HTTPS Android
+
+Clôturée le 20 novembre 2026 comme expérimentation. Le prototype BoundedHttps a exercé sur émulateur Android 17 les redirections, les certificats de fixture, l’isolation des cookies, la lecture bornée après décompression et la fermeture après annulation. Le profil natif attribue les copies de 786 443 octets aux ArrayBuffer Hermes et mesure huit libérations sur quinze à T2. La durée de vie des sept buffers restants reste ouverte. Le contrôle complémentaire du GC est reporté.
+
+Le prototype et ses tests sont conservés hors de la composition mobile et de l’autolinking. Le banc TLS réutilisable subsiste. Le choix et la qualification du transport définitif, iOS, la production et la qualification mémoire complète restent à effectuer. [Bilan technique et conditions de reprise](native-https-transport-evaluation.md)
+
 # Jalon 4.5B0 — harmonisation mobile
 
 Refactorisation de la composition, de la présentation des diagnostics et des adaptateurs natifs pour revue. Voir [architecture et limites](mobile-architecture.md). La vérification des stores après redémarrage Android reste à effectuer séparément ; les qualifications historiques ci-dessous ne sont pas modifiées. Le diagnostic HTTP 4.5B1 n’est pas commencé.

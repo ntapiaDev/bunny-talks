@@ -1,5 +1,4 @@
 import { Platform } from 'react-native';
-import { QualificationScreen } from '../../qualification/QualificationScreen';
 import { createApiDiagnostic } from '../features/diagnostics/api-diagnostics';
 import { runDiagnostics } from '../features/diagnostics/diagnostics';
 import { DiagnosticsScreen } from '../features/diagnostics/DiagnosticsScreen';
@@ -20,8 +19,6 @@ const runApiDiagnostic = createApiDiagnostic(
 const createNativeDiagnostic = () => createNativeVaultDiagnostics(applicationVaultArgon2Provider);
 
 export default function App() {
-  if (__DEV__ && process.env.EXPO_PUBLIC_HTTPS_QUALIFICATION === '1')
-    return <QualificationScreen />;
   return (
     <DiagnosticsScreen
       createNativeVaultDiagnostics={createNativeDiagnostic}

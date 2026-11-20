@@ -82,6 +82,17 @@ describe('mobile architecture boundaries', () => {
       './src/composition/App',
     ]);
   });
+  it('keeps qualification code outside the application import graph', () => {
+    const qualification = path.join(mobile, 'qualification');
+    for (const file of [path.join(mobile, 'index.ts'), ...files(path.join(mobile, 'src'))]) {
+      for (const specifier of imports(file)) {
+        if (!specifier.startsWith('.')) continue;
+        const resolved = path.resolve(path.dirname(file), specifier);
+        expect(resolved, file).not.toBe(qualification);
+        expect(resolved.startsWith(qualification + path.sep), file).toBe(false);
+      }
+    }
+  });
   it('has no cycles among mobile source imports', () => {
     const sourceFiles = files(path.join(mobile, 'src'));
     const byStem = new Map(sourceFiles.map((file) => [file.replace(/\.[^.]+$/, ''), file]));
