@@ -1,3 +1,7 @@
+# Jalon 4.5B2C2 — point d’étape du harnais libcurl sur Apple
+
+Le 21 novembre 2026, les deux premiers essais GitHub Actions sur Apple se sont arrêtés en `NOT_RUN` pendant l’inspection Mach-O. Le deuxième a identifié une dépendance nommée CoreFoundation. Le troisième a franchi les contrôles et obtenu **PASS** sur iPhone 17 Simulator, iOS 26.5 arm64, Release, avec libcurl 8.23.0 et OpenSSL 3.5.9 statiques. Le rapport confirme les deux refus TLS exercés et une seule réception du GET de coupure avec le garde, contre deux chez le témoin. La composition iOS est fermée à ce point d’étape. L’intégration Expo, la confiance système et la qualification de la Release applicative sur appareil relèvent de la phase suivante proposée. [Preuve du troisième essai](native-https-transport.md#troisième-essai-apple--pass-du-harnais-autonome)
+
 # Jalon 4.5B2B — expérimentation du transport HTTPS Android
 
 Clôturée le 20 novembre 2026 comme expérimentation. Le prototype BoundedHttps a exercé sur émulateur Android 17 les redirections, les certificats de fixture, l’isolation des cookies, la lecture bornée après décompression et la fermeture après annulation. Le profil natif attribue les copies de 786 443 octets aux ArrayBuffer Hermes et mesure huit libérations sur quinze à T2. La durée de vie des sept buffers restants reste ouverte. Le contrôle complémentaire du GC est reporté.

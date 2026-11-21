@@ -151,12 +151,17 @@ export async function startFixture(
   basePort = 9443,
   host = '127.0.0.1',
   identityProfile = false,
+  recordConnectionIds = false,
 ) {
   const controls = new Map<string, Control>();
+  const connectionIds = new WeakMap<Socket, number>();
+  let nextConnectionId = 1;
   const events: Array<{
     destination: string;
     path: string;
     method: string;
+    connectionId?: number;
+    httpVersion?: string;
     authorization: boolean;
     authorizationMatchesFixture: boolean;
     cookie: boolean;
@@ -216,6 +221,15 @@ export async function startFixture(
       finished: false,
       closedAfterMs: null as number | null,
     };
+    if (recordConnectionIds) {
+      let connectionId = connectionIds.get(req.socket);
+      if (connectionId === undefined) {
+        connectionId = nextConnectionId++;
+        connectionIds.set(req.socket, connectionId);
+      }
+      event.connectionId = connectionId;
+      event.httpVersion = req.httpVersion;
+    }
     events.push(event);
     const recordHeaders = () => {
       event.headersSent = res.headersSent;
