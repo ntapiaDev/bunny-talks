@@ -1,3 +1,17 @@
+# Jalon 4.5B2C3-B — acceptation des preuves de compilation et de liaison Expo
+
+Le 22 novembre 2026, la revue humaine accepte la compilation, la liaison CocoaPods et l’inspection du Mach-O Release simulateur arm64 du build `397256d4-2b57-4c13-b95a-855342a67c90` préparé depuis `9d1ef16843a174196aa77cad9cf78c638cf43265`. La revue des artefacts confirme les trois définitions de code recherchées. L’audit des duplications reste ouvert faute de carte de liens. L’acceptation porte sur les preuves statiques. À cette étape, C n’a pas commencé, la composition iOS est fermée et les secrets applicatifs sont interdits. [Revue post-build et limites](native-https-transport.md#revue-post-build-du-22-novembre-2026)
+
+# Jalon 4.5B2C3-A — construction XCFrameworks iOS
+
+La revue humaine accepte le run `44942974411` à la révision `8b965b0e209e3145bcff0f68fda9586a9c33c144`. Les bibliothèques statiques libcurl 8.23.0 et OpenSSL 3.5.9 ont été construites et inspectées pour appareil et simulateur arm64. Les quatre sondes se lient avec iOS 16.4 déclaré. Les preuves de confiance TLS, d’anti-réémission avec SecTrust et d’intégration Expo relèvent des jalons suivants. [Périmètre du PASS](native-https-transport.md#pass-de-construction-45b2c3-a)
+
+# Jalon 4.5B2C2 — point d’étape du harnais libcurl sur Apple
+
+Le 21 novembre 2026, les deux premiers essais GitHub Actions sur Apple se sont arrêtés en `NOT_RUN` pendant l’inspection Mach-O. Le deuxième a identifié une dépendance nommée CoreFoundation. Le troisième a franchi les contrôles et obtenu **PASS** sur iPhone 17 Simulator, iOS 26.5 arm64, Release, avec libcurl 8.23.0 et OpenSSL 3.5.9 statiques. Le rapport confirme les deux refus TLS exercés et une seule réception du GET de coupure avec le garde, contre deux chez le témoin. La composition iOS est fermée à ce point d’étape. L’intégration Expo, la confiance système et la qualification de la Release applicative sur appareil relèvent de la phase suivante proposée. [Preuve du troisième essai](native-https-transport.md#troisième-essai-apple--pass-du-harnais-autonome)
+
+La revue humaine a accepté le PASS dans le périmètre de ce harnais, pour le GET de coupure en HTTP/1.1, OpenSSL avec la CA de fixture explicite et SecTrust désactivé. Elle a autorisé la seule préparation 4.5B2C3-A. [Préparation et limites](native-https-transport.md#45b2c3-a--préparation-des-bibliothèques-ios)
+
 # Jalon 4.5B2B — expérimentation du transport HTTPS Android
 
 Clôturée le 20 novembre 2026 comme expérimentation. Le prototype BoundedHttps a exercé sur émulateur Android 17 les redirections, les certificats de fixture, l’isolation des cookies, la lecture bornée après décompression et la fermeture après annulation. Le profil natif attribue les copies de 786 443 octets aux ArrayBuffer Hermes et mesure huit libérations sur quinze à T2. La durée de vie des sept buffers restants reste ouverte. Le contrôle complémentaire du GC est reporté.

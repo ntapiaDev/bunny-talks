@@ -1,15 +1,18 @@
+import BunnyHttpsNative
 import ExpoModulesCore
 import Foundation
 
 public final class ApplicationHttpsModule: Module {
-  private let transport = HttpsTransport()
+  private let transport = CurlHttpsTransport()
 
   public func definition() -> ModuleDefinition {
     Name("ApplicationHttps")
     OnDestroy { transport.close() }
 
     #if BUNNY_HTTPS_QUALIFICATION
-    Function("qualificationProfile") { "identity" }
+    Function("qualificationProfile") {
+      bunny_https_runtime_profile().map { String(cString: $0) } ?? "unavailable"
+    }
     #endif
 
     Function("reserve") { (timeoutMs: Int) in

@@ -20,6 +20,7 @@ coverage/
 !/apps/mobile/.eas/build/
 /apps/mobile/.eas/build/*
 !/apps/mobile/.eas/build/ios-https-qualification.yml
+!/apps/mobile/.eas/build/ios-https-libcurl-build.yml
 
 # Expo Prebuild — generated native projects
 /apps/mobile/android/
@@ -43,3 +44,6 @@ Thumbs.db
 
 # Prisma generated client
 /apps/api/generated/
+
+# Approved local iOS HTTPS artifact and its staged contents
+/apps/mobile/modules/application-https/ios/vendor/
