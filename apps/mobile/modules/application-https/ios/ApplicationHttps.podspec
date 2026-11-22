@@ -12,11 +12,30 @@ Pod::Spec.new do |s|
   s.source_files = 'ApplicationHttpsModule.swift', 'CurlHttpsTransport.swift', 'Native/BunnyHttpsNative.c'
   s.preserve_paths = 'Native/*', 'verify_xcframeworks.py', 'vendor/xcframeworks.zip', 'vendor/package/**/*'
 
+  qualification = ENV['BUNNY_IOS_HTTPS_QUALIFICATION'] == '1'
+  if qualification
+    require 'json'
+    mobile = File.expand_path('../../..', __dir__)
+    begin
+      bundle = JSON.parse(File.read(File.join(mobile, 'app.json'))).dig('expo', 'ios', 'bundleIdentifier')
+      entry = JSON.parse(File.read(File.join(mobile, 'package.json')))['main']
+    rescue SystemCallError, JSON::ParserError, TypeError
+      raise 'ApplicationHttps could not read qualification app configuration.', cause: nil
+    end
+    qualification_entries = {
+      'fr.bunnytalks.mobile.httpsqualification' => 'qualification/ios-libcurl-build-entry.tsx',
+      'fr.bunnytalks.mobile.httpsqualification.libcurl' => 'qualification/ios-libcurl-runtime-entry.tsx'
+    }
+    unless qualification_entries.key?(bundle) && qualification_entries[bundle] == entry
+      raise 'ApplicationHttps qualification flags require a dedicated qualification app identity and entry point.'
+    end
+  end
+
   verifier = File.join(__dir__, 'verify_xcframeworks.py')
   archive = File.join(__dir__, 'vendor', 'xcframeworks.zip')
   package = File.join(__dir__, 'vendor', 'package')
-  unless system('python3', verifier, 'stage', archive, package)
-    raise 'ApplicationHttps requires the verified 4.5B2C3-A XCFramework ZIP in ios/vendor/xcframeworks.zip.'
+  unless system('python3', '-I', verifier, 'stage', archive, package)
+    raise 'ApplicationHttps requires the approved ZIP. Run verify_xcframeworks.py install with the approved ZIP path.'
   end
 
   s.vendored_frameworks = 'vendor/package/libcurl.xcframework', 'vendor/package/libopenssl.xcframework'
@@ -33,7 +52,7 @@ Pod::Spec.new do |s|
     'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => '$(inherited) x86_64',
     'GCC_PREPROCESSOR_DEFINITIONS' => '$(inherited) CURL_STATICLIB=1'
   }
-  if ENV['BUNNY_IOS_HTTPS_QUALIFICATION'] == '1'
+  if qualification
     settings['SWIFT_ACTIVE_COMPILATION_CONDITIONS'] = '$(inherited) BUNNY_HTTPS_QUALIFICATION'
     settings['GCC_PREPROCESSOR_DEFINITIONS'] += ' BUNNY_HTTPS_QUALIFICATION=1'
   end
@@ -47,7 +66,7 @@ Pod::Spec.new do |s|
       '$(PODS_TARGET_SRCROOT)/vendor/xcframeworks.zip',
       '$(PODS_TARGET_SRCROOT)/vendor/package'
     ],
-    :script => 'python3 "$PODS_TARGET_SRCROOT/verify_xcframeworks.py" verify "$PODS_TARGET_SRCROOT/vendor/xcframeworks.zip" "$PODS_TARGET_SRCROOT/vendor/package"'
+    :script => 'python3 -I "$PODS_TARGET_SRCROOT/verify_xcframeworks.py" verify "$PODS_TARGET_SRCROOT/vendor/xcframeworks.zip" "$PODS_TARGET_SRCROOT/vendor/package"'
   }
   s.dependency 'ExpoModulesCore'
 end

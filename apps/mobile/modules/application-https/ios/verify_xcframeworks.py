@@ -3,6 +3,7 @@ import argparse
 import hashlib
 import io
 import json
+import os
 import plistlib
 import re
 import shutil
@@ -42,10 +43,14 @@ def inventory(path):
     ) is not None
 
 
-def files_from_archive(archive, pin=ZIP_SHA256):
+def read_zip(archive):
+    require(not archive.parent.is_symlink(), "symbolic link in XCFramework ZIP path")
     require(archive.is_file() and not archive.is_symlink(), "approved XCFramework ZIP is missing")
     require(archive.stat().st_size <= 16 * 1024 * 1024, "XCFramework ZIP exceeds the approved size bound")
-    source = archive.read_bytes()
+    return archive.read_bytes()
+
+
+def files_from_archive(source, pin=ZIP_SHA256):
     require(sha256(source) == pin, "XCFramework ZIP SHA-256 mismatch")
     with zipfile.ZipFile(io.BytesIO(source)) as outer:
         require(outer.namelist() == ["xcframeworks.tar"], "unexpected ZIP inventory")
@@ -116,6 +121,7 @@ def verify(files):
 
 
 def verify_installed(directory, files):
+    require(not directory.parent.is_symlink(), "symbolic link in XCFramework staging path")
     require(directory.is_dir() and not directory.is_symlink(), "missing or invalid staged XCFramework directory")
     found = set()
     for path in directory.rglob("*"):
@@ -132,6 +138,7 @@ def verify_installed(directory, files):
 
 
 def stage(directory, files):
+    require(not directory.parent.is_symlink(), "symbolic link in XCFramework staging path")
     if directory.exists() or directory.is_symlink():
         verify_installed(directory, files)
         return
@@ -147,18 +154,37 @@ def stage(directory, files):
             shutil.rmtree(temporary)
 
 
+def install_zip(vendor, source):
+    vendor.mkdir(exist_ok=True)
+    require(vendor.is_dir() and not vendor.is_symlink(), "invalid XCFramework vendor directory")
+    archive = vendor / "xcframeworks.zip"
+    with tempfile.TemporaryDirectory(prefix="xcframework-zip.", dir=vendor) as temporary:
+        candidate = Path(temporary) / archive.name
+        candidate.write_bytes(source)
+        try:
+            # Publish complete bytes without replacing an existing path.
+            os.link(candidate, archive)
+        except FileExistsError:
+            require(read_zip(archive) == source, "existing XCFramework ZIP differs from the approved archive")
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=["archive", "stage", "verify"])
+    parser.add_argument("mode", choices=["archive", "install", "stage", "verify"])
     parser.add_argument("zip", type=Path)
     parser.add_argument("directory", type=Path, nargs="?")
     args = parser.parse_args()
-    if args.mode != "archive" and args.directory is None:
+    if args.mode in ("stage", "verify") and args.directory is None:
         parser.error("stage and verify require a directory")
+    if args.mode in ("archive", "install") and args.directory is not None:
+        parser.error("archive and install take only a ZIP path")
     try:
-        files = files_from_archive(args.zip)
+        source = read_zip(args.zip)
+        files = files_from_archive(source)
         manifest = verify(files)
-        if args.mode == "stage":
+        if args.mode == "install":
+            install_zip(Path(__file__).resolve().parent / "vendor", source)
+        elif args.mode == "stage":
             stage(args.directory, files)
         elif args.mode == "verify":
             verify_installed(args.directory, files)

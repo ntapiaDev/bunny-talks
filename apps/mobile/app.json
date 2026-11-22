@@ -9,7 +9,13 @@
       "package": "fr.bunnytalks.mobile"
     },
     "ios": {
-      "bundleIdentifier": "fr.bunnytalks.mobile"
+      "bundleIdentifier": "fr.bunnytalks.mobile",
+      "deploymentTarget": "16.4",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": false
+        }
+      }
     },
     "plugins": [
       [
