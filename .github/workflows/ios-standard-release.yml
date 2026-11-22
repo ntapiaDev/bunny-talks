@@ -1,0 +1,251 @@
+name: Bunny Talks iOS standard Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      reviewed_sha:
+        description: Full SHA of the standard build candidate approved for this run
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ios-standard-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.repository == 'ntapiaDev/bunny-talks' && github.run_attempt == '1'
+    runs-on: macos-26
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      EXPO_NO_DOTENV: '1'
+      EXPO_NO_GIT_STATUS: '1'
+      EXPO_OFFLINE: '1'
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+    steps:
+      - name: Confirm reviewed revision and Apple toolchain
+        env:
+          REVIEWED_REVISION_MATCH: ${{ inputs.reviewed_sha == github.sha }}
+        run: |
+          umask 077
+          mkdir "$RUNNER_TEMP/bunny-ios-standard" "$RUNNER_TEMP/bunny-ios-proof"
+          [[ "$GITHUB_SHA" =~ ^[a-f0-9]{40}$ && "$REVIEWED_REVISION_MATCH" == true ]]
+          [[ "$(uname -m)" == arm64 ]]
+          [[ "$(xcodebuild -version)" == $'Xcode 26.6\nBuild version 17F113' ]]
+          [[ "$(xcrun --sdk iphonesimulator --show-sdk-version)" == 26.5 ]]
+
+      - name: Check out the reviewed revision
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          set-safe-directory: false
+
+      - name: Select Node 24 arm64
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24.22.3'
+          architecture: arm64
+          package-manager-cache: false
+
+      - name: Fetch the original approved ZIP
+        id: artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          umask 077
+          gh api --method GET "repos/$GITHUB_REPOSITORY/actions/artifacts/14723035221/zip" \
+            > "$RUNNER_TEMP/bunny-ios-standard/xcframeworks.zip"
+
+      - name: Verify the ZIP and standard source configuration
+        id: preflight
+        env:
+          CHECKED_OUT_SHA: ${{ steps.checkout.outputs.commit }}
+        run: |
+          [[ "$CHECKED_OUT_SHA" == "$GITHUB_SHA" ]]
+          scratch="$RUNNER_TEMP/bunny-ios-standard"
+          archive="$scratch/xcframeworks.zip"
+          verifier=apps/mobile/modules/application-https/ios/verify_xcframeworks.py
+          python3 -I "$verifier" archive "$archive" > "$scratch/provenance.json"
+          mv "$scratch/provenance.json" "$RUNNER_TEMP/bunny-ios-proof/provenance.json"
+          corepack enable
+          [[ "$(pnpm --version)" == 10.34.9 ]]
+          pnpm install --frozen-lockfile
+          pnpm --filter '@bunny-talks/mobile^...' run --if-present build
+          bash apps/mobile/scripts/preflight-ios-standard.sh "$archive"
+          python3 -I "$verifier" install "$archive" >/dev/null
+          python3 -I - "$RUNNER_TEMP/bunny-ios-proof/environment.json" <<'PY'
+          import json
+          import os
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          def version(*command):
+              output = subprocess.check_output(command, text=True).strip()
+              if not output or len(output) > 80 or not all(c.isascii() and (c.isalnum() or c in ". -+_\n") for c in output):
+                  raise SystemExit("Unexpected toolchain version")
+              return output
+
+          Path(sys.argv[1]).write_text(json.dumps({
+              "revision": os.environ["GITHUB_SHA"],
+              "run": int(os.environ["GITHUB_RUN_ID"]),
+              "architecture": "arm64",
+              "macOS": version("sw_vers", "-productVersion"),
+              "macOSBuild": version("sw_vers", "-buildVersion"),
+              "xcode": version("xcodebuild", "-version"),
+              "sdk": version("xcrun", "--sdk", "iphonesimulator", "--show-sdk-version"),
+              "sdkBuild": version("xcrun", "--sdk", "iphonesimulator", "--show-sdk-build-version"),
+              "cocoaPods": version("pod", "--version"),
+              "node": version("node", "--version"),
+              "pnpm": version("pnpm", "--version"),
+          }, sort_keys=True, indent=2) + "\n")
+          PY
+
+      - name: Generate the standard app and install CocoaPods
+        id: pods
+        working-directory: apps/mobile
+        run: |
+          umask 077
+          scratch="$RUNNER_TEMP/bunny-ios-standard"
+          pnpm exec expo prebuild --platform ios --no-install --no-clean > "$scratch/prebuild.log" 2>&1
+          python3 -IB scripts/inspect-ios-standard.py generated
+          cd ios
+          pod install > "$scratch/pods.log" 2>&1
+          xcodebuild -project Pods/Pods.xcodeproj -target ApplicationHttps -target ExpoSQLite \
+            -configuration Release -sdk iphonesimulator -showBuildSettings -json \
+            > "$scratch/pod-settings.json" 2> "$scratch/pod-settings.log"
+          python3 -IB ../scripts/inspect-ios-standard.py pods "$scratch/pod-settings.json"
+
+      - name: Compile the standard arm64 simulator Release
+        id: build
+        working-directory: apps/mobile/ios
+        run: |
+          umask 077
+          scratch="$RUNNER_TEMP/bunny-ios-standard"
+          exec 3> "$scratch/xcodebuild.log"
+          status=0
+          xcodebuild build \
+            -workspace BunnyTalks.xcworkspace -scheme BunnyTalks \
+            -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$scratch/DerivedData" ARCHS=arm64 CODE_SIGNING_ALLOWED=NO \
+            -resultBundlePath "$scratch/build.xcresult" \
+            SOURCEMAP_FILE="$scratch/bundle.map" \
+            LD_GENERATE_MAP_FILE=YES 'LD_MAP_FILE_PATH=$(TARGET_TEMP_DIR)/$(TARGET_NAME)-LinkMap-$(CURRENT_ARCH).txt' \
+            >&3 2>&1 || status=$?
+          exec 3>&-
+          printf '%s\n' "$status" > "$scratch/xcodebuild.exit"
+          exit "$status"
+
+      - name: Inspect the simulator Release
+        id: inspection
+        working-directory: apps/mobile
+        run: |
+          umask 077
+          scratch="$RUNNER_TEMP/bunny-ios-standard"
+          proof="$RUNNER_TEMP/bunny-ios-proof"
+          native=modules/application-https/ios
+          python3 -I "$native/verify_xcframeworks.py" verify "$native/vendor/xcframeworks.zip" "$native/vendor/package" >/dev/null
+          python3 -IB scripts/inspect-ios-standard.py release "$scratch/DerivedData" \
+            "$scratch/bundle.map" "$scratch/pod-settings.json" "$proof/provenance.json" > "$proof/release.json"
+
+      - name: Collect sanitized Xcode diagnostics
+        if: always() && (steps.build.outcome == 'success' || steps.build.outcome == 'failure')
+        env:
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+        run: |
+          umask 077
+          scratch="$RUNNER_TEMP/bunny-ios-standard"
+          python3 -IB apps/mobile/scripts/collect-ios-build-diagnostics.py "$scratch" "$BUILD_OUTCOME" \
+            > "$scratch/build-diagnostics.json"
+          mv "$scratch/build-diagnostics.json" "$RUNNER_TEMP/bunny-ios-proof/build-diagnostics.json"
+
+      - name: Record compilation and inspection results
+        if: always()
+        env:
+          ARTIFACT: ${{ steps.artifact.outcome }}
+          PREFLIGHT: ${{ steps.preflight.outcome }}
+          PODS: ${{ steps.pods.outcome }}
+          BUILD: ${{ steps.build.outcome }}
+          INSPECTION: ${{ steps.inspection.outcome }}
+        run: |
+          umask 077
+          proof="$RUNNER_TEMP/bunny-ios-proof"
+          mkdir -p "$proof"
+          python3 -I - "$proof" "$RUNNER_TEMP/bunny-ios-standard/xcodebuild.exit" <<'PY'
+          import json
+          import os
+          import re
+          import sys
+          from pathlib import Path
+
+          stages = {name.lower(): os.environ[name] or "not-run"
+                    for name in ("ARTIFACT", "PREFLIGHT", "PODS", "BUILD", "INSPECTION")}
+          proof = Path(sys.argv[1])
+          def read_report(filename):
+              try:
+                  value = json.loads((proof / filename).read_bytes())
+                  return value if isinstance(value, dict) else {}
+              except (OSError, ValueError):
+                  return {}
+
+          release = read_report("release.json")
+          diagnostics = read_report("build-diagnostics.json")
+          compilation = {"success": "PASS", "failure": "FAIL"}.get(stages["build"], "NOT_RUN")
+          inspection = "NOT_RUN"
+          if compilation == "PASS" and stages["inspection"] in ("success", "failure"):
+              if release.get("verdict") == "FAIL":
+                  inspection = "FAIL"
+              elif stages["inspection"] == "success" and release.get("verdict") == "PASS":
+                  inspection = "PASS"
+          verdict = "FAIL" if compilation == "FAIL" else inspection
+          quality = "not-run"
+          if compilation == "FAIL":
+              quality = diagnostics.get("quality")
+              if quality not in ("technical-error", "phase-only", "generic"):
+                  quality = "unknown"
+          xcode_exit = None
+          if compilation != "NOT_RUN":
+              try:
+                  with Path(sys.argv[2]).open("rb") as stream:
+                      value = stream.read(6)
+                  if re.fullmatch(rb"[0-9]{1,3}\n", value) and int(value) <= 255:
+                      xcode_exit = int(value)
+              except OSError:
+                  pass
+          (proof / "report.json").write_text(json.dumps({
+              "scope": "standard-release-simulator-build-and-static-inspection",
+              "revision": os.environ["GITHUB_SHA"],
+              "verdict": verdict,
+              "stages": stages,
+              "compilation": compilation,
+              "xcodeExitCode": xcode_exit,
+              "inspection": inspection,
+              "diagnostics": "PASS" if compilation == "FAIL" and diagnostics.get("verdict") == "PASS" else "NOT_RUN",
+              "diagnosticQuality": quality,
+              "runtime": "NOT_RUN",
+          }, sort_keys=True, indent=2) + "\n")
+          PY
+
+      - name: Upload sanitized JSON evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-standard-release-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/bunny-ios-proof/report.json
+            ${{ runner.temp }}/bunny-ios-proof/environment.json
+            ${{ runner.temp }}/bunny-ios-proof/provenance.json
+            ${{ runner.temp }}/bunny-ios-proof/build-diagnostics.json
+            ${{ runner.temp }}/bunny-ios-proof/release.json
+          if-no-files-found: error
+          retention-days: 7

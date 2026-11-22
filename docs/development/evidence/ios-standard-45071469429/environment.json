@@ -1,0 +1,13 @@
+{
+  "architecture": "arm64",
+  "cocoaPods": "1.17.0",
+  "macOS": "26.7.2",
+  "macOSBuild": "25G332",
+  "node": "v24.22.3",
+  "pnpm": "10.34.9",
+  "revision": "1bac131e0dcdbb15092d94ed9857ec24d75f714c",
+  "run": 45071469429,
+  "sdk": "26.5",
+  "sdkBuild": "23F81a",
+  "xcode": "Xcode 26.6\nBuild version 17F113"
+}

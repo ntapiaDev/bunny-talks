@@ -25,6 +25,7 @@ it('resolves the standard Expo identity, minimum iOS and ATS settings', () => {
   expect(config.name).toBe('Bunny Talks');
   expect(config.slug).toBe('bunny-talks');
   expect(config.scheme).toBe('bunnytalks');
+  expect(config.sdkVersion).toBe('57.0.0');
   expect(config.extra?.eas?.projectId).toBeUndefined();
   expect(config.ios.bundleIdentifier).toBe('fr.bunnytalks.mobile');
   expect(config.android.package).toBe('fr.bunnytalks.mobile');
@@ -51,6 +52,18 @@ it('autolinks ApplicationHttps on Apple and Android from the local module', () =
       modules: [{ name: null, class: 'ApplicationHttpsModule' }],
       debugOnly: false,
     }),
+  );
+  expect(apple.modules).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        packageName: 'expo-sqlite',
+        pods: [expect.objectContaining({ podName: 'ExpoSQLite' })],
+      }),
+      expect.objectContaining({
+        packageName: 'expo-secure-store',
+        pods: [expect.objectContaining({ podName: 'ExpoSecureStore' })],
+      }),
+    ]),
   );
   const android = readExpoOutput('expo/bin/autolinking', ['resolve', '--platform', 'android']);
   expect(android.modules).toContainEqual(

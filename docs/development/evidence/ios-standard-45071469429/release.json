@@ -1,0 +1,148 @@
+{
+  "architecture": "arm64",
+  "ats": "default",
+  "bundleId": "fr.bunnytalks.mobile",
+  "configuration": "Release",
+  "definitions": {
+    "_OPENSSL_init_ssl": [
+      {
+        "address": 4296680840,
+        "section": "__TEXT,__text",
+        "visibility": "external",
+        "weak": false
+      }
+    ],
+    "_curl_multi_perform": [
+      {
+        "address": 4296423988,
+        "section": "__TEXT,__text",
+        "visibility": "local",
+        "weak": false
+      }
+    ],
+    "_curl_version_info": [
+      {
+        "address": 4296540720,
+        "section": "__TEXT,__text",
+        "visibility": "local",
+        "weak": false
+      }
+    ]
+  },
+  "displayName": "Bunny Talks",
+  "embeddedProviders": {
+    "ExpoFileSystem.framework": {
+      "definitions": {
+        "_OPENSSL_init_ssl": [],
+        "_curl_multi_perform": [],
+        "_curl_version_info": []
+      },
+      "executableSha256": "ce9aa0c44def0dd8bfe164ee1fd7b4e5fdaae80a45ab70d987e84c6cfdf42bd1"
+    },
+    "ExpoFont.framework": {
+      "definitions": {
+        "_OPENSSL_init_ssl": [],
+        "_curl_multi_perform": [],
+        "_curl_version_info": []
+      },
+      "executableSha256": "47660b3c298dbcd2344d2a4f64ed3fe546ccc1cd29eb7e5a3ada2cb5b9264563"
+    },
+    "ExpoModulesCore.framework": {
+      "definitions": {
+        "_OPENSSL_init_ssl": [],
+        "_curl_multi_perform": [],
+        "_curl_version_info": []
+      },
+      "executableSha256": "055649e305e585b17375df40078c45dbe4d135878766db5c6175ce526800dae5"
+    },
+    "ExpoModulesJSI.framework": {
+      "definitions": {
+        "_OPENSSL_init_ssl": [],
+        "_curl_multi_perform": [],
+        "_curl_version_info": []
+      },
+      "executableSha256": "dedb66feb73768446b1a743f016f7a0065093047751e5650b20a681ac89c3a29"
+    },
+    "ExpoModulesWorklets.framework": {
+      "definitions": {
+        "_OPENSSL_init_ssl": [],
+        "_curl_multi_perform": [],
+        "_curl_version_info": []
+      },
+      "executableSha256": "24758b82fd3e35a3b5220198f52521c1340c575c77edb08d971c456829469827"
+    },
+    "React.framework": {
+      "definitions": {
+        "_OPENSSL_init_ssl": [],
+        "_curl_multi_perform": [],
+        "_curl_version_info": []
+      },
+      "executableSha256": "6bb7c4b8c0fcadd038a422c2580a581041777145575e7622dc8ce5947f893e04"
+    },
+    "ReactNativeDependencies.framework": {
+      "definitions": {
+        "_OPENSSL_init_ssl": [],
+        "_curl_multi_perform": [],
+        "_curl_version_info": []
+      },
+      "executableSha256": "fac8e1599978a2296991770cb5f3588df82591fe9a46b862684bb10a2fc572f7"
+    },
+    "hermesvm.framework": {
+      "definitions": {
+        "_OPENSSL_init_ssl": [],
+        "_curl_multi_perform": [],
+        "_curl_version_info": []
+      },
+      "executableSha256": "d93d6fb893ffcdd49017168c2381d527cd81fd924f95fcdf9129b602a8c51dc8"
+    }
+  },
+  "executableSha256": "d41dc703535648d9b31c7cb47c2441a8bb20a5538a29304e13796326eda6a5eb",
+  "hermesBundleSha256": "0d26a9ae8c5df7f3f30be7fe9d5dfd8c294a4a37f9d4095e9ee5e821032c807f",
+  "licenseSha256": {
+    "curl-COPYING": "82f2f4427d6545ee5aaac4f0b80428da6cc8ba41c2cf5da3a03680ec327b9681",
+    "openssl-LICENSE.txt": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a"
+  },
+  "linkMap": {
+    "deadStrippedSymbols": {},
+    "liveSymbols": {
+      "_OPENSSL_init_ssl": [
+        {
+          "address": 4296680840,
+          "object": "237",
+          "size": 68
+        }
+      ],
+      "_curl_multi_perform": [
+        {
+          "address": 4296423988,
+          "object": "156",
+          "size": 96
+        }
+      ],
+      "_curl_version_info": [
+        {
+          "address": 4296540720,
+          "object": "189",
+          "size": 212
+        }
+      ]
+    },
+    "objects": {
+      "156": "libcurl.a(libcurl_la-multi.o)",
+      "189": "libcurl.a(libcurl_la-version.o)",
+      "237": "libopenssl.a(libssl-lib-ssl_init.o)"
+    }
+  },
+  "linkMapSha256": "9a9c0f2be0305a3e621dfb597f1bf91c12eca9599370b36285eb12eb91c300e3",
+  "linkedArchiveSha256": {
+    "libcurl.a": "4d879b180e9a131f013ea69b784da7fb84f2597a7f33eab069b00dc1a599f610",
+    "libopenssl.a": "bef688b94fa1e56ef49c7343b1b61c581529ff86125e76b64fda58056afed020"
+  },
+  "minimumOS": "16.4",
+  "platform": "IOSSIMULATOR",
+  "podfileLockSha256": "f4ccbbce9731507aff114169b384d2d1d16b187e1cb447b296444eec1835abfb",
+  "qualificationFlagsResourcesAndDiagnostics": "absent-in-checked-scope",
+  "secureStoreInPodfileLock": true,
+  "sqlcipherReleaseFlags": true,
+  "verdict": "PASS"
+}

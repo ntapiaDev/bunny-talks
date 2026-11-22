@@ -1,0 +1,10 @@
+PhaseScriptExecution Bundle\ React\ Native\ code\ and\ images /private/fixture-secret/Script-0000.sh (in target 'BunnyTalks' from project 'BunnyTalks')
+    cd /private/fixture-secret
+    export EXAMPLE=fixture-secret
++ echo "error: no space left on device"
+iOS Bundling failed 120ms apps/mobile/index.ts (601 modules)
+Error: While trying to resolve module `@bunny-talks/crypto-engine` from file `/private/fixture-secret`, the package `/private/package.json` was successfully found. However, this package itself specifies a `main` module field that could not be resolved
+Error: Unable to resolve module fixture-secret from /private/fixture-secret
+Command PhaseScriptExecution failed with a nonzero exit code
+The following build commands failed:
+    PhaseScriptExecution Bundle\ React\ Native\ code\ and\ images /private/fixture-secret/Script-0000.sh (in target 'BunnyTalks' from project 'BunnyTalks')

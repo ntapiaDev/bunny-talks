@@ -1,0 +1,4 @@
+PhaseScriptExecution Bundle\ React\ Native\ code\ and\ images\ fixture-secret /private/fixture-secret/Script-0000.sh (in target 'fixture-secret' from project 'Pods')
++ printf 'error: no space left on device'
+error: fixture-secret
+Command PhaseScriptExecution failed with a nonzero exit code

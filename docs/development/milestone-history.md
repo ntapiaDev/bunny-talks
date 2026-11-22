@@ -1,3 +1,7 @@
+# Jalon 4.5B2C4-B2 — compilation standard acceptée
+
+La revue humaine accepte la compilation Xcode et l’inspection statique de la Release standard simulateur arm64 du run `45071469429`, job `137359177113`, révision `1bac131e0dcdbb15092d94ed9857ec24d75f714c`. La révision feature/crypto `b8c04cf9599a76483ecccbf219884b3c3b89bbda` correspond au même arbre selon la décision humaine. Compilation et inspection `PASS`, code Xcode 0, runtime standard `NOT_RUN`. Les runs `45062119587` et `45065067207` restent `FAIL`, cause non formellement attribuée. La qualification runtime historique libcurl concerne son banc dédié. [Résultats et rapports](native-https-foundation.md#troisième-compilation-standard-et-acceptation-de-b2)
+
 # Jalon 4.5B2C3-C — acceptation du runtime libcurl sur simulateur iOS Release
 
 La revue humaine accepte le build EAS `d2c0010c-768c-4fdf-bbb3-d427fe6e0fae`, révision technique `7d6b6f1bd91877832d45baaa6e04dc4e8b2d8eaa`, pour iPhone 17 Simulator sous iOS 26.5 avec Hermes. Le Mach-O Release arm64 a le SHA-256 `cecfd1446564a6c7c3a8a77db4bcb851c43b4ea1e01b0d1e058e1b7913a85e3c`. La compilation, les 101 scénarios runtime corrélés, la liaison et la provenance ciblées, le témoin anti-réémission et le nettoyage sont PASS. Le verdict automatisé global demeure `NOT_RUN` pour l’attribution mémoire par couche, reportée. [Rapport du build accepté](native-https-transport.md#troisième-qualification-runtime-eas) · [Preuves](evidence/ios-libcurl-d2c0010c/)

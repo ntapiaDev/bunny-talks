@@ -1,0 +1,12 @@
+{
+  "diagnostics": [],
+  "limitReached": false,
+  "logStatus": "not-run",
+  "logUsage": "not-run",
+  "quality": "not-run",
+  "reason": "build-succeeded",
+  "sources": [],
+  "verdict": "NOT_RUN",
+  "xcodeExitCode": 0,
+  "xcresultStatus": "not-run"
+}

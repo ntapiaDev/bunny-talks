@@ -1,0 +1,18 @@
+{
+  "compilation": "PASS",
+  "diagnosticQuality": "not-run",
+  "diagnostics": "NOT_RUN",
+  "inspection": "PASS",
+  "revision": "1bac131e0dcdbb15092d94ed9857ec24d75f714c",
+  "runtime": "NOT_RUN",
+  "scope": "standard-release-simulator-build-and-static-inspection",
+  "stages": {
+    "artifact": "success",
+    "build": "success",
+    "inspection": "success",
+    "pods": "success",
+    "preflight": "success"
+  },
+  "verdict": "PASS",
+  "xcodeExitCode": 0
+}

@@ -1,0 +1,6 @@
+PhaseScriptExecution [Expo]\ Configure\ project /private/fixture-secret/Script-0001.sh (in target 'BunnyTalks' from project 'BunnyTalks')
+error: Could not find "node" executable while running an Xcode build script.
+CompileC /private/fixture-secret/fixture.o (in target 'ApplicationHttps' from project 'Pods')
+/private/fixture-secret/BunnyHttpsNative.c:8:9: fatal error: 'curl/curl.h' file not found (in target 'ApplicationHttps' from project 'Pods')
+PhaseScriptExecution [CP]\ Copy\ Pods\ Resources /private/fixture-secret/Script-0002.sh (in target 'BunnyTalks' from project 'BunnyTalks')
+Command PhaseScriptExecution failed with a nonzero exit code (in target 'BunnyTalks' from project 'BunnyTalks')
