@@ -35,6 +35,7 @@ Pod::Spec.new do |s|
   }
   if ENV['BUNNY_IOS_HTTPS_QUALIFICATION'] == '1'
     settings['SWIFT_ACTIVE_COMPILATION_CONDITIONS'] = '$(inherited) BUNNY_HTTPS_QUALIFICATION'
+    settings['GCC_PREPROCESSOR_DEFINITIONS'] += ' BUNNY_HTTPS_QUALIFICATION=1'
   end
   s.pod_target_xcconfig = settings
   s.user_target_xcconfig = { 'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => '$(inherited) x86_64' }

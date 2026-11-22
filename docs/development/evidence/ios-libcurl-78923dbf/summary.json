@@ -1,0 +1,21 @@
+{
+  "verdict": "FAIL",
+  "automatedVerdict": "FAIL",
+  "checks": {
+    "runtime": "FAIL",
+    "link": "NOT_RUN",
+    "guard": "PASS",
+    "cleanup": "PASS"
+  },
+  "reason": "checks-failed",
+  "failedChecks": [
+    "runtime"
+  ],
+  "unconfirmedChecks": [
+    "link"
+  ],
+  "memoryAttribution": {
+    "verdict": "NOT_RUN",
+    "reason": "layer-specific-trace-required"
+  }
+}

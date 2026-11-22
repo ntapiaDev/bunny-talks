@@ -15,6 +15,7 @@
 
 struct BunnyHttpsRequest {
   CURLM *multi;
+  pthread_mutex_t wakeup_lock;
   struct curl_slist *headers;
   atomic_bool cancelled;
 };
@@ -73,8 +74,13 @@ BunnyHttpsRequest *bunny_https_create(void)
   BunnyHttpsRequest *request = calloc(1, sizeof(*request));
   if (!request) return NULL;
   atomic_init(&request->cancelled, false);
+  if (pthread_mutex_init(&request->wakeup_lock, NULL) != 0) {
+    free(request);
+    return NULL;
+  }
   request->multi = curl_multi_init();
   if (!request->multi) {
+    pthread_mutex_destroy(&request->wakeup_lock);
     free(request);
     return NULL;
   }
@@ -102,12 +108,25 @@ bool bunny_https_is_bearer_authorization(const char *value)
 void bunny_https_cancel(BunnyHttpsRequest *request)
 {
   atomic_store(&request->cancelled, true);
-  curl_multi_wakeup(request->multi);
+  pthread_mutex_lock(&request->wakeup_lock);
+  if (request->multi) curl_multi_wakeup(request->multi);
+  pthread_mutex_unlock(&request->wakeup_lock);
+}
+
+static void close_multi(BunnyHttpsRequest *request)
+{
+  // Stop new wakeups and let any in-progress wakeup finish before cleanup.
+  pthread_mutex_lock(&request->wakeup_lock);
+  CURLM *multi = request->multi;
+  request->multi = NULL;
+  pthread_mutex_unlock(&request->wakeup_lock);
+  if (multi) curl_multi_cleanup(multi);
 }
 
 void bunny_https_destroy(BunnyHttpsRequest *request)
 {
-  curl_multi_cleanup(request->multi);
+  close_multi(request);
+  pthread_mutex_destroy(&request->wakeup_lock);
   curl_slist_free_all(request->headers);
   free(request);
 }
@@ -358,17 +377,52 @@ static bool complete(const struct response *state)
          (!state->gzip || state->stream_end);
 }
 
+static void apply_completion(struct response *state, CURLcode code)
+{
+  if (code == CURLE_OPERATION_TIMEDOUT) {
+    state->outcome = BunnyHttpsTimeout;
+  } else if (code == CURLE_OK && complete(state)) {
+    state->outcome = BunnyHttpsSuccess;
+  } else if (state->outcome == BunnyHttpsNetwork &&
+             (state->headers_complete || (state->status >= 200 && code == CURLE_WEIRD_SERVER_REPLY))) {
+    // curl can reject an invalid final header before handing it to receive_header.
+    state->outcome = BunnyHttpsResponse;
+  }
+}
+
+#ifdef BUNNY_HTTPS_QUALIFICATION
+static const char *qualification_completion(CURLcode code, bool headers_complete)
+{
+  switch (code) {
+    case CURLE_WEIRD_SERVER_REPLY:
+      return headers_complete ? "weird-reply-after-headers" : "weird-reply-before-headers";
+    case CURLE_WRITE_ERROR: return "write-error";
+    case CURLE_RECV_ERROR: return "receive-error";
+    case CURLE_PARTIAL_FILE: return "partial-file";
+    case CURLE_OPERATION_TIMEDOUT: return "timeout";
+    case CURLE_OK: return "ok";
+    default: return "other";
+  }
+}
+#endif
+
 BunnyHttpsResult bunny_https_perform(BunnyHttpsRequest *request, const char *url, const char *method,
                                     const void *body, size_t body_size, size_t limit,
                                     uint64_t deadline_ns)
 {
   BunnyHttpsResult result = { .outcome = BunnyHttpsNetwork };
-  if (!limit || limit > 1048576) return result;
+#ifdef BUNNY_HTTPS_QUALIFICATION
+  result.qualification_completion = "not-completed";
+#endif
+  CURLM *multi = request->multi;
+  if (!multi) return result;
   struct response state = { .request = request, .deadline = deadline_ns, .limit = limit };
-  CURL *easy = curl_easy_init();
-  if (!easy) return result;
+  CURL *easy = NULL;
   bool added = false;
+  if (!limit || limit > 1048576) goto finish;
   if (stopped(&state)) goto finish;
+  easy = curl_easy_init();
+  if (!easy) goto finish;
   const long timeout_ms = (long)((remaining_ns(deadline_ns) + 999999) / 1000000);
   if (!timeout_ms) {
     state.outcome = BunnyHttpsTimeout;
@@ -415,30 +469,28 @@ BunnyHttpsResult bunny_https_perform(BunnyHttpsRequest *request, const char *url
   }
 #undef SET
 
-  if (curl_multi_add_handle(request->multi, easy) != CURLM_OK) goto finish;
+  if (curl_multi_add_handle(multi, easy) != CURLM_OK) goto finish;
   added = true;
   while (!stopped(&state)) {
     int running;
-    if (curl_multi_perform(request->multi, &running) != CURLM_OK) break;
+    if (curl_multi_perform(multi, &running) != CURLM_OK) break;
     int messages;
-    CURLMsg *message = curl_multi_info_read(request->multi, &messages);
+    CURLMsg *message = curl_multi_info_read(multi, &messages);
     if (message && message->msg == CURLMSG_DONE) {
+#ifdef BUNNY_HTTPS_QUALIFICATION
+      result.qualification_completion = qualification_completion(message->data.result, state.headers_complete);
+#endif
       if (stopped(&state)) break;
-      if (message->data.result == CURLE_OPERATION_TIMEDOUT) {
-        state.outcome = BunnyHttpsTimeout;
-      } else if (message->data.result == CURLE_OK && complete(&state)) {
-        state.outcome = BunnyHttpsSuccess;
-      } else if (state.outcome == BunnyHttpsNetwork && state.headers_complete) {
-        state.outcome = BunnyHttpsResponse;
-      }
+      apply_completion(&state, message->data.result);
       break;
     }
-    if (!running || curl_multi_poll(request->multi, NULL, 0, 100, NULL) != CURLM_OK) break;
+    if (!running || curl_multi_poll(multi, NULL, 0, 100, NULL) != CURLM_OK) break;
   }
 
 finish:
-  if (added) curl_multi_remove_handle(request->multi, easy);
-  curl_easy_cleanup(easy);
+  if (added) curl_multi_remove_handle(multi, easy);
+  if (easy) curl_easy_cleanup(easy);
+  close_multi(request);
   if (state.inflater_initialized) inflateEnd(&state.inflater);
   stopped(&state);
   result.outcome = state.outcome;

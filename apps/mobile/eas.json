@@ -4,22 +4,22 @@
     "requireCommit": false
   },
   "build": {
-    "ios-https-qualification": {
+    "ios-https-libcurl-runtime": {
       "node": "24.22.2",
       "pnpm": "10.34.9",
       "environment": "preview",
       "env": {
         "EXPO_NO_DOTENV": "1",
-        "EXPO_PUBLIC_BUNNY_HTTPS_QUALIFICATION": "1",
+        "EXPO_PUBLIC_USE_RN_FETCH": "1",
         "BUNNY_IOS_HTTPS_QUALIFICATION": "1"
       },
       "ios": {
         "simulator": true,
         "withoutCredentials": true,
         "buildConfiguration": "Release",
-        "image": "sdk-57",
+        "image": "macos-tahoe-26.5-xcode-26.6",
         "resourceClass": "medium",
-        "config": "ios-https-qualification.yml"
+        "config": "ios-https-libcurl-runtime.yml"
       }
     },
     "ios-https-libcurl-build": {

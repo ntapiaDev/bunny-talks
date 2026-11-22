@@ -22,6 +22,7 @@ typedef struct {
   char content_type[256];
   void *bytes;
   size_t size;
+  const char *qualification_completion;
 } BunnyHttpsResult;
 
 // The caller owns the request. Only cancel may run concurrently with perform.
@@ -31,6 +32,7 @@ bool bunny_https_is_bearer_authorization(const char *value);
 void bunny_https_cancel(BunnyHttpsRequest *);
 void bunny_https_destroy(BunnyHttpsRequest *);
 
+// One transfer per request. perform closes its multi before returning.
 // Body storage must remain valid until perform returns. Success transfers malloc-owned bytes.
 BunnyHttpsResult bunny_https_perform(BunnyHttpsRequest *, const char *url, const char *method,
                                     const void *body, size_t body_size, size_t limit,

@@ -1,6 +1,73 @@
 // Local tests of the real response callbacks. No network or Apple runtime.
-#include "../../modules/application-https/ios/Native/BunnyHttpsNative.c"
+#include <curl/curl.h>
 #include <assert.h>
+
+static CURLMcode cancel_during_perform(CURLM *, int *);
+static CURLMcode record_remove(CURLM *, CURL *);
+static void record_easy_cleanup(CURL *);
+static CURLMcode record_multi_cleanup(CURLM *);
+#define curl_multi_perform cancel_during_perform
+#define curl_multi_remove_handle record_remove
+#define curl_easy_cleanup record_easy_cleanup
+#define curl_multi_cleanup record_multi_cleanup
+#include "../../modules/application-https/ios/Native/BunnyHttpsNative.c"
+#undef curl_multi_perform
+#undef curl_multi_remove_handle
+#undef curl_easy_cleanup
+#undef curl_multi_cleanup
+
+static BunnyHttpsRequest *performing;
+static unsigned cleanup_step;
+
+static CURLMcode cancel_during_perform(CURLM *multi, int *running)
+{
+  assert(performing && performing->multi == multi);
+  bunny_https_cancel(performing);
+  *running = 0;
+  return CURLM_OK;
+}
+
+static CURLMcode record_remove(CURLM *multi, CURL *easy)
+{
+  assert(cleanup_step++ == 0);
+  return curl_multi_remove_handle(multi, easy);
+}
+
+static void record_easy_cleanup(CURL *easy)
+{
+  assert(cleanup_step++ == 1);
+  curl_easy_cleanup(easy);
+}
+
+static CURLMcode record_multi_cleanup(CURLM *multi)
+{
+  assert(performing && !performing->multi && cleanup_step++ == 2);
+  // Cancellation during teardown must no longer wake the retired multi.
+  bunny_https_cancel(performing);
+  return curl_multi_cleanup(multi);
+}
+
+static void check_cancel_cleanup(void)
+{
+  assert(curl_global_init(CURL_GLOBAL_DEFAULT) == CURLE_OK);
+  BunnyHttpsRequest *request = calloc(1, sizeof(*request));
+  assert(request && pthread_mutex_init(&request->wakeup_lock, NULL) == 0);
+  atomic_init(&request->cancelled, false);
+  request->multi = curl_multi_init();
+  assert(request->multi);
+  struct timespec now;
+  assert(clock_gettime(CLOCK_MONOTONIC, &now) == 0);
+  const uint64_t deadline = ((uint64_t)now.tv_sec + 5) * 1000000000 + (uint64_t)now.tv_nsec;
+  performing = request;
+  BunnyHttpsResult result = bunny_https_perform(request, "https://localhost/", "GET", NULL, 0, 2, deadline);
+  assert(atomic_load(&request->cancelled));
+  assert(result.outcome == BunnyHttpsNetwork && !result.bytes && !result.size);
+  assert(cleanup_step == 3 && !request->multi);
+  bunny_https_cancel(request);
+  bunny_https_destroy(request);
+  performing = NULL;
+  curl_global_cleanup();
+}
 
 static void reset(struct response *state, BunnyHttpsRequest *request, size_t limit)
 {
@@ -46,6 +113,7 @@ static void check_bearer_authorization(void)
 
 int main(void)
 {
+  check_cancel_cleanup();
   check_bearer_authorization();
   BunnyHttpsRequest request;
   atomic_init(&request.cancelled, false);
@@ -84,6 +152,33 @@ int main(void)
   field(&state, "Content-Length: 2\r\n", true);
   field(&state, "Content-Length: 2\r\n", false);
   assert(state.outcome == BunnyHttpsResponse);
+
+  reset(&state, &request, 8);
+  field(&state, "HTTP/1.1 200 OK\r\n", true);
+  field(&state, "Content-Length: 2\r\n", true);
+  field(&state, "Content-Length: 3\r\n", false);
+  apply_completion(&state, CURLE_WRITE_ERROR);
+  assert(state.outcome == BunnyHttpsResponse && !complete(&state) && state.used == 0);
+
+  reset(&state, &request, 8);
+  field(&state, "HTTP/1.1 200 OK\r\n", true);
+  field(&state, "Content-Length: 2\r\n", true);
+  // The pinned curl parser may return this before calling receive_header again.
+  apply_completion(&state, CURLE_WEIRD_SERVER_REPLY);
+  assert(state.outcome == BunnyHttpsResponse && !complete(&state) && state.bytes == NULL);
+#ifdef BUNNY_HTTPS_QUALIFICATION
+  assert(strcmp(qualification_completion(CURLE_WEIRD_SERVER_REPLY, state.headers_complete),
+                "weird-reply-before-headers") == 0);
+#endif
+
+  reset(&state, &request, 8);
+  field(&state, "HTTP/1.1 200 OK\r\n", true);
+  field(&state, "Content-Length: 2\r\n", true);
+  apply_completion(&state, CURLE_RECV_ERROR);
+  assert(state.outcome == BunnyHttpsNetwork && !complete(&state) && state.bytes == NULL);
+  reset(&state, &request, 8);
+  apply_completion(&state, CURLE_WEIRD_SERVER_REPLY);
+  assert(state.outcome == BunnyHttpsNetwork && !complete(&state));
 
   reset(&state, &request, 2);
   field(&state, "HTTP/1.1 204 No Content\r\n", true);

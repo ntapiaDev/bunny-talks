@@ -1,0 +1,17 @@
+{
+  "verdict": "NOT_RUN",
+  "automatedVerdict": "PASS",
+  "checks": {
+    "runtime": "PASS",
+    "link": "PASS",
+    "guard": "PASS",
+    "cleanup": "PASS"
+  },
+  "reason": "memory-attribution-required",
+  "failedChecks": [],
+  "unconfirmedChecks": [],
+  "memoryAttribution": {
+    "verdict": "NOT_RUN",
+    "reason": "layer-specific-trace-required"
+  }
+}

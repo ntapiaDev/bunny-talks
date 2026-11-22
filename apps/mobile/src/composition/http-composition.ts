@@ -12,7 +12,7 @@ export function createMobileApplicationHttpClient(config: {
   timeoutMs: number;
   maxResponseBytes: number;
 }) {
-  // URLSession can implicitly retry idempotent requests after a connection loss.
+  // iOS remains gated until the standard Release transport is qualified.
   if (Platform.OS !== 'android') throw new ApplicationHttpError('configuration');
 
   return createApplicationHttpClient({

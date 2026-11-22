@@ -1,0 +1,14 @@
+{
+  "easBuildId": "78923dbf-7287-4d66-8c17-aff2fff735d8",
+  "reviewedRevision": "18699b59202d561cc557bf6dd99c081fcc58171a",
+  "executableSha256": "bedccb835180fa7a4ff5fc2d5be28278ba0f30265e2b4764cae9b5bc303dc55a",
+  "configuration": "Release",
+  "platform": "IOSSIMULATOR",
+  "architecture": "arm64",
+  "minimumOS": "16.4",
+  "xcode": "Xcode 26.6\nBuild version 17F113",
+  "sdk": "26.5",
+  "model": "iPhone 17",
+  "os": "iOS 26.5",
+  "runtimeBuild": "23F77"
+}

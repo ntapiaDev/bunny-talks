@@ -96,7 +96,7 @@ final class CurlHttpsTransport: @unchecked Sendable {
     guard let slot = slots[id] else { return }
     slot.timer.cancel()
     if let operation = slot.operation {
-      // Keep the place until curl has left its transfer loop and closed the easy handle.
+      // Keep the place until perform returns after closing the easy and multi handles.
       bunny_https_cancel(operation.handle)
     } else {
       slots.removeValue(forKey: id)
@@ -115,6 +115,7 @@ final class CurlHttpsTransport: @unchecked Sendable {
   }
 
   private static func project(_ result: BunnyHttpsResult) -> [String: Any] {
+    let kind: String
     switch result.outcome {
     case BunnyHttpsSuccess:
       let bytes = result.bytes.map { Data(bytesNoCopy: $0, count: result.size, deallocator: .free) } ?? Data()
@@ -125,12 +126,21 @@ final class CurlHttpsTransport: @unchecked Sendable {
       }
       return ["ok": true, "status": Int(result.status),
               "contentType": contentType as Any? ?? NSNull(), "bytes": bytes]
-    case BunnyHttpsTimeout: return failure("timeout")
-    case BunnyHttpsRedirect: return failure("redirect")
-    case BunnyHttpsResponse: return failure("response")
-    case BunnyHttpsSize: return failure("size")
-    default: return failure("network")
+    case BunnyHttpsTimeout: kind = "timeout"
+    case BunnyHttpsRedirect: kind = "redirect"
+    case BunnyHttpsResponse: kind = "response"
+    case BunnyHttpsSize: kind = "size"
+    default: kind = "network"
     }
+    #if BUNNY_HTTPS_QUALIFICATION
+    var projected = failure(kind)
+    if let completion = result.qualification_completion {
+      projected["qualificationCompletion"] = String(cString: completion)
+    }
+    return projected
+    #else
+    return failure(kind)
+    #endif
   }
 
   private static func requestFields(url: String, method: String, headers: [String: String],

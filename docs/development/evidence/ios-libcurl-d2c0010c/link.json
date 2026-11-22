@@ -1,0 +1,196 @@
+{
+  "architecture": "arm64",
+  "archives": {
+    "libcurl.xcframework/ios-arm64-simulator/libcurl.a": "4d879b180e9a131f013ea69b784da7fb84f2597a7f33eab069b00dc1a599f610",
+    "libcurl.xcframework/ios-arm64/libcurl.a": "611c9a10c9d1182dd335508245f1954d106f743e3acfeecdf8743c0dfc751601",
+    "libopenssl.xcframework/ios-arm64-simulator/libopenssl.a": "bef688b94fa1e56ef49c7343b1b61c581529ff86125e76b64fda58056afed020",
+    "libopenssl.xcframework/ios-arm64/libopenssl.a": "9c66d6f8a1b8feb44ed9f9136ecf1e155180e10313d557a9e9859a166f6722e1"
+  },
+  "bundleId": "fr.bunnytalks.mobile.httpsqualification.libcurl",
+  "configuration": "Release",
+  "definitions": {
+    "_OPENSSL_init_ssl": [
+      {
+        "address": 4296681652,
+        "section": "__TEXT,__text",
+        "visibility": "external",
+        "weak": false
+      }
+    ],
+    "_curl_multi_perform": [
+      {
+        "address": 4296424800,
+        "section": "__TEXT,__text",
+        "visibility": "local",
+        "weak": false
+      }
+    ],
+    "_curl_version_info": [
+      {
+        "address": 4296541532,
+        "section": "__TEXT,__text",
+        "visibility": "local",
+        "weak": false
+      }
+    ]
+  },
+  "dependencies": [
+    "/usr/lib/libc++.1.dylib",
+    "/usr/lib/libz.1.dylib",
+    "/System/Library/Frameworks/Accelerate.framework/Accelerate",
+    "/System/Library/Frameworks/AudioToolbox.framework/AudioToolbox",
+    "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation",
+    "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics",
+    "/System/Library/Frameworks/CoreServices.framework/CoreServices",
+    "@rpath/ExpoFileSystem.framework/ExpoFileSystem",
+    "@rpath/ExpoFont.framework/ExpoFont",
+    "@rpath/ExpoModulesCore.framework/ExpoModulesCore",
+    "@rpath/ExpoModulesJSI.framework/ExpoModulesJSI",
+    "@rpath/ExpoModulesWorklets.framework/ExpoModulesWorklets",
+    "/System/Library/Frameworks/ImageIO.framework/ImageIO",
+    "/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices",
+    "/System/Library/Frameworks/QuartzCore.framework/QuartzCore",
+    "@rpath/React.framework/React",
+    "@rpath/ReactNativeDependencies.framework/ReactNativeDependencies",
+    "/System/Library/Frameworks/Security.framework/Security",
+    "/System/Library/Frameworks/UIKit.framework/UIKit",
+    "@rpath/hermesvm.framework/hermesvm",
+    "/System/Library/Frameworks/JavaScriptCore.framework/JavaScriptCore",
+    "/System/Library/Frameworks/Foundation.framework/Foundation",
+    "/usr/lib/libobjc.A.dylib",
+    "/usr/lib/libSystem.B.dylib",
+    "/System/Library/Frameworks/CryptoKit.framework/CryptoKit",
+    "/System/Library/Frameworks/LocalAuthentication.framework/LocalAuthentication",
+    "/System/Library/Frameworks/WebKit.framework/WebKit",
+    "/usr/lib/swift/libswiftAVFoundation.dylib",
+    "/usr/lib/swift/libswiftAccelerate.dylib",
+    "/usr/lib/swift/libswiftCore.dylib",
+    "/usr/lib/swift/libswiftCoreAudio.dylib",
+    "/usr/lib/swift/libswiftCoreFoundation.dylib",
+    "/usr/lib/swift/libswiftCoreImage.dylib",
+    "/usr/lib/swift/libswiftCoreLocation.dylib",
+    "/usr/lib/swift/libswiftCoreMIDI.dylib",
+    "/usr/lib/swift/libswiftCoreMedia.dylib",
+    "/usr/lib/swift/libswiftDarwin.dylib",
+    "/usr/lib/swift/libswiftDispatch.dylib",
+    "/usr/lib/swift/libswiftMetal.dylib",
+    "/usr/lib/swift/libswiftOSLog.dylib",
+    "/usr/lib/swift/libswiftObjectiveC.dylib",
+    "/usr/lib/swift/libswiftQuartzCore.dylib",
+    "/usr/lib/swift/libswiftSpatial.dylib",
+    "/usr/lib/swift/libswiftUniformTypeIdentifiers.dylib",
+    "/usr/lib/swift/libswiftXPC.dylib",
+    "/usr/lib/swift/libswift_Concurrency.dylib",
+    "/usr/lib/swift/libswiftos.dylib",
+    "/usr/lib/swift/libswiftsimd.dylib",
+    "/usr/lib/swift/libswiftUIKit.dylib"
+  ],
+  "easBuildId": "d2c0010c-768c-4fdf-bbb3-d427fe6e0fae",
+  "executable": "BunnyTalksHTTPSLibcurlQualification",
+  "executableSha256": "cecfd1446564a6c7c3a8a77db4bcb851c43b4ea1e01b0d1e058e1b7913a85e3c",
+  "frameworks": {
+    "ExpoFileSystem.framework": {
+      "definitions": {
+        "_OPENSSL_init_ssl": [],
+        "_curl_multi_perform": [],
+        "_curl_version_info": []
+      },
+      "executableSha256": "ce9aa0c44def0dd8bfe164ee1fd7b4e5fdaae80a45ab70d987e84c6cfdf42bd1"
+    },
+    "ExpoFont.framework": {
+      "definitions": {
+        "_OPENSSL_init_ssl": [],
+        "_curl_multi_perform": [],
+        "_curl_version_info": []
+      },
+      "executableSha256": "47660b3c298dbcd2344d2a4f64ed3fe546ccc1cd29eb7e5a3ada2cb5b9264563"
+    },
+    "ExpoModulesCore.framework": {
+      "definitions": {
+        "_OPENSSL_init_ssl": [],
+        "_curl_multi_perform": [],
+        "_curl_version_info": []
+      },
+      "executableSha256": "d15f0a97edc75f54eab6ea9ebc6d7d18fe2683cbf4b3c7c9a32a78bd9e1f7a90"
+    },
+    "ExpoModulesJSI.framework": {
+      "definitions": {
+        "_OPENSSL_init_ssl": [],
+        "_curl_multi_perform": [],
+        "_curl_version_info": []
+      },
+      "executableSha256": "dbcfead15a5c5db71d0409cbb9caa2f937dc9989b7f0d0355ed5e441e5ecd222"
+    },
+    "ExpoModulesWorklets.framework": {
+      "definitions": {
+        "_OPENSSL_init_ssl": [],
+        "_curl_multi_perform": [],
+        "_curl_version_info": []
+      },
+      "executableSha256": "cda5e986c0ef3f7a4bbdaed632ea5f30b946a0c2c8fd960a0ef381ee6317c47c"
+    },
+    "React.framework": {
+      "definitions": {
+        "_OPENSSL_init_ssl": [],
+        "_curl_multi_perform": [],
+        "_curl_version_info": []
+      },
+      "executableSha256": "762b1f02fb3b630925963ad721640df54228c5d109444e3e16cd320158344a03"
+    },
+    "ReactNativeDependencies.framework": {
+      "definitions": {
+        "_OPENSSL_init_ssl": [],
+        "_curl_multi_perform": [],
+        "_curl_version_info": []
+      },
+      "executableSha256": "395787c00cc81fe4b1ea0fdac627714fb008fdb30d8d118cf4219779b4afc503"
+    },
+    "hermesvm.framework": {
+      "definitions": {
+        "_OPENSSL_init_ssl": [],
+        "_curl_multi_perform": [],
+        "_curl_version_info": []
+      },
+      "executableSha256": "9e7fcaead6717d04ea4dce73181c79b945b27e1f3b20a8dc9766af888ec30fa6"
+    }
+  },
+  "linkMap": {
+    "deadStrippedSymbols": {},
+    "liveSymbols": {
+      "_OPENSSL_init_ssl": [
+        {
+          "address": 4296681652,
+          "object": "237",
+          "size": 68
+        }
+      ],
+      "_curl_multi_perform": [
+        {
+          "address": 4296424800,
+          "object": "156",
+          "size": 96
+        }
+      ],
+      "_curl_version_info": [
+        {
+          "address": 4296541532,
+          "object": "189",
+          "size": 212
+        }
+      ]
+    },
+    "objects": {
+      "156": "libcurl.a(libcurl_la-multi.o)",
+      "189": "libcurl.a(libcurl_la-version.o)",
+      "237": "libopenssl.a(libssl-lib-ssl_init.o)"
+    }
+  },
+  "manifestSha256": "b0c44eb42ad6d837771b5bdca813d98fb6981a12d6957f088d8b0bf2b288b780",
+  "minimumOS": "16.4",
+  "platform": "IOSSIMULATOR",
+  "rawMapSha256": "3c95e6f2f305adb77c82091b63ab6f611fcafa1afcb0397f233e2c3507afa0e1",
+  "reason": "selected-objects-correlated",
+  "reviewedRevision": "7d6b6f1bd91877832d45baaa6e04dc4e8b2d8eaa",
+  "verdict": "PASS",
+  "zipSha256": "57908367212fb83b17b830e1aa69c0e4282e7afbb4fd368294943216f625d841"
+}

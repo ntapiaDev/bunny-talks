@@ -1,6 +1,14 @@
+# Jalon 4.5B2C3-C — acceptation du runtime libcurl sur simulateur iOS Release
+
+La revue humaine accepte le build EAS `d2c0010c-768c-4fdf-bbb3-d427fe6e0fae`, révision technique `7d6b6f1bd91877832d45baaa6e04dc4e8b2d8eaa`, pour iPhone 17 Simulator sous iOS 26.5 avec Hermes. Le Mach-O Release arm64 a le SHA-256 `cecfd1446564a6c7c3a8a77db4bcb851c43b4ea1e01b0d1e058e1b7913a85e3c`. La compilation, les 101 scénarios runtime corrélés, la liaison et la provenance ciblées, le témoin anti-réémission et le nettoyage sont PASS. Le verdict automatisé global demeure `NOT_RUN` pour l’attribution mémoire par couche, reportée. [Rapport du build accepté](native-https-transport.md#troisième-qualification-runtime-eas) · [Preuves](evidence/ios-libcurl-d2c0010c/)
+
+La composition iOS reste fermée aux parcours applicatifs et aux véritables secrets. iOS 16.4 et l’appareil physique restent à exécuter. La confiance TLS de la Release normale, les fournisseurs hors des trois symboles ciblés et le coût des connexions sans réutilisation restent à vérifier. Les recettes, notices et empreintes de libcurl et OpenSSL sont conservées avec une obligation de veille et de requalification. Le profil URLSession est archivé avec ses oracles historiques. [Clôture et limites](native-https-transport.md#clôture-humaine-de-45b2c3-c) · [Synthèse opérationnelle](native-https-foundation.md)
+
 # Jalon 4.5B2C3-B — acceptation des preuves de compilation et de liaison Expo
 
 Le 22 novembre 2026, la revue humaine accepte la compilation, la liaison CocoaPods et l’inspection du Mach-O Release simulateur arm64 du build `397256d4-2b57-4c13-b95a-855342a67c90` préparé depuis `9d1ef16843a174196aa77cad9cf78c638cf43265`. La revue des artefacts confirme les trois définitions de code recherchées. L’audit des duplications reste ouvert faute de carte de liens. L’acceptation porte sur les preuves statiques. À cette étape, C n’a pas commencé, la composition iOS est fermée et les secrets applicatifs sont interdits. [Revue post-build et limites](native-https-transport.md#revue-post-build-du-22-novembre-2026)
+
+La décision de clôture accepte le résultat de B et sa réserve objet par objet. L’exécutable porte le SHA-256 `55f4d17115dde3a989fc8717338fc9a2696fa2f077acf92efd3f2949c39bbd8c`. Le `-lc++` répété, le chemin Metal absent et la phase Expo Dev Launcher sans dépendance de sortie sont les trois avertissements non bloquants. Aucun résultat runtime n’est attribué à ce build. L’audit des duplications reste ouvert avant diffusion. La carte de liens est prévue lors du prochain build fonctionnel autorisé et sera rattachée à ce nouveau binaire. [Décision et limites](native-https-transport.md#revue-post-build-du-22-novembre-2026)
 
 # Jalon 4.5B2C3-A — construction XCFrameworks iOS
 

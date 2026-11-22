@@ -7,6 +7,7 @@ dist/
 build/
 coverage/
 *.tsbuildinfo
+__pycache__/
 
 # Environment files
 .env
@@ -19,8 +20,10 @@ coverage/
 # Keep only the Expo custom build configuration in this build directory.
 !/apps/mobile/.eas/build/
 /apps/mobile/.eas/build/*
-!/apps/mobile/.eas/build/ios-https-qualification.yml
 !/apps/mobile/.eas/build/ios-https-libcurl-build.yml
+!/apps/mobile/.eas/build/ios-https-libcurl-runtime.yml
+/apps/mobile/qualification/ios-libcurl-results/
+/apps/mobile/qualification/ios-results/
 
 # Expo Prebuild — generated native projects
 /apps/mobile/android/

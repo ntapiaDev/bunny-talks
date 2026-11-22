@@ -1,0 +1,26 @@
+{
+  "cli": {
+    "appVersionSource": "local",
+    "requireCommit": false
+  },
+  "build": {
+    "ios-https-qualification": {
+      "node": "24.22.2",
+      "pnpm": "10.34.9",
+      "environment": "preview",
+      "env": {
+        "EXPO_NO_DOTENV": "1",
+        "EXPO_PUBLIC_BUNNY_HTTPS_QUALIFICATION": "1",
+        "BUNNY_IOS_HTTPS_QUALIFICATION": "1"
+      },
+      "ios": {
+        "simulator": true,
+        "withoutCredentials": true,
+        "buildConfiguration": "Release",
+        "image": "sdk-57",
+        "resourceClass": "medium",
+        "config": "ios-https-qualification.yml"
+      }
+    }
+  }
+}

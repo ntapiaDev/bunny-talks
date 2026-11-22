@@ -322,9 +322,9 @@ it('keeps the standard HTTP refusal blocking even when the artificial witness pa
 });
 
 it('preserves Swift event names through the app, shell and verifier while bounding the trace', () => {
-  const swift = readFileSync('modules/application-https/ios/HttpsTransport.swift', 'utf8');
+  const swift = readFileSync('qualification/archive/urlsession/HttpsTransport.swift', 'utf8');
   const source = readFileSync('qualification/native-https-entry.tsx', 'utf8');
-  const runner = readFileSync('qualification/run-ios-eas.sh', 'utf8');
+  const runner = readFileSync('qualification/archive/urlsession/run-ios-eas.sh', 'utf8');
   const pattern = new RegExp(/qualificationTracePattern =\s*\/([^/]+)\//.exec(source)![1]!);
   const filter = /sed -nE '([^']+)'/.exec(runner)![1]!;
   // Swift emits these finite categories as literals. The resolver adds the terminal category.

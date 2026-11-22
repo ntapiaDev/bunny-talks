@@ -1,5 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
+import {
+  fixtureByteValues,
+  fixturePost,
+  fixtureText,
+  invalidUtf8ByteValues,
+  prefix,
+} from '../qualification/ios-libcurl-scenarios';
 import type { HttpTransport } from '../src/infrastructure/http/application-http';
+import { createApplicationHttpClient } from '../src/infrastructure/http/application-http';
 import { createNativeHttpsTransport } from '../src/infrastructure/http/native-https-transport';
 
 const request = {
@@ -32,6 +40,7 @@ function setup() {
     native,
     loadNative,
     complete,
+    transport,
     send: () => transport({ ...request, signal: controller.signal }),
   };
 }
@@ -116,4 +125,82 @@ describe('native HTTPS transport adapter', () => {
       await expect(result).resolves.toEqual({ ok: false, kind });
     },
   );
+
+  it.each([
+    null,
+    { ok: true, status: 200, contentType: null, bytes: [42] },
+    { ok: true, status: 200, contentType: null, bytes: new DataView(new ArrayBuffer(1)) },
+    { ok: true, status: 200, contentType: 42, bytes: new Uint8Array([42]) },
+    { ok: true, status: 200, contentType: null },
+    { ok: false, kind: 'response', bytes: new Uint8Array([42]) },
+  ])('returns only the public response failure for a malformed result', async (nativeResult) => {
+    const { complete, send } = setup();
+    const result = send();
+    complete(nativeResult);
+    await expect(result).resolves.toEqual({ ok: false, kind: 'response' });
+  });
+});
+
+describe('libcurl qualification through the application client', () => {
+  it('sends the nominal POST with its exact multibyte JSON and explicit authorization', async () => {
+    const { native, complete, transport } = setup();
+    const client = createApplicationHttpClient({
+      origin: 'https://fixture.invalid',
+      timeoutMs: 6000,
+      maxResponseBytes: 1024,
+      transport,
+    });
+    const path = prefix + 'post-body';
+    const result = client.request({
+      method: 'POST',
+      path,
+      expectedStatuses: [200],
+      bearerToken: 'fixture-only',
+      body: JSON.parse(fixturePost) as unknown,
+    });
+    complete({
+      ok: true,
+      status: 200,
+      contentType: 'application/json',
+      bytes: Uint8Array.from(fixtureByteValues),
+    });
+    await expect(result).resolves.toEqual(JSON.parse(fixtureText));
+    expect(native.execute).toHaveBeenCalledExactlyOnceWith(
+      'fixture-id',
+      'https://fixture.invalid' + path,
+      'POST',
+      {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer fixture-only',
+      },
+      fixturePost,
+      1024,
+    );
+  });
+
+  it('passes intact invalid UTF-8 through the adapter and refuses it in the client decoder', async () => {
+    const { complete, transport } = setup();
+    const bytes = Uint8Array.from(invalidUtf8ByteValues);
+    let delivered: Awaited<ReturnType<HttpTransport>> | undefined;
+    const client = createApplicationHttpClient({
+      origin: 'https://fixture.invalid',
+      timeoutMs: 6000,
+      maxResponseBytes: 1024,
+      transport: async (request) => (delivered = await transport(request)),
+    });
+    const result = client.request({
+      method: 'GET',
+      path: prefix + 'invalid-utf8',
+      expectedStatuses: [200],
+    });
+    complete({ ok: true, status: 200, contentType: 'application/json', bytes });
+    await expect(result).rejects.toMatchObject({ kind: 'response' });
+    expect(delivered).toEqual({
+      ok: true,
+      status: 200,
+      contentType: 'application/json',
+      body: bytes,
+    });
+  });
 });

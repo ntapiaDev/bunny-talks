@@ -7,10 +7,28 @@ slug=bunny-talks-https
 app_name='Bunny Talks HTTPS Qualification'
 xcframework_zip=${BUNNY_IOS_XCFRAMEWORK_ZIP:-}
 bundle_id=fr.bunnytalks.mobile.httpsqualification
+runtime=0
+profile=ios-https-libcurl-build
+if [[ "${1:-}" == --runtime ]]; then
+  runtime=1
+  shift
+  profile=ios-https-libcurl-runtime
+  app_name='Bunny Talks HTTPS Libcurl Qualification'
+  bundle_id=fr.bunnytalks.mobile.httpsqualification.libcurl
+  if [[ ! "${BUNNY_IOS_RUNTIME_REVISION:-}" =~ ^[a-f0-9]{40}$ ]]; then
+    printf '%s\n' 'Runtime staging requires the reviewed revision in BUNNY_IOS_RUNTIME_REVISION.' >&2
+    exit 1
+  fi
+fi
+
+if [[ -z "$xcframework_zip" ]]; then
+  printf '%s\n' 'Set BUNNY_IOS_XCFRAMEWORK_ZIP to the approved XCFramework ZIP.' >&2
+  exit 1
+fi
 
 if [[ "${1:-}" == --check ]]; then
   if [[ "$#" != 3 && "$#" != 4 ]]; then
-    printf '%s\n' 'Usage: prepare-ios-eas.sh --check STAGE PROJECT_ID [INSPECTED_ARCHIVE]' >&2
+    printf '%s\n' 'Usage: prepare-ios-eas.sh [--runtime] --check STAGE PROJECT_ID [INSPECTED_ARCHIVE]' >&2
     exit 1
   fi
   stage=$(cd "$2" && pwd -P)
@@ -19,7 +37,11 @@ if [[ "${1:-}" == --check ]]; then
     printf '%s\n' 'Use EAS_NO_VCS=1, EAS_PROJECT_ROOT set to the prepared workspace, and run from its apps/mobile directory.' >&2
     exit 1
   fi
-  reference=$(bash "$0")
+  if [[ "$runtime" == 1 ]]; then
+    reference=$(bash "$0" --runtime)
+  else
+    reference=$(bash "$0")
+  fi
   trap 'rm -rf -- "$reference"' EXIT
   node "$repo/apps/mobile/qualification/verify-ios-eas-tree.mjs" "$reference" "$2" "${4:-}"
   node --input-type=module - "$stage/apps/mobile/app.json" "$3" "$slug" "$app_name" "$bundle_id" <<'JS'
@@ -39,10 +61,12 @@ JS
   printf '%s\n' 'EAS qualification preflight passed.'
   exit 0
 fi
+[[ $# == 0 ]]
 
 cd "$repo"
 stage=$(mktemp -d /tmp/bunny-ios-eas.XXXXXXXX)
 stage=$(cd "$stage" && pwd -P)
+trap 'rm -rf -- "$stage"' EXIT
 mobile="$stage/apps/mobile"
 mkdir -p "$mobile/.eas/build" "$mobile/qualification" "$stage/packages"
 
@@ -54,37 +78,34 @@ cp apps/mobile/{app.json,eas.json,package.json,tsconfig.json,metro.config.js} "$
 rsync -rm --exclude='node_modules/' --exclude='dist/' --exclude='build/' --exclude='tests/' --exclude='.*/' \
   --exclude='.env*' --include='*/' --include='package.json' --include='tsconfig.json' \
   --include='**/src/**/*.ts' --include='**/src/*.ts' --exclude='*' packages/ "$stage/packages/"
-if [[ -n "$xcframework_zip" ]]; then
-  module=apps/mobile/modules/application-https
-  native="$stage/$module/ios"
-  python3 "$module/ios/verify_xcframeworks.py" archive "$xcframework_zip" >/dev/null
-  mkdir -p "$native/Native" "$native/vendor"
-  cp "$module/expo-module.config.json" "$native/../"
-  cp "$module/ios/"{ApplicationHttps.podspec,ApplicationHttpsModule.swift,CurlHttpsTransport.swift,verify_xcframeworks.py} "$native/"
-  cp "$module/ios/Native/"{BunnyHttpsNative.c,BunnyHttpsNative.h,module.modulemap} "$native/Native/"
-  cp "$xcframework_zip" "$native/vendor/xcframeworks.zip"
-  python3 "$native/verify_xcframeworks.py" archive "$native/vendor/xcframeworks.zip" >/dev/null
-  entry=qualification/ios-libcurl-build-entry.tsx
-  cp apps/mobile/.eas/build/ios-https-libcurl-build.yml "$mobile/.eas/build/"
-  cp "apps/mobile/$entry" apps/mobile/qualification/inspect-ios-libcurl-build.sh "$mobile/qualification/"
-else
-  entry=qualification/native-https-entry.tsx
-  cp apps/mobile/.eas/build/{ios-https-qualification,ios-https-libcurl-build}.yml "$mobile/.eas/build/"
-  cp apps/mobile/qualification/{certificates.sh,native-https-entry.tsx,run-ios-eas.sh,server.ts,verify-https-events.ts,ios-libcurl-build-entry.tsx,inspect-ios-libcurl-build.sh} \
+module=apps/mobile/modules/application-https
+native="$stage/$module/ios"
+python3 "$module/ios/verify_xcframeworks.py" archive "$xcframework_zip" >/dev/null
+mkdir -p "$native/Native" "$native/vendor"
+cp "$module/expo-module.config.json" "$native/../"
+cp "$module/ios/"{ApplicationHttps.podspec,ApplicationHttpsModule.swift,CurlHttpsTransport.swift,verify_xcframeworks.py} "$native/"
+cp "$module/ios/Native/"{BunnyHttpsNative.c,BunnyHttpsNative.h,module.modulemap} "$native/Native/"
+cp "$xcframework_zip" "$native/vendor/xcframeworks.zip"
+python3 "$native/verify_xcframeworks.py" archive "$native/vendor/xcframeworks.zip" >/dev/null
+cp "apps/mobile/.eas/build/$profile.yml" "$mobile/.eas/build/"
+if [[ "$runtime" == 1 ]]; then
+  entry=qualification/ios-libcurl-runtime-entry.tsx
+  cp apps/mobile/qualification/{ios-libcurl-runtime-entry.tsx,ios-libcurl-scenarios.ts,server.ts,certificates.sh,run-ios-libcurl-runtime.mjs,verify-ios-libcurl-runtime.mjs,inspect-ios-libcurl-runtime.py,with-ios-libcurl-link-map.cjs} \
     "$mobile/qualification/"
-  rsync -rm --exclude='node_modules/' --exclude='.*/' --exclude='.env*' \
-    --include='*/' --include='*.ts' --include='*.tsx' --exclude='*' \
-    apps/mobile/src/ "$mobile/src/"
-  rsync -rm --exclude='android/' --exclude='build/' --exclude='.*/' --exclude='vendor/' \
-    --include='*/' --include='expo-module.config.json' --include='*.swift' \
-    --include='*.podspec' --include='*.py' --include='*.c' --include='*.h' \
-    --include='*.modulemap' --exclude='*' apps/mobile/modules/ "$mobile/modules/"
+  mkdir -p "$mobile/src/infrastructure/http" "$stage/experiments/libcurl-single-emission"
+  cp apps/mobile/src/infrastructure/http/{application-http,native-https-transport}.ts "$mobile/src/infrastructure/http/"
+  cp experiments/libcurl-single-emission/{run.mjs,run-apple.mjs,single-emission.c,SimulatorApp.m,Info.plist} \
+    "$stage/experiments/libcurl-single-emission/"
+  printf '{"reviewedRevision":"%s"}\n' "$BUNNY_IOS_RUNTIME_REVISION" > "$mobile/qualification/ios-libcurl-input.json"
+else
+  entry=qualification/ios-libcurl-build-entry.tsx
+  cp "apps/mobile/$entry" apps/mobile/qualification/inspect-ios-libcurl-build.sh "$mobile/qualification/"
 fi
 
-node --input-type=module - "$mobile" "$slug" "$app_name" "$bundle_id" "$entry" <<'JS'
+node --input-type=module - "$mobile" "$slug" "$app_name" "$bundle_id" "$entry" "$profile" <<'JS'
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-const [mobile, slug, name, bundleId, entry] = process.argv.slice(2);
+const [mobile, slug, name, bundleId, entry, profile] = process.argv.slice(2);
 function edit(filename, update) {
   const path = join(mobile, filename);
   const data = JSON.parse(readFileSync(path, 'utf8'));
@@ -94,21 +115,25 @@ function edit(filename, update) {
 edit('package.json', (data) => {
   data.main = entry;
 });
-if (entry === 'qualification/ios-libcurl-build-entry.tsx') {
-  edit('eas.json', (data) => {
-    const profile = 'ios-https-libcurl-build';
-    if (!data.build?.[profile]) throw new Error('Missing iOS libcurl build profile.');
-    data.build = { [profile]: data.build[profile] };
-  });
-}
+const runtime = entry === 'qualification/ios-libcurl-runtime-entry.tsx';
+edit('eas.json', (data) => {
+  if (!data.build?.[profile]) throw new Error('Missing qualification profile.');
+  data.build = { [profile]: data.build[profile] };
+});
 edit('app.json', ({ expo }) => {
   expo.name = name;
   expo.slug = slug;
   expo.scheme = 'bunnytalks-httpsqualification';
   expo.ios.bundleIdentifier = bundleId;
+  if (runtime) {
+    expo.jsEngine = 'hermes';
+    expo.scheme = 'bunnytalks-httpslibcurlqualification';
+    expo.plugins.push('./qualification/with-ios-libcurl-link-map.cjs');
+  }
   delete expo.owner;
   if (expo.extra?.eas) delete expo.extra.eas.projectId;
 });
 JS
 
+trap - EXIT
 printf '%s\n' "$stage"

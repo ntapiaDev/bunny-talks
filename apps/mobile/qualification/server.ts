@@ -5,6 +5,8 @@ import { createServer as createHttpsServer, get as httpsGet } from 'node:https';
 import type { Socket } from 'node:net';
 import { createServer as createTcpServer } from 'node:net';
 import process from 'node:process';
+import type { TLSSocket } from 'node:tls';
+import { createSecureContext } from 'node:tls';
 import { pathToFileURL } from 'node:url';
 import { brotliCompressSync, gzipSync } from 'node:zlib';
 
@@ -13,6 +15,7 @@ const exactJson = JSON.stringify({ data: 'x'.repeat(1_048_565) });
 const exactGzip = gzipSync(exactJson);
 const smallGzip = gzipSync('{}');
 const fixtureBytes = Buffer.from(fixtureJson);
+const fixturePostBytes = Buffer.from('{"message":"fixture 🐰"}');
 const fixtureGzip = gzipSync(fixtureBytes);
 const matrixBodies = new Map([
   ['/chunked-coding-absent', fixtureBytes],
@@ -152,10 +155,47 @@ export async function startFixture(
   host = '127.0.0.1',
   identityProfile = false,
   recordConnectionIds = false,
+  runtimeRoutes?: ReadonlyMap<string, string>,
 ) {
   const controls = new Map<string, Control>();
   const connectionIds = new WeakMap<Socket, number>();
   let nextConnectionId = 1;
+  const runtimeSockets = new Set<Socket>();
+  const connections: Array<{
+    id: number;
+    destination: string;
+    acceptedAtMs: number;
+    closedAtMs: number | null;
+    receivedBytes: boolean;
+    fixtureName: boolean;
+    tls: string | null;
+  }> = [];
+  const socketsByEndpoint = new Map<string, (typeof connections)[number]>();
+  const endpoint = (destination: string, socket: Socket) => destination + ':' + socket.remotePort;
+  let overflow = false;
+  function trackConnection(destination: string, socket: Socket) {
+    if (!runtimeRoutes) return;
+    const address = endpoint(destination, socket);
+    const entry = {
+      id: nextConnectionId++,
+      destination,
+      acceptedAtMs: Date.now(),
+      closedAtMs: null as number | null,
+      receivedBytes: false,
+      fixtureName: false,
+      tls: null as string | null,
+    };
+    if (connections.length < 4096) connections.push(entry);
+    else overflow = true;
+    socketsByEndpoint.set(address, entry);
+    runtimeSockets.add(socket);
+    socket.once('close', () => {
+      entry.receivedBytes ||= socket.bytesRead > 0;
+      entry.closedAtMs = Date.now();
+      socketsByEndpoint.delete(address);
+      runtimeSockets.delete(socket);
+    });
+  }
   const events: Array<{
     destination: string;
     path: string;
@@ -179,6 +219,12 @@ export async function startFixture(
     controlBody?: Control['controlBody'];
     heldLengthEnd?: 'peer-close' | 'fixture-watchdog' | 'finished' | 'socket-error';
     fixtureCut?: boolean;
+    requestComplete?: boolean;
+    processed?: boolean;
+    offeredLimitPlusOne?: boolean;
+    requestedRuntimeCoding?: boolean;
+    ambientFixtureCookieMatches?: boolean;
+    responseFixtureCookie?: 'none' | 'ambient' | 'native' | 'unexpected';
     headersSent: boolean;
     responseStarted: boolean;
     responseStartedAtMs: number | null;
@@ -189,8 +235,18 @@ export async function startFixture(
   }> = [];
   const handler = (destination: string) => (req: IncomingMessage, res: ServerResponse) => {
     const requestPath = new URL(req.url ?? '/', 'https://fixture.invalid').pathname;
-    const path = requestPath.replace(/^\/v1\/https-qualification(?=\/)/, '');
+    const runtimeRoute = runtimeRoutes?.get(requestPath);
+    const path = runtimeRoute ?? requestPath.replace(/^\/v1\/https-qualification(?=\/)/, '');
+    const runtimeCookieStep =
+      runtimeRoute &&
+      /^\/curl-cookies\/(baseline|seed|expo-probe|native-probe|native-set|expo-after)$/.exec(
+        path,
+      )?.[1];
+    const cookieScope = requestPath.slice(0, requestPath.lastIndexOf('/') + 1);
+    const fixtureCookie = (name: 'expo' | 'native') =>
+      `bunny_fixture_${name}=synthetic; Secure; HttpOnly; Max-Age=120; Path=${cookieScope}`;
     if (events.length >= 4096) {
+      overflow = true;
       res.writeHead(503).end();
       return;
     }
@@ -200,8 +256,11 @@ export async function startFixture(
       .map((cookie) => cookie.split('=', 1)[0]?.trim());
     const event: (typeof events)[number] = {
       destination,
-      path: evidencePath(requestPath),
-      method: req.method ?? '',
+      path: runtimeRoute ? requestPath : evidencePath(requestPath),
+      method:
+        runtimeRoutes && !['GET', 'POST', 'DELETE'].includes(req.method ?? '')
+          ? 'unexpected'
+          : (req.method ?? ''),
       authorization: !!req.headers.authorization,
       authorizationMatchesFixture: req.headers.authorization === 'Bearer fixture-only',
       cookie: !!req.headers.cookie,
@@ -221,7 +280,15 @@ export async function startFixture(
       finished: false,
       closedAfterMs: null as number | null,
     };
-    if (recordConnectionIds) {
+    if (runtimeRoutes) {
+      const connection = socketsByEndpoint.get(endpoint(destination, req.socket));
+      if (connection) event.connectionId = connection.id;
+      event.httpVersion = req.httpVersion;
+      event.requestedRuntimeCoding = req.headers['accept-encoding'] === 'gzip, identity';
+      if (runtimeCookieStep)
+        event.ambientFixtureCookieMatches =
+          req.headers.cookie?.trim() === 'bunny_fixture_expo=synthetic';
+    } else if (recordConnectionIds) {
       let connectionId = connectionIds.get(req.socket);
       if (connectionId === undefined) {
         connectionId = nextConnectionId++;
@@ -235,6 +302,17 @@ export async function startFixture(
       event.headersSent = res.headersSent;
       if (!event.headersSent) return;
       event.responseCoding = coding(res.getHeader('Content-Encoding'));
+      if (runtimeCookieStep) {
+        const field = res.getHeader('Set-Cookie');
+        event.responseFixtureCookie =
+          field === undefined
+            ? 'none'
+            : field === fixtureCookie('expo')
+              ? 'ambient'
+              : field === fixtureCookie('native')
+                ? 'native'
+                : 'unexpected';
+      }
       const transfer = res.getHeader('Transfer-Encoding');
       event.configuredFraming =
         transfer !== undefined
@@ -257,13 +335,76 @@ export async function startFixture(
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Cache-Control', 'no-store');
     if (
-      identityProfile &&
+      (identityProfile || runtimeRoute) &&
       path !== '/coding-absent' &&
       path !== '/chunked-coding-absent' &&
       path !== '/no-content'
     )
       res.setHeader('Content-Encoding', 'identity');
+    if (runtimeRoute && (path === '/curl-cut-before' || path === '/curl-cut-after')) {
+      event.fixtureCut = false;
+      event.requestComplete = false;
+      event.processed = false;
+      if (path === '/curl-cut-before' && req.method === 'POST') {
+        req.once('data', (chunk: Buffer) => {
+          event.requestComplete = req.complete;
+          event.fixtureCut = chunk.length > 0 && !req.complete;
+          res.destroy();
+        });
+        return;
+      }
+      let body = '';
+      req
+        .setEncoding('utf8')
+        .on('data', (chunk: string) => {
+          body += chunk.slice(0, Math.max(0, 101 - body.length));
+        })
+        .on('end', () => {
+          event.requestComplete = req.complete;
+          event.postBodyMatchesFixture = body === '{"message":"fixture 🐰"}';
+          // Only the after case commits the synthetic effect. Both lose the full response.
+          event.processed =
+            path === '/curl-cut-after' &&
+            req.complete &&
+            (req.method !== 'POST' || event.postBodyMatchesFixture);
+          if (event.processed) {
+            res.setHeader('Content-Length', '1000');
+            res.flushHeaders();
+            res.write('{}', (error) => {
+              if (error) return;
+              event.responseStarted = true;
+              event.responseStartedAtMs = Date.now();
+              const timer = setTimeout(() => {
+                event.fixtureCut = true;
+                res.destroy();
+              }, 100);
+              res.once('close', () => clearTimeout(timer));
+            });
+          } else {
+            event.fixtureCut = true;
+            res.destroy();
+          }
+        });
+      return;
+    }
     if (path === '/request-body') {
+      if (runtimeRoute) {
+        let received = 0;
+        let matches = true;
+        req
+          .on('data', (chunk: Buffer) => {
+            matches &&= chunk.equals(fixturePostBytes.subarray(received, received + chunk.length));
+            received += chunk.length;
+          })
+          .on('end', () => {
+            event.requestComplete = req.complete;
+            event.postBodyMatchesFixture =
+              req.complete && matches && received === fixturePostBytes.length;
+            res.setHeader('Content-Length', fixtureBytes.length);
+            res.end(fixtureBytes);
+          });
+        return;
+      }
       let body = '';
       req
         .setEncoding('utf8')
@@ -341,6 +482,35 @@ export async function startFixture(
       // Complete HTTP framing, even for malformed compressed payloads.
       res.setHeader('Content-Length', gzipSample.length);
       res.end(gzipSample);
+    } else if (runtimeRoute && path === '/curl-gzip-concatenated') {
+      res.setHeader('Content-Encoding', 'gzip');
+      res.setHeader('Content-Length', smallGzip.length * 2);
+      res.end(Buffer.concat([smallGzip, smallGzip]));
+    } else if (runtimeRoute && path === '/curl-chunked-trailer') {
+      res.setHeader('Transfer-Encoding', 'chunked');
+      res.setHeader('Trailer', 'X-Fixture');
+      res.addTrailers({ 'X-Fixture': 'only' });
+      res.end('{}');
+    } else if (runtimeRoute && (path === '/curl-chunked-exact' || path === '/curl-memory')) {
+      if (path === '/curl-chunked-exact') {
+        res.setHeader('Transfer-Encoding', 'chunked');
+        res.end(exactJson);
+      } else {
+        res.setHeader('Content-Length', exactJson.length);
+        res.flushHeaders();
+        const timer = setTimeout(() => res.end(exactJson), 700);
+        res.on('close', () => clearTimeout(timer));
+      }
+    } else if (
+      runtimeRoute &&
+      (path === '/curl-length-conflict' || path === '/curl-length-and-chunked')
+    ) {
+      event.fixtureCut = true;
+      const framing =
+        path === '/curl-length-conflict'
+          ? 'Content-Length: 3\r\n\r\n{}'
+          : 'Transfer-Encoding: chunked\r\n\r\n2\r\n{}\r\n0\r\n\r\n';
+      res.socket!.end('HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 2\r\n' + framing);
     } else if (path === '/gzip' || path === '/oversize') {
       res.setHeader('Content-Encoding', 'gzip');
       res.end(
@@ -400,7 +570,10 @@ export async function startFixture(
       res.setHeader('Transfer-Encoding', 'chunked');
       res.write(exactJson);
       // Keep the message open after byte limit+1 so a native stop is observable.
-      const extra = setTimeout(() => res.write(' '), 100);
+      const extra = setTimeout(() => {
+        if (runtimeRoute) event.offeredLimitPlusOne = true;
+        res.write(' ');
+      }, 100);
       const end = setTimeout(() => res.end(), 1200);
       res.on('close', () => {
         clearTimeout(extra);
@@ -416,7 +589,9 @@ export async function startFixture(
       res.end(fixtureJson);
     } else if (path === '/coding-other' || path === '/coding-stacked') {
       res.setHeader('Content-Encoding', path === '/coding-other' ? 'br' : 'gzip, gzip');
-      res.end(path === '/coding-other' ? brotliCompressSync('{}') : gzipSync(smallGzip));
+      const bytes = path === '/coding-other' ? brotliCompressSync('{}') : gzipSync(smallGzip);
+      if (runtimeRoute) res.setHeader('Content-Length', bytes.length);
+      res.end(bytes);
     } else if (path === '/retry-status-gzip') {
       res.setHeader('Content-Encoding', 'gzip');
       res.writeHead(503, { 'Retry-After': '0', 'Content-Length': smallGzip.length }).end(smallGzip);
@@ -424,7 +599,9 @@ export async function startFixture(
       res.removeHeader('Content-Type');
       res.writeHead(204).end();
     } else if (path === '/invalid-utf8') {
-      res.end(Buffer.from([0x22, 0xc0, 0x22]));
+      const bytes = Buffer.from([0x22, 0xc0, 0x22]);
+      if (runtimeRoute) res.setHeader('Content-Length', bytes.length);
+      res.end(bytes);
     } else if (path === '/retry-status' || path === '/retry-status-length') {
       if (path === '/retry-status-length') res.setHeader('Content-Length', '2');
       else res.setHeader('Transfer-Encoding', 'chunked');
@@ -438,6 +615,11 @@ export async function startFixture(
     } else if (path === '/cookie') {
       res.setHeader('Set-Cookie', 'fixture=only; Secure; HttpOnly; Path=/');
       res.end(fixtureJson);
+    } else if (runtimeCookieStep) {
+      if (runtimeCookieStep === 'seed') res.setHeader('Set-Cookie', fixtureCookie('expo'));
+      if (runtimeCookieStep === 'native-set') res.setHeader('Set-Cookie', fixtureCookie('native'));
+      res.setHeader('Content-Length', fixtureBytes.length);
+      res.end(fixtureBytes);
     } else if (
       /^\/cookies\/[a-f0-9-]{36}\/(baseline|seed|expo-probe|native-probe|native-set|expo-after)$/.test(
         path,
@@ -458,17 +640,51 @@ export async function startFixture(
     else if (['/destination', '/reuse/one', '/reuse/two'].includes(path)) res.end(fixtureJson);
     else res.writeHead(404).end('{}');
   };
+  const destinations = ['A', 'B', 'C', 'unknown', 'wrong'] as const;
   const credentials = async (name: string) => ({
     key: await readFile(`${directory}/${name}.key`),
     cert: await readFile(`${directory}/${name}.pem`),
   });
+  const httpsServer = async (name: string, destination: string) => {
+    const keys = await credentials(name);
+    if (!runtimeRoutes) return createHttpsServer(keys, handler(destination));
+    const context = createSecureContext(keys);
+    return createHttpsServer(
+      {
+        ...keys,
+        SNICallback(this: TLSSocket, servername, callback) {
+          const connection = socketsByEndpoint.get(endpoint(destination, this));
+          if (connection) {
+            // Node parsed a ClientHello even if the wrapped raw socket's counter is empty.
+            connection.receivedBytes = true;
+            connection.fixtureName = servername === 'localhost';
+          }
+          callback(null, context);
+        },
+      },
+      handler(destination),
+    );
+  };
   const servers = [
-    createHttpsServer(await credentials('server'), handler('A')),
-    createHttpsServer(await credentials('server'), handler('B')),
+    await httpsServer('server', 'A'),
+    await httpsServer('server', 'B'),
     createHttpServer(handler('C')),
-    createHttpsServer(await credentials('unknown'), handler('unknown')),
-    createHttpsServer(await credentials('wrong'), handler('wrong')),
+    await httpsServer('unknown', 'unknown'),
+    await httpsServer('wrong', 'wrong'),
   ];
+  if (runtimeRoutes) {
+    for (const [index, server] of servers.entries()) {
+      const destination = destinations[index]!;
+      server.on('connection', (socket: Socket) => trackConnection(destination, socket));
+      server.on('secureConnection', (socket: TLSSocket) => {
+        const connection = socketsByEndpoint.get(endpoint(destination, socket));
+        if (connection) {
+          connection.receivedBytes = true;
+          connection.tls = socket.getProtocol();
+        }
+      });
+    }
+  }
   const stalledConnections = new Set<Socket>();
   const stalledTls = createTcpServer((socket) => {
     stalledConnections.add(socket);
@@ -495,6 +711,11 @@ export async function startFixture(
       finished: false,
       closedAfterMs: null,
     };
+    if (runtimeRoutes) {
+      trackConnection('stalled-tls', socket);
+      const connection = socketsByEndpoint.get(endpoint('stalled-tls', socket));
+      if (connection) event.connectionId = connection.id;
+    }
     if (events.length < 4096) events.push(event);
     socket.on('error', () => {});
     socket.on('close', () => {
@@ -510,10 +731,13 @@ export async function startFixture(
       events.length = 0;
       res.end('{}');
     } else if (req.method === 'GET' && req.url === '/events') res.end(JSON.stringify(events));
+    else if (runtimeRoutes && req.method === 'GET' && req.url === '/runtime')
+      res.end(JSON.stringify({ overflow, events, connections }));
     else res.writeHead(404).end('{}');
   });
   const close = async () => {
     stalledConnections.forEach((socket) => socket.destroy());
+    runtimeSockets.forEach((socket) => socket.destroy());
     await Promise.all(
       [...servers, control].map(async (server) => {
         server.closeAllConnections();
@@ -529,7 +753,7 @@ export async function startFixture(
         server.listen(basePort + index, host, resolve);
       });
     }
-    if (identityProfile) {
+    if (identityProfile && !runtimeRoutes) {
       const ca = await readFile(`${directory}/ca.pem`);
       for (const path of framingPaths) {
         const methods = path === '/retry-status' ? ['GET', 'POST', 'DELETE'] : ['GET'];
