@@ -1,0 +1,134 @@
+name: Bunny Talks iOS standard runtime C1
+
+on:
+  workflow_dispatch:
+    inputs:
+      reviewed_sha:
+        description: Full SHA explicitly approved for the C1 Apple run
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ios-standard-runtime
+  cancel-in-progress: false
+
+jobs:
+  runtime:
+    if: github.repository == 'ntapiaDev/bunny-talks' && github.run_attempt == '1'
+    runs-on: macos-26
+    timeout-minutes: 50
+    defaults:
+      run:
+        shell: bash
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      EXPO_NO_DOTENV: '1'
+      EXPO_NO_GIT_STATUS: '1'
+      EXPO_OFFLINE: '1'
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+    steps:
+      - name: Gate the reviewed revision
+        id: approval
+        env:
+          REVIEWED_SHA: ${{ inputs.reviewed_sha }}
+        run: |
+          umask 077
+          mkdir "$RUNNER_TEMP/bunny-ios-c1-proof" "$RUNNER_TEMP/bunny-ios-c1"
+          [[ "$GITHUB_SHA" =~ ^[a-f0-9]{40}$ && "$REVIEWED_SHA" == "$GITHUB_SHA" ]]
+
+      - name: Check out the reviewed revision
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          set-safe-directory: false
+
+      - name: Select Node 24 arm64
+        id: node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24.22.3'
+          architecture: arm64
+          package-manager-cache: false
+
+      - name: Fetch the original approved ZIP
+        timeout-minutes: 2
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHECKED_OUT_SHA: ${{ steps.checkout.outputs.commit }}
+        run: |
+          umask 077
+          [[ "$CHECKED_OUT_SHA" == "$GITHUB_SHA" ]]
+          scratch="$RUNNER_TEMP/bunny-ios-c1"
+          gh api --method GET "repos/$GITHUB_REPOSITORY/actions/artifacts/14723035221/zip" \
+            > "$scratch/download.tmp" 2> "$scratch/download.log"
+          mv "$scratch/download.tmp" "$scratch/xcframeworks.zip"
+
+      - name: Prepare the simulator, then build and observe the standard Release
+        if: ${{ !cancelled() && steps.approval.outcome == 'success' && steps.checkout.outcome == 'success' && steps.checkout.outputs.commit == github.sha && steps.node.outcome == 'success' }}
+        env:
+          REVIEWED_SHA: ${{ inputs.reviewed_sha }}
+          CHECKED_OUT_SHA: ${{ steps.checkout.outputs.commit }}
+        run: |
+          umask 077
+          exec python3 -IB apps/mobile/scripts/run-ios-standard-runtime.py \
+            "$RUNNER_TEMP/bunny-ios-c1" "$RUNNER_TEMP/bunny-ios-c1-proof/report.json"
+
+      - name: Preserve a sanitized report when the worker never starts
+        if: always()
+        env:
+          APPROVAL: ${{ steps.approval.outcome }}
+          CHECKOUT: ${{ steps.checkout.outcome }}
+          CHECKOUT_MATCH: ${{ steps.checkout.outputs.commit == github.sha }}
+          NODE: ${{ steps.node.outcome }}
+        run: |
+          umask 077
+          proof="$RUNNER_TEMP/bunny-ios-c1-proof"
+          mkdir -p "$proof"
+          [[ ! -s "$proof/report.json" ]] || exit 0
+          python3 -I - "$proof/report.json" <<'PY'
+          import json
+          import os
+          import re
+          import sys
+          from pathlib import Path
+
+          stages = "revision toolchain archive simulatorAvailability simulatorPreparation dependencies project build staticInspection installation installedExecutable launch reactNativeRendering processStability stop cleanup httpsRuntime runtimeMinimumIOS physicalDevice"
+          result = {name: {"verdict": "NOT_RUN"} for name in stages.split()}
+          failure = next((code for step, code in (
+              ("APPROVAL", "approval-check-failed"),
+              ("CHECKOUT", "checkout-failed"),
+              ("NODE", "node-setup-failed"),
+          ) if os.environ.get(step) == "failure"), None)
+          if not failure and os.environ.get("CHECKOUT") == "success" and os.environ.get("CHECKOUT_MATCH") != "true":
+              failure = "checkout-sha-mismatch"
+          if failure:
+              stage = "toolchain" if failure == "node-setup-failed" else "revision"
+              result[stage] = {"verdict": "FAIL", "code": failure}
+          revision = os.environ.get("GITHUB_SHA", "")
+          run_id = os.environ.get("GITHUB_RUN_ID", "")
+          Path(sys.argv[1]).write_text(json.dumps({
+              "schemaVersion": 1,
+              "scope": "ios-standard-runtime-c1",
+              "revision": revision if re.fullmatch("[a-f0-9]{40}", revision) else None,
+              "run": int(run_id) if re.fullmatch("[0-9]{1,20}", run_id) else None,
+              "verdict": "FAIL" if failure else "NOT_RUN",
+              "complete": False,
+              "stages": result,
+              "evidence": {},
+          }, sort_keys=True, indent=2) + "\n")
+          PY
+
+      - name: Upload sanitized runtime evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-standard-runtime-c1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/bunny-ios-c1-proof/report.json
+          if-no-files-found: error
+          retention-days: 7

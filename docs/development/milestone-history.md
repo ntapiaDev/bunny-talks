@@ -1,3 +1,9 @@
+# Jalon 4.5B2C4-C1 — runtime initial de la Release iOS standard accepté
+
+- Le premier run `45241273024`, révision `983a9a721d0bfd0bbcd53ab711d9ad5a5ad605ae`, est `FAIL` au contrôle de révision (`approval-check-failed`). Les étapes suivantes, dont compilation et runtime, sont `NOT_RUN`. [Rapport de la première tentative](https://github.com/ntapiaDev/bunny-talks/actions/runs/45241273024/artifacts/14851138614)
+- Le deuxième run `45248690746`, révision `2ca6717344349d84f5e572e988d65f05c9c5e77c`, est `FAIL` pendant la préparation CoreSimulator (`command-timeout`). Compilation, inspection et nettoyage sont `PASS`. L’installation et le lancement sont `NOT_RUN`. [Analyse de la deuxième tentative](native-https-foundation.md#deuxième-run-c1-et-correction-du-préflight)
+- La revue humaine accepte le troisième run `45255963304`, job `137977739099`, révision `f3175e24640a712761c5c3697d896dc403a494d8`. La Release arm64 standard a affiché son premier écran React Native sur iPhone 17 Simulator sous iOS 26.5 et le nettoyage est `PASS`. HTTPS, iOS 16.4 et appareil physique restent `NOT_RUN`. [Rapport original](evidence/ios-standard-runtime-45255963304/report.json) · [Clôture et périmètre](native-https-foundation.md#clôture-humaine-de-45b2c4-c1)
+
 # Jalon 4.5B2C4-B2 — compilation standard acceptée
 
 La revue humaine accepte la compilation Xcode et l’inspection statique de la Release standard simulateur arm64 du run `45071469429`, job `137359177113`, révision `1bac131e0dcdbb15092d94ed9857ec24d75f714c`. La révision feature/crypto `b8c04cf9599a76483ecccbf219884b3c3b89bbda` correspond au même arbre selon la décision humaine. Compilation et inspection `PASS`, code Xcode 0, runtime standard `NOT_RUN`. Les runs `45062119587` et `45065067207` restent `FAIL`, cause non formellement attribuée. La qualification runtime historique libcurl concerne son banc dédié. [Résultats et rapports](native-https-foundation.md#troisième-compilation-standard-et-acceptation-de-b2)

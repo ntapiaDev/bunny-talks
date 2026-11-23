@@ -57,3 +57,22 @@ Le jalon courant décrit **l’état déclaré du pilotage**, pas une preuve ind
 - **Messages de commit et continuité des jalons** : proposer un message Conventional Commit indicatif en anglais lors du premier rapport d'un nouveau jalon ou d'une tâche autonome destinée à un commit, même si le travail reste partiellement vérifié. Ce message sert de référence pour toute la durée du jalon.
 - **Corrections après revue** : les corrections, compléments de tests, investigations ciblées et ajustements documentaires appartenant au même jalon conservent son message de commit initial. Ne proposer aucun nouveau message de commit et ne pas répéter l'ancien dans les rapports successifs. Le développeur intègre ces modifications par amendement au commit du jalon, selon son propre workflow.
 - **Nouveau périmètre indépendant** : proposer un nouveau message uniquement lorsqu'un nouveau jalon commence ou qu'un travail autonome distinct est explicitement autorisé. Ne jamais créer, modifier ou publier de commit ; toute gestion Git reste exclusivement à la charge du développeur.
+
+### Hygiène du dépôt et maintenance documentaire
+
+Maintenir le dépôt Bunny Talks aussi simple, lisible et cohérent que possible avec l'architecture actuellement validée.
+
+- **À chaque jalon**, identifier le code, les expérimentations, les prototypes, les scripts, les fixtures, les dépendances et les documents devenus inutiles.
+- Supprimer les éléments obsolètes, remplacés ou inutilisés après vérification de leurs références et dépendances.
+- Privilégier la consolidation des implémentations existantes plutôt que l'accumulation de solutions parallèles.
+- Maintenir la documentation active à jour, en décrivant prioritairement les **décisions retenues, le fonctionnement actuel et les procédures réellement applicables**.
+- Supprimer ou fusionner les documents obsolètes, redondants ou contradictoires. Ne pas laisser d'anciennes hypothèses apparaître comme des choix encore valides.
+- Séparer clairement la documentation de référence des preuves et de l'historique nécessaires à la traçabilité.
+- Conserver les tests de non-régression utiles, les décisions d'architecture structurantes et les preuves de qualification ou de sécurité indispensables.
+- Ne pas conserver une expérimentation uniquement parce qu'elle a nécessité du travail.
+- Ne jamais supprimer une preuve de sécurité, un test critique ou un élément historique important sans analyser les conséquences.
+- Intégrer systématiquement un contrôle de propreté du dépôt et de cohérence documentaire aux revues de jalon.
+- Classer les nettoyages identifiés en **obligatoires, recommandés ou facultatifs**.
+- Ne pas effectuer de nettoyage massif ou de suppression potentiellement destructive sans revue et autorisation préalables.
+
+**Principe directeur : le dépôt doit refléter les choix techniques actuels de Bunny Talks, sans accumuler indéfiniment les traces des expérimentations passées.**

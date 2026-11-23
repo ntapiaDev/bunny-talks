@@ -1,4 +1,8 @@
-# État courant — 4.5B2C4-B2 clôturé
+# État courant — 4.5B2C4-C1 clôturé
+
+**La revue humaine accepte le démarrage initial de la Release iOS standard.** Le run `45255963304`, job `137977739099`, révision `f3175e24640a712761c5c3697d896dc403a494d8`, valide compilation, inspection, préparation iPhone 17 sous iOS 26.5, installation, identité, lancement, rendu Vision avec contrôle négatif, stabilité de 15 secondes, arrêt et nettoyage. Les deux premières tentatives C1 conservent leurs verdicts d’origine. [Rapport original](evidence/ios-standard-runtime-45255963304/report.json) · [Historique des jalons](milestone-history.md)
+
+**HTTPS standard, runtime iOS 16.4 et appareil physique restent `NOT_RUN`.** La composition HTTP iOS reste verrouillée. C2 demande une autorisation distincte et un protocole pour qualifier la confiance TLS et le comportement du transport avec des données factices. La qualification sur les cibles de diffusion et la revue de sécurité restent requises avant toute intégration réelle. [Périmètre et suite](native-https-foundation.md#clôture-humaine-de-45b2c4-c1) · [Conditions C2](native-https-foundation.md#conditions-de-préparation-de-c2)
 
 **4.5B2C4-A est accepté par revue humaine dans son périmètre local.** À la révision examinée `ff4ca90c80dbf7301e0a3afbdacea26fc22ada5b`, les preuves confirment l’approvisionnement du ZIP, la configuration Expo iOS 16.4, l’autolinking, l’isolation du banc et le verrou iOS avant chargement natif. [Procédure et contrôles locaux](native-https-foundation.md#préparer-le-projet-ios-standard)
 
