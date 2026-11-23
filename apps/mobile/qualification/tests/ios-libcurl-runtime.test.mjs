@@ -17,11 +17,57 @@ import {
   probes,
   runtimeProfile,
   runtimeRoutes,
+  standardHttpsBefore,
+  standardHttpsMarker,
+  standardHttpsPlan,
+  standardHttpsProbes,
+  standardHttpsReady,
 } from '../ios-libcurl-scenarios.ts';
-import { summarizeRuntimeChecks, validateStage } from '../run-ios-libcurl-runtime.mjs';
-import { evaluateRuntime, readAppLog } from '../verify-ios-libcurl-runtime.mjs';
+import {
+  standardPhaseLog,
+  summarizeRuntimeChecks,
+  validateStage,
+  validateStandardFixture,
+} from '../run-ios-libcurl-runtime.mjs';
+import {
+  evaluateRuntime,
+  evaluateStandardRuntime,
+  readAppLog,
+} from '../verify-ios-libcurl-runtime.mjs';
 
 const tag = '[BunnyIosCurlRuntime] ';
+
+test('C2 fixture readiness requires all actual loopback listeners and a fresh control snapshot', () => {
+  const fixtureId = 'b'.repeat(32);
+  const bindings = Array.from({ length: 7 }, (_, i) => ({ address: '127.0.0.1', port: 29443 + i }));
+  const initial = { fixtureId, overflow: false, events: [], connections: [] };
+  assert.deepEqual(validateStandardFixture(bindings, initial, fixtureId), bindings);
+  assert.throws(() => validateStandardFixture(bindings.slice(0, 6), initial, fixtureId));
+  assert.throws(() =>
+    validateStandardFixture(
+      [{ ...bindings[0], address: '0.0.0.0' }, ...bindings.slice(1)],
+      initial,
+      fixtureId,
+    ),
+  );
+  assert.throws(() => validateStandardFixture(bindings, { ...initial, events: [{}] }, fixtureId));
+  assert.throws(() => validateStandardFixture(bindings, initial, 'c'.repeat(32)));
+});
+
+test('C2 capture binds the log to its phase, actual PID and fresh run and fixture identities', () => {
+  const runId = 'a'.repeat(32);
+  const fixtureId = 'b'.repeat(32);
+  const marker = '[BunnyIosStandardHttpsRun] ' + runId + ' ' + fixtureId + ' before';
+  const raw = [marker, '[BunnyIosStandardHttps] DONE']
+    .map((eventMessage) => JSON.stringify({ processID: 42, eventMessage, unrelated: 'private' }))
+    .join('\n');
+  const actual = standardPhaseLog(raw, 42, runId, fixtureId, 'before');
+  assert.equal(actual, marker + '\n[BunnyIosStandardHttps] DONE\n');
+  assert.throws(() => standardPhaseLog(raw, 43, runId, fixtureId, 'before'));
+  assert.throws(() => standardPhaseLog(raw, 42, 'c'.repeat(32), fixtureId, 'before'));
+  assert.throws(() => standardPhaseLog(raw, 42, runId, fixtureId, 'after'));
+  assert.throws(() => standardPhaseLog(raw + '\n' + raw, 42, runId, fixtureId, 'before'));
+});
 
 test('requires correlated finite diagnostics for a newly qualified length conflict', () => {
   const { log, wire, samples } = complete();
@@ -106,16 +152,16 @@ test('attributes failed and unconfirmed runtime checks independently of orchestr
   assert.equal(allPassed.reason, 'memory-attribution-required');
 });
 
-function complete() {
+function complete(options = {}) {
   const wire = { overflow: false, events: [], connections: [] };
   const samples = [];
-  const lines = ['READY ApplicationHttps Release Hermes ' + runtimeProfile];
-  const epoch = 1_800_000_000_000;
+  const lines = [options.ready ?? 'READY ApplicationHttps Release Hermes ' + runtimeProfile];
+  const epoch = options.epoch ?? 1_800_000_000_000;
   let fetchConnection;
-  for (const [index, id] of plan.entries()) {
+  for (const [index, id] of (options.plan ?? plan).entries()) {
     const start = epoch + index * 10000;
     const end = start + 5000;
-    const probe = probes.find((probe) => probe.id === id);
+    const probe = (options.probes ?? probes).find((probe) => probe.id === id);
     const interrupt = interruptions.find((test) => test.id === id);
     const stop = start + (interrupt?.budgetMs ?? 0);
     function connection(destination, acceptedAtMs = start + 10) {
@@ -168,6 +214,7 @@ function complete() {
         closed: true,
         finished: !interrupt,
         offeredLimitPlusOne: true,
+        encodedBelowLimit: true,
         configuredOversizeLength: true,
       };
       wire.events.push(row);
@@ -205,9 +252,59 @@ function complete() {
     lines.push('END ' + id + ' ' + end + ' PASS');
   }
   lines.push('DONE');
-  const log = lines.map((line) => 'ignored prefix ' + tag + line).join('\n');
+  const log = lines.map((line) => 'ignored prefix ' + (options.marker ?? tag) + line).join('\n');
   return { log, wire, samples, evaluate: () => evaluateRuntime(log, wire, samples) };
 }
+
+function standardProof(before = false) {
+  return complete({
+    plan: before ? [standardHttpsBefore.id] : standardHttpsPlan,
+    probes: before ? [standardHttpsBefore] : standardHttpsProbes,
+    marker: standardHttpsMarker,
+    ready: standardHttpsReady,
+    epoch: before ? 1_800_000_000_000 : 1_800_000_010_000,
+  });
+}
+
+test('correlates the reduced standard plan before and after trust without publishing raw inputs', () => {
+  const result = evaluateStandardRuntime(standardProof(true), standardProof());
+  assert.equal(result.verdict, 'PASS');
+  assert.equal(result.beforeTrust.checks['identity-json'].reason, 'tls-handshake-without-http');
+  assert.deepEqual(result.beforeTrust.counters, { requests: 0, connections: 1 });
+  assert.equal(result.afterTrust.checks['cookie-fetch-after'].verdict, 'PASS');
+  assert.equal(result.afterTrust.checks.capacity.verdict, 'PASS');
+  assert.ok(standardHttpsPlan.length < plan.length / 2);
+  assert.doesNotMatch(
+    JSON.stringify(result),
+    /ignored prefix|localhost|BunnyIosStandardHttps|\.pem/,
+  );
+});
+
+test('leaves an absent TLS witness or partial standard plan unconfirmed and fails on extra emission', () => {
+  const noCertificateExchange = standardProof(true);
+  noCertificateExchange.wire.connections.length = 0;
+  assert.equal(evaluateStandardRuntime(noCertificateExchange, standardProof()).verdict, 'NOT_RUN');
+  const partial = standardProof();
+  partial.log = partial.log.replace(/\n[^\n]*DONE$/, '');
+  assert.equal(evaluateStandardRuntime(standardProof(true), partial).verdict, 'NOT_RUN');
+  const repeated = standardProof();
+  repeated.wire.events.push({ ...requestFor(repeated, 'cut-post-after') });
+  assert.equal(evaluateStandardRuntime(standardProof(true), repeated).verdict, 'FAIL');
+});
+
+test('checks cumulative snapshots from the same server and detects a changed first phase', () => {
+  const before = standardProof(true);
+  const after = standardProof();
+  after.wire.connections.forEach((row) => row.id++);
+  after.wire.events.forEach((row) => row.connectionId++);
+  after.wire.connections.unshift(...before.wire.connections.map((row) => ({ ...row })));
+  assert.equal(evaluateStandardRuntime(before, after, { cumulative: true }).verdict, 'PASS');
+  after.wire.connections[0].closedAtMs++;
+  assert.equal(
+    evaluateStandardRuntime(before, after, { cumulative: true }).reason,
+    'fixture-snapshots-diverged',
+  );
+});
 
 const requestFor = (proof, id) => proof.wire.events.find(({ path }) => path === prefix + id);
 const connectionFor = (proof, destination) =>

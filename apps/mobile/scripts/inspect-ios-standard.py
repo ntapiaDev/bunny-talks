@@ -11,12 +11,31 @@ from pathlib import Path
 
 MOBILE = Path(__file__).resolve().parents[1]
 BUNDLE_ID = "fr.bunnytalks.mobile"
+CANDIDATE_BUNDLE_ID = "fr.bunnytalks.mobile.c2https"
+CANDIDATE_ENTRY = "qualification/ios-standard-https-entry.tsx"
 TARGET = "BunnyTalks"
-CERTIFICATE_SUFFIXES = {".cer", ".crt", ".der", ".key", ".p12", ".pem", ".pfx", ".mobileprovision"}
+CERTIFICATE_SUFFIXES = {".cer", ".crt", ".der", ".key", ".p7b", ".p12", ".pem", ".pfx", ".mobileprovision"}
 QUALIFICATION_MARKERS = (
     b"qualificationProfile", b"qualificationCompletion", b"weird-reply-before-headers",
     b"fr.bunnytalks.mobile.httpsqualification", b"bunny-https-libcurl-runtime", b"Bunny fixture",
 )
+CERTIFICATE_PAYLOAD = re.compile(
+    rb"-----BEGIN (?:(?:(?:TRUSTED|X509) )?CERTIFICATE|(?:[A-Z0-9]+ )*PRIVATE KEY)-----"
+    rb"(?:\r?\n|(?:\\r)?\\n)[A-Za-z0-9+/]{32}"
+)
+NORMAL_CURL_OPTIONS = {
+    "CURLOPT_PROTOCOLS_STR": '"https"',
+    "CURLOPT_HTTP_VERSION": "(long)CURL_HTTP_VERSION_1_1",
+    "CURLOPT_FOLLOWLOCATION": "0L",
+    "CURLOPT_PROXY": '""',
+    "CURLOPT_NETRC": "(long)CURL_NETRC_IGNORED",
+    "CURLOPT_HTTPAUTH": "(long)CURLAUTH_NONE",
+    "CURLOPT_SSL_VERIFYPEER": "1L",
+    "CURLOPT_SSL_VERIFYHOST": "2L",
+    "CURLOPT_SSL_OPTIONS": "(long)CURLSSLOPT_NATIVE_CA",
+    "CURLOPT_SSLVERSION": "(long)(CURL_SSLVERSION_TLSv1_2|CURL_SSLVERSION_MAX_TLSv1_3)",
+    "CURLOPT_SSL_SESSIONID_CACHE": "0L",
+}
 
 
 class CheckFailed(ValueError):
@@ -41,30 +60,73 @@ def check_ats(plist):
     check(plist.get("NSAppTransportSecurity") == {"NSAllowsArbitraryLoads": False}, "ats")
 
 
-def check_resources(root):
+def check_resource(path, *, allow_qualification_markers=False):
+    check(path.suffix.lower() not in CERTIFICATE_SUFFIXES, "certificate-resource")
+    if path.is_file():
+        data = path.read_bytes()
+        if not allow_qualification_markers:
+            check(not any(marker in data for marker in QUALIFICATION_MARKERS), "qualification-marker")
+        check(not CERTIFICATE_PAYLOAD.search(data), "certificate-or-key-payload")
+
+
+def check_resources(root, *, allow_qualification_markers=False):
+    check(not root.is_symlink(), "external-resource-link")
     root = root.resolve()
     for path in root.rglob("*"):
         relative = path.relative_to(root)
         check(not path.is_symlink() or path.resolve().is_relative_to(root), "external-resource-link")
-        check(path.suffix.lower() not in CERTIFICATE_SUFFIXES, "certificate-resource")
         check(all("qualification" not in part.lower() for part in relative.parts), "qualification-resource")
-        if path.is_file():
-            data = path.read_bytes()
-            check(not any(marker in data for marker in QUALIFICATION_MARKERS), "qualification-marker")
-            check(not re.search(rb"-----BEGIN (?:CERTIFICATE|(?:[A-Z]+ )?PRIVATE KEY)-----\r?\n"
-                                rb"[A-Za-z0-9+/]{32}", data), "certificate-or-key-payload")
+        check_resource(path, allow_qualification_markers=allow_qualification_markers)
 
 
-def check_generated(ios):
+def check_curl_options(source):
+    # This checks the reviewed SET calls in the source. Effective build settings and TLS need separate evidence.
+    source = re.sub(r"/\*.*?\*/|//[^\n]*", "", source, flags=re.S)
+    for option, expected in NORMAL_CURL_OPTIONS.items():
+        calls = re.findall(rf"\bSET\s*\(\s*{option}\s*,\s*([^;]+)\);", source)
+        check(len(calls) == 1 and re.sub(r"\s+", "", calls[0]) == expected
+              and len(re.findall(rf"\b{option}\b", source)) == 1, "native-curl-options")
+    check(not re.search(r"\b(?:CURLOPT_(?:PROXY_)?(?:CAINFO|CAPATH)(?:_BLOB)?|"
+                        r"CURLOPT_SSL_CTX_(?:FUNCTION|DATA)|"
+                        r"SecTrustSetAnchorCertificates|SSL_CTX_(?:load_verify_locations|set_default_verify_paths))\b",
+                        source),
+          "native-alternative-trust")
+
+
+def check_https_sources(mobile):
+    native = mobile / "modules/application-https/ios"
+    check(native.resolve().is_relative_to(mobile.resolve()), "external-resource-link")
+    for path in (mobile / "src", mobile / "assets", native, native / "Native"):
+        check(not path.is_symlink(), "external-resource-link")
+    check((mobile / "src").is_dir() and (native / "Native").is_dir(), "https-source-tree")
+    check_resources(mobile / "src")
+    if (mobile / "assets").is_dir():
+        check_resources(mobile / "assets")
+    for name in ("index.ts", "app.json", "package.json", "metro.config.js"):
+        path = mobile / name
+        check(path.is_file() and not path.is_symlink(), "https-source-tree")
+        check_resource(path)
+    # The pod contains the historical branches. Its approved vendor ZIP is checked by its own verifier.
+    for path in native.iterdir():
+        if path.name != "vendor":
+            check(not path.is_symlink(), "external-resource-link")
+            check_resource(path, allow_qualification_markers=True)
+            if path.is_dir():
+                check_resources(path, allow_qualification_markers=True)
+    check_curl_options((native / "Native/BunnyHttpsNative.c").read_text())
+
+
+def check_generated(ios, *, bundle_id=BUNDLE_ID, resources=True):
     properties = json.loads((ios / "Podfile.properties.json").read_bytes())
     check(properties.get("ios.deploymentTarget") == "16.4", "project-minimum-ios")
     check(properties.get("expo.jsEngine") == "hermes", "project-hermes")
     check(properties.get("expo.sqlite.useSQLCipher") == "true", "project-sqlcipher")
     project = (ios / f"{TARGET}.xcodeproj/project.pbxproj").read_text()
     identifiers = re.findall(r'^\s*PRODUCT_BUNDLE_IDENTIFIER = "?([\w.]+)"?;', project, re.M)
-    check(set(identifiers) == {BUNDLE_ID}, "project-identity")
+    check(set(identifiers) == {bundle_id}, "project-identity")
     check_ats(read_plist(ios / TARGET / "Info.plist"))
-    check_resources(ios)
+    if resources:
+        check_resources(ios)
 
 
 def check_pod_settings(settings):
@@ -82,8 +144,16 @@ def check_pod_settings(settings):
     check({"-DSQLITE_HAS_CODEC=1", "-DSQLCIPHER_CRYPTO_CC"} <= set(sqlite_flags), "sqlcipher-flags")
 
 
-def check_bundle_sources(path):
+def check_bundle_sources(path, *, candidate=False):
     sources = [name.replace("\\", "/") for name in json.loads(path.read_bytes())["sources"]]
+    if candidate:
+        fixture_sources = {name.rsplit("/qualification/", 1)[1] for name in ("/" + n for n in sources)
+                           if "/qualification/" in name}
+        check(fixture_sources == {CANDIDATE_ENTRY.rsplit("/", 1)[1], "ios-libcurl-scenarios.ts"},
+              "candidate-js-entry")
+        check(not any(name.endswith("/src/composition/App.tsx") or name == "src/composition/App.tsx"
+                      for name in sources), "candidate-standard-entry")
+        return
     check(any(name in ("index.ts", "./index.ts") or ("/" + name).endswith("/apps/mobile/index.ts")
               for name in sources)
           and any(name.endswith("src/composition/App.tsx") for name in sources), "standard-js-entry")
@@ -112,15 +182,16 @@ def check_linked_archives(raw_map, archives, digest):
     return result
 
 
-def inspect_release(derived, source_map, pod_settings, provenance):
+def inspect_release(derived, source_map, pod_settings, provenance, *, mobile=MOBILE, bundle_id=BUNDLE_ID,
+                    c2=False):
     check_pod_settings(json.loads(pod_settings.read_bytes()))
-    check_bundle_sources(source_map)
+    check_bundle_sources(source_map, candidate=bundle_id == CANDIDATE_BUNDLE_ID)
     link = link_helpers()
     apps = list((derived / "Build/Products/Release-iphonesimulator").glob("*.app"))
     check(len(apps) == 1, "release-application")
     app = apps[0]
     plist = read_plist(app / "Info.plist")
-    check(plist.get("CFBundleIdentifier") == BUNDLE_ID and plist.get("CFBundleDisplayName") == "Bunny Talks",
+    check(plist.get("CFBundleIdentifier") == bundle_id and plist.get("CFBundleDisplayName") == "Bunny Talks",
           "release-identity")
     check(plist.get("MinimumOSVersion") in ("16.4", "16.4.0"), "release-plist-minimum")
     check_ats(plist)
@@ -137,7 +208,7 @@ def inspect_release(derived, source_map, pod_settings, provenance):
     with bundle.open("rb") as handle:
         check(handle.read(8) == bytes.fromhex("c61fbc03c103191f"), "hermes-bytecode")
 
-    vendor = MOBILE / "modules/application-https/ios/vendor/package"
+    vendor = mobile / "modules/application-https/ios/vendor/package"
     license_bundles = list(app.rglob("ApplicationHttpsLicenses.bundle"))
     check(len(license_bundles) == 1, "license-bundle")
     licenses = {}
@@ -145,7 +216,7 @@ def inspect_release(derived, source_map, pod_settings, provenance):
         licenses[name] = link.digest(license_bundles[0] / name)
         check(licenses[name] == link.digest(vendor / name), "license-bytes")
 
-    podfile_lock = MOBILE / "ios/Podfile.lock"
+    podfile_lock = mobile / "ios/Podfile.lock"
     pods = podfile_lock.read_text()
     for name in ("ApplicationHttps", "ExpoSQLite", "ExpoSecureStore", "hermes-engine"):
         check(re.search(rf"^  - {name}(?:\s|:)", pods, re.M), "native-dependencies")
@@ -173,8 +244,8 @@ def inspect_release(derived, source_map, pod_settings, provenance):
         }
     check(not any(rows for provider in providers.values() for rows in provider["definitions"].values()),
           "additional-visible-provider")
-    return {
-        "verdict": "PASS", "bundleId": BUNDLE_ID, "displayName": "Bunny Talks",
+    result = {
+        "verdict": "PASS", "bundleId": bundle_id, "displayName": "Bunny Talks",
         "configuration": "Release", "platform": "IOSSIMULATOR", "architecture": "arm64",
         "minimumOS": "16.4", "executableSha256": link.digest(binary),
         "hermesBundleSha256": link.digest(bundle), "podfileLockSha256": link.digest(podfile_lock),
@@ -183,12 +254,36 @@ def inspect_release(derived, source_map, pod_settings, provenance):
         "linkedArchiveSha256": linked_archives, "linkMapSha256": link.digest(maps[0]),
         "linkMap": link_map, "definitions": definitions, "embeddedProviders": providers,
     }
+    if c2:
+        undefined = link.command("xcrun", "nm", "-u", binary)
+        check(all(re.search(rf"\b{symbol}\b", undefined) for symbol in
+                  ("_SecTrustEvaluateWithError", "_inflate", "_inflateInit2_"))
+              and "Security.framework/Security" in dependencies
+              and re.search(r"/libz(?:\.\d+)*\.dylib\b", dependencies), "c2-transport-imports")
+        result["transportLinkSelection"] = transport_link_selection(raw_map, link.object_label)
+    return result
+
+
+def transport_link_selection(raw_map, object_label):
+    selection = [(name.decode("ascii"), object_label(member)) for name, member in re.findall(
+        rb"^\[[ \t]*\d+\][ \t]+[^\n]*?/"
+        rb"(libcurl\.a|libopenssl\.a|libApplicationHttps\.a|ApplicationHttps)\(([^\n)]+)\)$", raw_map, re.M,
+    )]
+    selection.extend(("module", object_label(member)) for member in re.findall(
+        rb"^\[[ \t]*\d+\][ \t]+[^\n]*?/ApplicationHttps\.build/[^\n]*/([^/\n]+\.o)$", raw_map, re.M,
+    ))
+    libraries = {name for name, _ in selection}
+    if not ({"libcurl.a", "libopenssl.a"} <= libraries and
+            libraries & {"module", "ApplicationHttps", "libApplicationHttps.a"}):
+        raise EvidenceUnavailable("c2-link-selection-unavailable")
+    return sorted(selection)
 
 
 def main():
     parser = argparse.ArgumentParser()
     commands = parser.add_subparsers(dest="mode", required=True)
     commands.add_parser("generated")
+    commands.add_parser("https-sources")
     pods = commands.add_parser("pods")
     pods.add_argument("pod_settings", type=Path)
     release = commands.add_parser("release")
@@ -200,6 +295,9 @@ def main():
         if args.mode == "generated":
             check_generated(MOBILE / "ios")
             result = {"verdict": "PASS", "scope": "generated-project"}
+        elif args.mode == "https-sources":
+            check_https_sources(MOBILE)
+            result = {"verdict": "PASS", "scope": "https-standard-sources", "httpsRuntime": "NOT_RUN"}
         elif args.mode == "pods":
             check_pod_settings(json.loads(args.pod_settings.read_bytes()))
             result = {"verdict": "PASS", "scope": "release-pod-settings"}

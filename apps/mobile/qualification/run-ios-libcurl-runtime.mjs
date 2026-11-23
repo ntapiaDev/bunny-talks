@@ -8,13 +8,14 @@ import {
   mkdtemp,
   open,
   readFile,
+  realpath,
   readdir,
   rm,
   stat,
   writeFile,
 } from 'node:fs/promises';
 import { get } from 'node:http';
-import { join } from 'node:path';
+import { isAbsolute, join, relative } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import process from 'node:process';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -22,7 +23,7 @@ import { promisify } from 'node:util';
 
 import { waitForResult } from '../../../experiments/libcurl-single-emission/run-apple.mjs';
 import { classify, parseNative } from '../../../experiments/libcurl-single-emission/run.mjs';
-import { fixturePort, runtimeRoutes } from './ios-libcurl-scenarios.ts';
+import { fixturePort, runtimeRoutes, standardHttpsRoutes } from './ios-libcurl-scenarios.ts';
 import { startFixture } from './server.ts';
 import { evaluateRuntime } from './verify-ios-libcurl-runtime.mjs';
 
@@ -544,9 +545,197 @@ async function qualify() {
   return summary.automatedVerdict;
 }
 
+const runIdPattern = /^[a-f0-9]{32}$/;
+const writePrivate = (file, data) =>
+  writeFile(file, JSON.stringify(data) + '\n', { flag: 'wx', mode: 0o600 });
+
+async function standardWorkspace(work) {
+  requireEvidence(
+    process.platform === 'darwin' && isAbsolute(work) && (await realpath(work)) === work,
+  );
+  const context = await json(join(work, '.c2-owner.json'));
+  requireEvidence(
+    runIdPattern.test(context.runId) &&
+      hash40.test(context.revision) &&
+      hash64.test(context.treeSha256) &&
+      hash64.test(context.zipSha256),
+  );
+  const receipt = async (scope) => {
+    const data = await json(join(work, scope + '.json'));
+    requireEvidence(
+      data.scope === scope &&
+        Object.keys(data.context ?? {}).length === Object.keys(context).length &&
+        Object.entries(context).every(([key, value]) => data.context[key] === value),
+    );
+    return data;
+  };
+  return { context, receipt };
+}
+
+export function validateStandardFixture(addresses, initial, fixtureId) {
+  requireEvidence(
+    addresses.length === 7 &&
+      addresses.every(
+        (entry, i) => entry?.address === '127.0.0.1' && entry.port === fixturePort + i,
+      ),
+  );
+  requireEvidence(
+    initial?.fixtureId === fixtureId &&
+      initial.overflow === false &&
+      Array.isArray(initial.events) &&
+      initial.events.length === 0 &&
+      Array.isArray(initial.connections) &&
+      initial.connections.length === 0,
+  );
+  return addresses.map(({ address, port }) => ({ address, port }));
+}
+
+async function serveStandardFixture(work, certificates) {
+  const { context, receipt } = await standardWorkspace(work);
+  const environment = await receipt('environment');
+  requireEvidence(
+    uuid.test(environment.device) && ['full', 'hosted-observed'].includes(environment.target),
+  );
+  const relativeCerts = relative(work, await realpath(certificates));
+  requireEvidence(relativeCerts === 'certificates');
+  const fixtureId = randomUUID().replaceAll('-', '');
+  const base = {
+    context,
+    fixtureId,
+    environmentDevice: environment.device,
+    environmentSha256: await hash(join(work, 'environment.json')),
+  };
+  await writePrivate(join(work, 'fixture-start.json'), { scope: 'fixture-start', ...base });
+  const { promise: stopped, resolve } = Promise.withResolvers();
+  let interrupted = false;
+  const stop = () => {
+    interrupted = true;
+    resolve();
+  };
+  process.once('SIGINT', stop);
+  process.once('SIGTERM', stop);
+  let fixture;
+  try {
+    fixture = await startFixture(
+      certificates,
+      fixturePort,
+      '127.0.0.1',
+      true,
+      true,
+      standardHttpsRoutes,
+      fixtureId,
+    );
+    if (interrupted) return;
+    const bindings = validateStandardFixture(
+      fixture.addresses(),
+      await readControl(fixturePort, '/runtime'),
+      fixtureId,
+    );
+    await writePrivate(join(work, 'fixture.json'), {
+      scope: 'fixture',
+      ...base,
+      bindings,
+      initialCounters: { requests: 0, connections: 0 },
+      rootSha256: await hash(join(certificates, 'ca.pem')),
+      leafSha256: await hash(join(certificates, 'server.pem')),
+    });
+    await stopped;
+  } finally {
+    try {
+      if (fixture) {
+        await fixture.close();
+        await writePrivate(join(work, 'fixture-stopped.json'), {
+          scope: 'fixture-stopped',
+          ...base,
+          closed: true,
+        });
+      }
+    } finally {
+      process.off('SIGINT', stop);
+      process.off('SIGTERM', stop);
+    }
+  }
+}
+
+export function standardPhaseLog(raw, pid, runId, fixtureId, phase) {
+  const boundMarker = '[BunnyIosStandardHttpsRun] ' + runId + ' ' + fixtureId + ' ' + phase;
+  const lines = [];
+  for (const line of raw.split(/\r?\n/).filter(Boolean)) {
+    const row = JSON.parse(line);
+    const message = row.eventMessage;
+    if (typeof message !== 'string' || !message.startsWith('[BunnyIosStandardHttps')) continue;
+    requireEvidence(row.processID === pid && !/[\r\n]/.test(message));
+    lines.push(message);
+  }
+  requireEvidence(
+    lines[0] === boundMarker &&
+      lines.filter((line) => line.startsWith('[BunnyIosStandardHttpsRun]')).length === 1,
+  );
+  return lines.join('\n') + '\n';
+}
+
+async function checkStandardFixture(work) {
+  const { receipt } = await standardWorkspace(work);
+  const fixture = await receipt('fixture');
+  validateStandardFixture(
+    fixture.bindings,
+    await readControl(fixturePort, '/runtime'),
+    fixture.fixtureId,
+  );
+}
+
+async function captureStandardWire(work, phase) {
+  requireEvidence(['before', 'after'].includes(phase));
+  const { context, receipt } = await standardWorkspace(work);
+  const launch = await receipt('prelaunch');
+  const stopped = await receipt('stopped-' + phase);
+  const fixture = await receipt('fixture');
+  const binding = {
+    prelaunchSha256: await hash(join(work, 'prelaunch.json')),
+    device: launch.device,
+    fixtureId: launch.fixtureId,
+  };
+  requireEvidence(
+    stopped.binding.prelaunchSha256 === binding.prelaunchSha256 &&
+      stopped.binding.device === binding.device &&
+      stopped.binding.fixtureId === binding.fixtureId &&
+      fixture.fixtureId === binding.fixtureId &&
+      fixture.environmentDevice === binding.device,
+  );
+  const raw = join(work, phase + '.ndjson');
+  requireEvidence((await stat(raw)).size <= 1024 * 1024 && (await realpath(raw)) === raw);
+  const log = standardPhaseLog(
+    await readFile(raw, 'utf8'),
+    stopped.pid,
+    context.runId,
+    fixture.fixtureId,
+    phase,
+  );
+  const wire = await readControl(fixturePort, '/runtime');
+  requireEvidence(
+    wire.fixtureId === fixture.fixtureId &&
+      (await hash(join(work, 'certificates/server.pem'))) === fixture.leafSha256,
+  );
+  await writeFile(join(work, phase + '.log'), log, { flag: 'wx', mode: 0o600 });
+  await writePrivate(join(work, phase + '-wire.json'), {
+    ...wire,
+    scope: phase + '-wire',
+    context,
+    binding,
+    stoppedSha256: await hash(join(work, 'stopped-' + phase + '.json')),
+    logSha256: await hash(join(work, phase + '.log')),
+  });
+}
+
 if (import.meta.main) {
   try {
     if (process.argv.length === 3 && process.argv[2] === '--preflight') await preflight();
+    else if (process.argv.length === 5 && process.argv[2] === '--standard-fixture')
+      await serveStandardFixture(process.argv[3], process.argv[4]);
+    else if (process.argv.length === 5 && process.argv[2] === '--standard-wire')
+      await captureStandardWire(process.argv[3], process.argv[4]);
+    else if (process.argv.length === 4 && process.argv[2] === '--standard-check')
+      await checkStandardFixture(process.argv[3]);
     else {
       requireEvidence(process.argv.length === 2);
       const verdict = await qualify();

@@ -1,6 +1,8 @@
 import { execFileSync } from 'node:child_process';
+import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { expect, it } from 'vitest';
 import manifest from '../package.json';
 
@@ -8,14 +10,23 @@ const mobile = resolve(import.meta.dirname, '..');
 const resolveExpo = createRequire(import.meta.url).resolve;
 
 function readExpoOutput(binary: string, args: string[]) {
-  return JSON.parse(
-    execFileSync(process.execPath, [resolveExpo(binary), ...args, '--json'], {
-      cwd: mobile,
-      env: { ...process.env, EXPO_OFFLINE: '1', EXPO_NO_DOTENV: '1' },
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    }),
-  );
+  const directory = mkdtempSync(join(tmpdir(), 'bunny-expo-config-'));
+  const output = join(directory, 'output.json');
+  try {
+    const descriptor = openSync(output, 'wx', 0o600);
+    try {
+      execFileSync(process.execPath, [resolveExpo(binary), ...args, '--json'], {
+        cwd: mobile,
+        env: { ...process.env, EXPO_OFFLINE: '1', EXPO_NO_DOTENV: '1', EXPO_NO_GIT_STATUS: '1' },
+        stdio: ['ignore', descriptor, 'ignore'],
+      });
+    } finally {
+      closeSync(descriptor);
+    }
+    return JSON.parse(readFileSync(output, 'utf8'));
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 }
 
 it('resolves the standard Expo identity, minimum iOS and ATS settings', () => {

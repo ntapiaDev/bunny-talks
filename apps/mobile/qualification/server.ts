@@ -156,6 +156,7 @@ export async function startFixture(
   identityProfile = false,
   recordConnectionIds = false,
   runtimeRoutes?: ReadonlyMap<string, string>,
+  fixtureId?: string,
 ) {
   const controls = new Map<string, Control>();
   const connectionIds = new WeakMap<Socket, number>();
@@ -222,6 +223,7 @@ export async function startFixture(
     requestComplete?: boolean;
     processed?: boolean;
     offeredLimitPlusOne?: boolean;
+    encodedBelowLimit?: boolean;
     requestedRuntimeCoding?: boolean;
     ambientFixtureCookieMatches?: boolean;
     responseFixtureCookie?: 'none' | 'ambient' | 'native' | 'unexpected';
@@ -511,6 +513,14 @@ export async function startFixture(
           ? 'Content-Length: 3\r\n\r\n{}'
           : 'Transfer-Encoding: chunked\r\n\r\n2\r\n{}\r\n0\r\n\r\n';
       res.socket!.end('HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 2\r\n' + framing);
+    } else if (runtimeRoute && path === '/standard-gzip-limit-plus-one') {
+      const decoded = exactJson + ' ';
+      const encoded = gzipSync(decoded);
+      event.offeredLimitPlusOne = Buffer.byteLength(decoded) === 1_048_577;
+      event.encodedBelowLimit = encoded.length < 1_048_576;
+      res.setHeader('Content-Encoding', 'gzip');
+      res.setHeader('Content-Length', encoded.length);
+      res.end(encoded);
     } else if (path === '/gzip' || path === '/oversize') {
       res.setHeader('Content-Encoding', 'gzip');
       res.end(
@@ -727,12 +737,12 @@ export async function startFixture(
   });
   const control = createHttpServer((req, res) => {
     res.setHeader('Content-Type', 'application/json');
-    if (req.method === 'POST' && req.url === '/reset') {
+    if (!fixtureId && req.method === 'POST' && req.url === '/reset') {
       events.length = 0;
       res.end('{}');
     } else if (req.method === 'GET' && req.url === '/events') res.end(JSON.stringify(events));
     else if (runtimeRoutes && req.method === 'GET' && req.url === '/runtime')
-      res.end(JSON.stringify({ overflow, events, connections }));
+      res.end(JSON.stringify({ fixtureId, overflow, events, connections }));
     else res.writeHead(404).end('{}');
   });
   const close = async () => {
@@ -779,7 +789,10 @@ export async function startFixture(
     await close();
     throw error;
   }
-  return { close };
+  return {
+    close,
+    addresses: () => [...servers, control, stalledTls].map((server) => server.address()),
+  };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

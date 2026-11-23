@@ -7,9 +7,14 @@ import {
 } from '../src/infrastructure/http/application-http';
 import type { ApplicationHttpsModule } from '../src/infrastructure/http/native-https-transport';
 import { createNativeHttpsTransport } from '../src/infrastructure/http/native-https-transport';
-import type { Destination, Probe, ProbeDiagnostic } from './ios-libcurl-scenarios';
+import type { ProbeDiagnostic } from './ios-libcurl-diagnostics';
 import {
   diagnosticProbe,
+  probeDiagnosticCodes,
+  transportFailures,
+} from './ios-libcurl-diagnostics';
+import type { Destination, Probe } from './ios-libcurl-scenarios';
+import {
   fixtureByteValues,
   fixturePort,
   fixturePost,
@@ -21,10 +26,8 @@ import {
   memoryCases,
   plan,
   prefix,
-  probeDiagnosticCodes,
   probes,
   runtimeProfile,
-  transportFailures,
 } from './ios-libcurl-scenarios';
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));

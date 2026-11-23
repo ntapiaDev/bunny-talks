@@ -112,11 +112,14 @@ def run_command(command, *, cwd, timeout, output=None, capture=False, merge_outp
 
 
 class RuntimeRun:
-    def __init__(self, scratch, report_path, env, command=run_command):
+    def __init__(self, scratch, report_path, env, command=run_command, *, device_name=DEVICE_NAME,
+                 bundle_id=BUNDLE_ID):
         self.scratch = scratch
         self.report_path = report_path
         self.env = env
         self.command = command
+        self.device_name = device_name
+        self.bundle_id = bundle_id
         self.device_set = scratch / "simulators"
         self.creation_attempted = False
         self.device = None
@@ -186,10 +189,10 @@ class RuntimeRun:
     def sim(self, *args, **kwargs):
         return self.call("xcrun", "simctl", "--set", str(self.device_set), *args, **kwargs)
 
-    def verify_toolchain(self):
-        require(self.env.get("RUNNER_ENVIRONMENT") == "github-hosted"
+    def verify_toolchain(self, *, require_hosted=True):
+        require(not require_hosted or (self.env.get("RUNNER_ENVIRONMENT") == "github-hosted"
                 and self.env.get("GITHUB_REPOSITORY") == "ntapiaDev/bunny-talks"
-                and self.env.get("GITHUB_RUN_ATTEMPT") == "1", "runner-not-approved")
+                and self.env.get("GITHUB_RUN_ATTEMPT") == "1"), "runner-not-approved")
         forbidden = {
             "BUNNY_IOS_HTTPS_QUALIFICATION", "XCODE_XCCONFIG_FILE", "ENTRY_FILE",
             "EXTRA_PACKAGER_ARGS", "BUNDLE_COMMAND", "SKIP_BUNDLING",
@@ -346,13 +349,13 @@ class RuntimeRun:
         require(app.is_dir() and not app.is_symlink(), "app-missing")
         with (app / "Info.plist").open("rb") as handle:
             info = plistlib.load(handle)
-        require(info.get("CFBundleIdentifier") == BUNDLE_ID, "bundle-id-mismatch")
+        require(info.get("CFBundleIdentifier") == self.bundle_id, "bundle-id-mismatch")
         executable = app / EXECUTABLE
         bundle = app / "main.jsbundle"
         require(info.get("CFBundleExecutable") == EXECUTABLE and executable.is_file()
                 and not executable.is_symlink(), "app-executable-invalid")
         require(bundle.is_file() and not bundle.is_symlink(), "hermes-bundle-missing")
-        return {"bundleId": BUNDLE_ID, "executableSha256": digest(executable),
+        return {"bundleId": self.bundle_id, "executableSha256": digest(executable),
                 "hermesBundleSha256": digest(bundle)}
 
     def devices(self):
@@ -366,7 +369,7 @@ class RuntimeRun:
         require(self.devices() == [], "device-set-not-empty")
         # Cleanup can recover a created device even if the create command never returns its UUID.
         self.creation_attempted = True
-        device = self.sim("create", DEVICE_NAME, DEVICE_TYPE, RUNTIME, timeout=60,
+        device = self.sim("create", self.device_name, DEVICE_TYPE, RUNTIME, timeout=60,
                           code="simulator-create-failed", timeout_code="simulator-create-timeout",
                           capture=True).output
         require(re.fullmatch(UUID, device), "simulator-uuid-unavailable")
@@ -493,14 +496,14 @@ class RuntimeRun:
         if not self.process_running():
             already_observed = self.stages["processStability"]["verdict"] == "PASS"
             raise StageError("process-already-exited", verdict="FAIL" if already_observed else "NOT_RUN")
-        self.sim("terminate", self.device, BUNDLE_ID, code="stop-refused")
+        self.sim("terminate", self.device, self.bundle_id, code="stop-refused")
         for _ in range(5):
             if not self.process_running():
                 return
             time.sleep(1)
         raise StageError("process-still-running")
 
-    def cleanup(self):
+    def cleanup_device(self):
         shutdown_error = None
         if self.creation_attempted:
             # Reuse the bounded cleanup inventory before mutating the device.
@@ -511,7 +514,7 @@ class RuntimeRun:
             require(len(rows) <= 1, "device-set-ownership-unconfirmed")
             for row in rows:
                 device = row["udid"]
-                require(row["name"] == DEVICE_NAME and re.fullmatch(UUID, device)
+                require(row["name"] == self.device_name and re.fullmatch(UUID, device)
                         and (self.device is None or device == self.device), "device-set-ownership-unconfirmed")
                 if preparation_failed:
                     self.evidence["simulatorStateAfterFailure"] = simulator_state(row.get("state"))
@@ -523,6 +526,10 @@ class RuntimeRun:
                 self.sim("delete", device, code="simulator-delete-failed", timeout=30)
             require(self.devices() == [], "simulator-still-present")
             self.evidence["simulatorRemoved"] = True
+        return shutdown_error
+
+    def cleanup(self):
+        shutdown_error = self.cleanup_device()
         shutil.rmtree(self.scratch)
         require(not self.scratch.exists(), "scratch-still-present")
         if shutdown_error is not None:

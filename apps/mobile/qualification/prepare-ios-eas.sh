@@ -90,7 +90,7 @@ python3 "$native/verify_xcframeworks.py" archive "$native/vendor/xcframeworks.zi
 cp "apps/mobile/.eas/build/$profile.yml" "$mobile/.eas/build/"
 if [[ "$runtime" == 1 ]]; then
   entry=qualification/ios-libcurl-runtime-entry.tsx
-  cp apps/mobile/qualification/{ios-libcurl-runtime-entry.tsx,ios-libcurl-scenarios.ts,server.ts,certificates.sh,run-ios-libcurl-runtime.mjs,verify-ios-libcurl-runtime.mjs,inspect-ios-libcurl-runtime.py,with-ios-libcurl-link-map.cjs} \
+  cp apps/mobile/qualification/{ios-libcurl-runtime-entry.tsx,ios-libcurl-scenarios.ts,ios-libcurl-diagnostics.ts,server.ts,certificates.sh,run-ios-libcurl-runtime.mjs,verify-ios-libcurl-runtime.mjs,inspect-ios-libcurl-runtime.py,with-ios-libcurl-link-map.cjs} \
     "$mobile/qualification/"
   mkdir -p "$mobile/src/infrastructure/http" "$stage/experiments/libcurl-single-emission"
   cp apps/mobile/src/infrastructure/http/{application-http,native-https-transport}.ts "$mobile/src/infrastructure/http/"

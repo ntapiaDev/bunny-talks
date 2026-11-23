@@ -1,17 +1,23 @@
 import process from 'node:process';
 
+import { diagnosticProbe, probeDiagnosticCodes } from './ios-libcurl-diagnostics.ts';
 import {
-  diagnosticProbe,
   interruptions,
   localCases,
   memoryCases,
   memoryPhases,
   plan,
   prefix,
-  probeDiagnosticCodes,
   probes,
   runtimeProfile,
   runtimeRoutes,
+  standardHttpsBefore,
+  standardHttpsLocalCases,
+  standardHttpsMarker,
+  standardHttpsPlan,
+  standardHttpsProbes,
+  standardHttpsReady,
+  standardHttpsRoutes,
 } from './ios-libcurl-scenarios.ts';
 
 const marker = '[BunnyIosCurlRuntime] ';
@@ -31,7 +37,36 @@ const requireEvidence = (condition) => {
   if (!condition) invalid();
 };
 
-export function readAppLog(log) {
+const historical = {
+  marker,
+  ready,
+  plan,
+  probes,
+  localCases,
+  interruptions,
+  memoryCases,
+  routes: runtimeRoutes,
+};
+const standard = {
+  marker: standardHttpsMarker,
+  ready: standardHttpsReady,
+  plan: standardHttpsPlan,
+  probes: standardHttpsProbes,
+  localCases: standardHttpsLocalCases,
+  interruptions,
+  memoryCases: [],
+  routes: standardHttpsRoutes,
+};
+const beforeTrust = {
+  ...standard,
+  plan: [standardHttpsBefore.id],
+  probes: [standardHttpsBefore],
+  localCases: [],
+  interruptions: [],
+};
+
+export function readAppLog(log, profile = historical) {
+  const { marker, ready, plan, interruptions, memoryCases } = profile;
   const lines = [];
   const intervals = new Map();
   let current;
@@ -148,6 +183,7 @@ const optionalFlags = [
   'requestComplete',
   'processed',
   'offeredLimitPlusOne',
+  'encodedBelowLimit',
   'configuredOversizeLength',
   'requestedRuntimeCoding',
   'contentTypeIsJson',
@@ -156,7 +192,7 @@ const optionalFlags = [
   'ambientFixtureCookieMatches',
 ];
 
-function readWire(wire) {
+function readWire(wire, routes) {
   requireEvidence(
     wire &&
       wire.overflow === false &&
@@ -225,7 +261,7 @@ function readWire(wire) {
       requireEvidence(row.path === '' && row.method === '' && row.httpVersion === undefined);
     else
       requireEvidence(
-        runtimeRoutes.has(row.path) &&
+        routes.has(row.path) &&
           ['GET', 'POST', 'DELETE'].includes(row.method) &&
           row.httpVersion === '1.1' &&
           ['absent', 'identity', 'gzip', 'stacked', 'other'].includes(row.responseCoding) &&
@@ -346,7 +382,13 @@ function memoryEvidence(app, samples) {
   return result;
 }
 
-export function evaluateRuntime(log, wire, samples, { requireProbeDiagnostic = false } = {}) {
+export function evaluateRuntime(
+  log,
+  wire,
+  samples,
+  { requireProbeDiagnostic = false, profile = historical, trustedAfter = false } = {},
+) {
+  const { plan, probes, localCases, interruptions, memoryCases, routes } = profile;
   const checks = {};
   let evidence;
   let rss = null;
@@ -354,7 +396,7 @@ export function evaluateRuntime(log, wire, samples, { requireProbeDiagnostic = f
     checks[id] = { verdict, reason };
   };
   try {
-    const app = readAppLog(log);
+    const app = readAppLog(log, profile);
     evidence = { application: app.lines, events: [], connections: [] };
     record(
       'application',
@@ -372,7 +414,7 @@ export function evaluateRuntime(log, wire, samples, { requireProbeDiagnostic = f
     if (wire == null) {
       record('server', 'NOT_RUN', 'fixture-evidence-missing');
     } else {
-      const { events, connections } = readWire(wire);
+      const { events, connections } = readWire(wire, routes);
       evidence.events = events;
       evidence.connections = [...connections.values()];
       const used = new Set();
@@ -457,7 +499,9 @@ export function evaluateRuntime(log, wire, samples, { requireProbeDiagnostic = f
               phase,
               rejected,
               requests.length > 0 || events.some((row) => row.destination === spec.destination),
-              checks['tls-trusted-other-port']?.verdict === 'PASS',
+              profile === beforeTrust
+                ? trustedAfter
+                : checks['tls-trusted-other-port']?.verdict === 'PASS',
             );
           }
           const [row] = requests;
@@ -481,6 +525,12 @@ export function evaluateRuntime(log, wire, samples, { requireProbeDiagnostic = f
           )
             return 'FAIL';
           if (spec.wire === 'complete' && (!row.headersSent || !row.finished)) return 'FAIL';
+          if (
+            profile === standard &&
+            spec.id === 'gzip-oversize' &&
+            (row.offeredLimitPlusOne !== true || row.encodedBelowLimit !== true)
+          )
+            return { verdict: 'NOT_RUN', reason: 'decoded-boundary-unconfirmed' };
           if (
             spec.id === 'post-body' &&
             (row.requestComplete !== true ||
@@ -526,10 +576,25 @@ export function evaluateRuntime(log, wire, samples, { requireProbeDiagnostic = f
         verify(test.id, (phase) => {
           if (phase.stop === undefined || phase.slots === undefined) return 'NOT_RUN';
           const cancelReading = test.id === 'cancel-reading';
-          if (cancelReading && phase.slots < phase.stop)
+          if ((cancelReading || profile === standard) && phase.slots < phase.stop)
             return { verdict: 'FAIL', reason: 'slots-recovery-before-stop' };
-          if (cancelReading && phase.slots > phase.stop + 1000)
+          if ((cancelReading || profile === standard) && phase.slots > phase.stop + 1000)
             return { verdict: 'FAIL', reason: 'slots-recovery-late' };
+          if (profile === standard && test.id === 'capacity') {
+            const active = events.filter((row) =>
+              [prefix + test.id, prefix + 'capacity-two'].includes(row.path),
+            );
+            if (
+              active.length !== 2 ||
+              !active.every(
+                (row) =>
+                  row.responseStartedAtMs !== null &&
+                  row.responseStartedAtMs < phase.stop &&
+                  connections.get(row.connectionId).closedAtMs >= phase.stop,
+              )
+            )
+              return 'FAIL';
+          }
           const paths = test.id === 'capacity' ? [test.id, 'capacity-two'] : [test.id];
           return paths.every((id) => {
             const rows = events.filter((row) =>
@@ -558,7 +623,7 @@ export function evaluateRuntime(log, wire, samples, { requireProbeDiagnostic = f
               conn.closedAtMs >= earliest &&
               conn.closedAtMs <= phase.stop + 1000 &&
               // Peer notification and slot recovery are timed independently for cancel-reading.
-              (cancelReading || conn.closedAtMs <= phase.slots + 100) &&
+              (cancelReading || profile === standard || conn.closedAtMs <= phase.slots + 100) &&
               (test.destination === 'stalled-tls' || (row.headersSent && row.method === 'GET'))
             );
           })
@@ -621,12 +686,14 @@ export function evaluateRuntime(log, wire, samples, { requireProbeDiagnostic = f
     }
     const diagnostic = app.intervals.get(diagnosticProbe)?.diagnostic;
     if (diagnostic) checks[diagnosticProbe].diagnostic = diagnostic;
-    rss = memoryEvidence(app, samples);
-    record(
-      'memory-rss',
-      rss ? 'PASS' : 'NOT_RUN',
-      rss ? 'phase-samples-collected' : 'phase-samples-missing',
-    );
+    if (memoryCases.length) {
+      rss = memoryEvidence(app, samples);
+      record(
+        'memory-rss',
+        rss ? 'PASS' : 'NOT_RUN',
+        rss ? 'phase-samples-collected' : 'phase-samples-missing',
+      );
+    }
   } catch {
     record('evidence', 'FAIL', 'invalid-evidence');
   }
@@ -639,16 +706,85 @@ export function evaluateRuntime(log, wire, samples, { requireProbeDiagnostic = f
   };
 }
 
+export function evaluateStandardRuntime(before, after, { cumulative = false } = {}) {
+  if (cumulative && before?.wire && after?.wire) {
+    const old = before.wire;
+    const current = after.wire;
+    if (
+      old.overflow !== false ||
+      current.overflow !== false ||
+      !['events', 'connections'].every(
+        (key) =>
+          Array.isArray(old[key]) &&
+          Array.isArray(current[key]) &&
+          JSON.stringify(current[key].slice(0, old[key].length)) === JSON.stringify(old[key]),
+      )
+    )
+      return { verdict: 'FAIL', reason: 'fixture-snapshots-diverged' };
+    const following = current.connections.slice(old.connections.length);
+    const oldClosures = old.connections.map((row) => row.closedAtMs);
+    if (
+      oldClosures.every(timestamp) &&
+      following.some((row) => row.acceptedAtMs < Math.max(...oldClosures))
+    )
+      return { verdict: 'FAIL', reason: 'fixture-phase-order' };
+    after = {
+      log: after.log,
+      wire: {
+        overflow: false,
+        events: current.events.slice(old.events.length),
+        connections: following,
+      },
+    };
+  }
+  const trusted = evaluateRuntime(after?.log ?? '', after?.wire, null, { profile: standard });
+  const untrusted = evaluateRuntime(before?.log ?? '', before?.wire, null, {
+    profile: beforeTrust,
+    trustedAfter: trusted.checks['identity-json']?.verdict === 'PASS',
+  });
+  const phase = ({ verdict, checks, evidence }, specs) => ({
+    verdict,
+    checks: Object.fromEntries(
+      Object.entries(checks).map(([id, row]) => {
+        const outcome = specs.find((spec) => spec.id === id)?.outcome;
+        const category = ['json', 'exact'].includes(outcome) ? 'success' : outcome;
+        return [id, row.verdict === 'PASS' && category ? { ...row, category } : row];
+      }),
+    ),
+    counters: {
+      requests: evidence?.events.filter((row) => row.httpVersion === '1.1').length ?? 0,
+      connections: evidence?.connections.length ?? 0,
+    },
+  });
+  const verdicts = [trusted.verdict, untrusted.verdict];
+  return {
+    verdict: verdicts.includes('FAIL')
+      ? 'FAIL'
+      : verdicts.every((v) => v === 'PASS')
+        ? 'PASS'
+        : 'NOT_RUN',
+    beforeTrust: phase(untrusted, [standardHttpsBefore]),
+    afterTrust: phase(trusted, standardHttpsProbes),
+  };
+}
+
 if (import.meta.main) {
   const { readFileSync } = await import('node:fs');
   try {
-    const [log, events, rss] = process.argv.slice(2);
+    const [log, events, rss, afterLog, afterEvents] = process.argv.slice(2);
     const read = (path) => (path === undefined ? null : JSON.parse(readFileSync(path, 'utf8')));
-    const report = evaluateRuntime(
-      log === undefined ? '' : readFileSync(log, 'utf8'),
-      read(events),
-      read(rss),
-    );
+    const report =
+      log === '--standard'
+        ? evaluateStandardRuntime(
+            { log: events && readFileSync(events, 'utf8'), wire: read(rss) },
+            { log: afterLog && readFileSync(afterLog, 'utf8'), wire: read(afterEvents) },
+            { cumulative: true },
+          )
+        : evaluateRuntime(
+            log === undefined ? '' : readFileSync(log, 'utf8'),
+            read(events),
+            read(rss),
+          );
     process.stdout.write(JSON.stringify(report, null, 2) + '\n');
     process.exitCode = report.verdict === 'PASS' ? 0 : report.verdict === 'FAIL' ? 1 : 2;
   } catch {

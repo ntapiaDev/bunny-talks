@@ -4,48 +4,8 @@ export const fixturePort = 29_443;
 export const runtimeProfile =
   'libcurl/8.23.0 OpenSSL/3.5.9 AppleSecTrust AsynchDNS HTTP/1.1 system-zlib';
 
-export const diagnosticProbe = 'length-conflict';
-export const transportFailures = ['response', 'network', 'timeout', 'size', 'redirect'] as const;
-export const probeDiagnosticCodes = {
-  native: [
-    'not-observed',
-    'bridge-rejected',
-    'unexpected',
-    'success',
-    'partial-body',
-    ...transportFailures,
-  ],
-  completion: [
-    'unavailable',
-    'unexpected',
-    'not-completed',
-    'weird-reply-before-headers',
-    'weird-reply-after-headers',
-    'write-error',
-    'receive-error',
-    'partial-file',
-    'timeout',
-    'ok',
-    'other',
-  ],
-  adapter: ['not-observed', 'success', 'partial-body', ...transportFailures],
-  client: [
-    'not-observed',
-    'unexpected',
-    'success',
-    'cancelled',
-    'configuration',
-    'request',
-    'status',
-    ...transportFailures,
-  ],
-  assertion: ['none', 'bridge', 'adapter', 'client', 'probe-evidence', 'slots'],
-} as const;
-export type ProbeDiagnostic = {
-  -readonly [Key in keyof typeof probeDiagnosticCodes]: (typeof probeDiagnosticCodes)[Key][number];
-};
-
 export type Method = 'GET' | 'POST' | 'DELETE';
+
 type Result =
   | 'json'
   | 'exact'
@@ -263,6 +223,65 @@ export const runtimeRoutes = new Map([
   [prefix + 'memory-two', '/curl-memory'],
   [prefix + 'memory-two-peer', '/curl-memory'],
 ]);
+
+const standardProbeIds = [
+  'identity-json',
+  'tls-trusted-other-port',
+  'tls-unknown-ca',
+  'tls-wrong-host',
+  'post-body',
+  'redirect-get-302-same',
+  'redirect-post-307-host',
+  'redirect-post-308-http',
+  'cut-post-before',
+  'cut-post-after',
+  'retry-post-503',
+  'gzip-exact',
+  'gzip-oversize',
+  'length-short',
+  'chunked-incomplete',
+  'gzip-truncated',
+  'gzip-crc',
+  'coding-other',
+  'auth-challenge',
+  'cookie-fetch-baseline',
+  'cookie-fetch-seed',
+  'cookie-fetch-probe',
+  'cookie-native-probe',
+  'cookie-native-set',
+  'cookie-native-probe-again',
+  'cookie-fetch-after',
+  'standard-json',
+] as const;
+
+export const standardHttpsMarker = '[BunnyIosStandardHttps] ';
+export const standardHttpsReady = 'READY ApplicationHttps Release Hermes';
+export const standardHttpsLocalCases = ['direct-http', 'expired-before'] as const;
+export const standardHttpsProbes = standardProbeIds.map((id) => {
+  const spec = probes.find((item) => item.id === id);
+  if (!spec) throw new Error('Missing standard HTTPS scenario');
+  return spec;
+});
+export const standardHttpsBefore = {
+  ...standardHttpsProbes[0]!,
+  outcome: 'network',
+  wire: 'reject',
+} satisfies Probe;
+export const standardHttpsPlan = [
+  ...standardHttpsProbes.slice(0, -1).map(({ id }) => id),
+  ...standardHttpsLocalCases,
+  ...interruptions.map(({ id }) => id),
+  'standard-json',
+];
+export const standardHttpsRoutes = new Map(
+  [...runtimeRoutes].filter(
+    ([path]) =>
+      standardHttpsPlan.some((id) => path === prefix + id) ||
+      [prefix + 'capacity-two', prefix + 'capacity-refused'].includes(path),
+  ),
+);
+standardHttpsRoutes.set(prefix + 'direct-http', '/json');
+standardHttpsRoutes.set(prefix + 'gzip-oversize', '/standard-gzip-limit-plus-one');
 
 export const fixturePost = '{"message":"fixture 🐰"}';
 export const incompletePost = 'x'.repeat(256 * 1024);

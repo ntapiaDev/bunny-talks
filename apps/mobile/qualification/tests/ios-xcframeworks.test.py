@@ -113,6 +113,17 @@ class PackageTest(unittest.TestCase):
                 source = verification.read_zip(archive)
                 verification.files_from_archive(source, verification.sha256(source))
 
+    def test_refuse_malformed_zip_and_unexpected_members_even_with_matching_test_pin(self):
+        malformed = b"not a ZIP"
+        with self.assertRaises(zipfile.BadZipFile):
+            verification.files_from_archive(malformed, verification.sha256(malformed))
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as archive:
+            archive.writestr("unexpected.tar", b"fixture")
+        source = buffer.getvalue()
+        with self.assertRaisesRegex(verification.VerificationError, "unexpected ZIP inventory"):
+            verification.files_from_archive(source, verification.sha256(source))
+
     def test_install_refuses_missing_and_altered_zip_before_creating_vendor(self):
         with tempfile.TemporaryDirectory() as root:
             local_script = Path(root) / script.name
