@@ -88,12 +88,12 @@ class CommandResult:
     output: str = ""
 
 
-def run_command(command, *, cwd, timeout, output=None, capture=False, merge_output=False):
+def run_command(command, *, cwd, timeout, output=None, capture=False, merge_output=False, env=None):
     # Tool output stays private. A process group also contains children on cancellation.
     with (output.open("w+b") if output else tempfile.TemporaryFile()) as stream:
         with subprocess.Popen(command, cwd=cwd, stdin=subprocess.DEVNULL, stdout=stream,
                               stderr=subprocess.STDOUT if merge_output else subprocess.DEVNULL,
-                              start_new_session=True) as child:
+                              start_new_session=True, env=env) as child:
             try:
                 child.wait(timeout)
             except (Interrupted, subprocess.TimeoutExpired):

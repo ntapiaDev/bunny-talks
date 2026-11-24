@@ -470,3 +470,42 @@ Les doubles de commandes et fixtures simulées ont vérifié l’ordre des porte
 La correction retire les déclarations de PID, de fixture joignable et de nettoyage qui valaient auparavant comme preuves isolées. Elle réutilise le worker C1 et le pilote libcurl sans dépendance ajoutée. Le code de qualification reste hors du graphe standard. Le coût d’exécution de Bunny Talks et la taille de son bundle standard ne changent pas par ces sources. La taille et la durée des deux builds de qualification restent à mesurer. En exécution Apple, le coût est limité à un build par application après le contrôle peu coûteux du laboratoire. En maintenance, le même serveur et les mêmes 35 scénarios restent la référence et les reçus remplacent le rapprochement manuel des phases. La consolidation générale et le cas historique du tube nommé restent hors de la correction.
 
 Pour un premier run de **faisabilité GitHub**, autoriser distinctement la révision complète corrigée, l’inventaire de l’export, la copie du ZIP, le job et ses seules actions de détection, boot, écoute loopback et nettoyage. Pour un premier **run C2-B avec la candidate**, approuver également la frontière d’egress et ses preuves, ou décider en revue d’un autre périmètre de preuve avant d’adapter les portes. Approuver la chaîne, les coûts, les deux compilations, les destinataires du rapport, les deux phases de la candidate et la procédure d’arrêt. La copie locale originale du ZIP est préservée. L’artefact Actions `14723035221` expire, selon l’annonce, le 28 novembre 2026 à 20 h 53, heure de Paris. Aucune publication durable ou reconstruction n’est approuvée. Toutes les observations Apple de cette correction restent `NOT_RUN`.
+
+### 4.5B2C4-C2-B1 — préparation du run court de faisabilité Apple
+
+La correction locale C2-B0 examinée à `9533f4c938c4b7540d479ed8a38744d11ee57767` est acceptée dans son périmètre ; C1 et C2-A restent acceptés. Le [workflow manuel C2-B1](../../.github/workflows/ios-hosted-feasibility.yml) prépare une étude distincte, sans autoriser son lancement ni une qualification HTTPS. Il requiert une révision complète qui contient le workflow et son [pilote](../../apps/mobile/scripts/run-ios-hosted-feasibility.py), ainsi qu'une empreinte d'inventaire approuvée séparément. Le SHA fourni doit être identique à `github.sha` et au commit retourné par checkout ; le dépôt doit être `ntapiaDev/bunny-talks`, le runner hébergé et la tentative la première. Le job est borné à 20 minutes ; une alarme de 12 minutes réserve du temps au nettoyage, sans relance automatique. La restriction à une étude relève de la décision humaine : une nouvelle exécution manuelle distincte reste techniquement possible.
+
+Le pilote télécharge le tarball GitHub adressé par ce SHA et en refuse les liens, chemins dangereux et fichiers inhabituels. Il normalise les modes des fichiers à `0644` ou `0755` selon leur bit exécutable, puis vérifie l'inventaire C2 (chemins, modes, SHA-256 des octets) contre l'empreinte approuvée indépendamment. Il compare aussi cet inventaire au checkout, hors métadonnées `.git`. Le jeton GitHub n'est transmis qu'aux deux commandes `gh api` d'approvisionnement ; les processus Apple, certificats, fixture et observation reçoivent un environnement limité sans identifiant d'authentification.
+
+Après publication de la révision corrigée, l'opérateur renseigne ci-dessous son SHA complet, obtient son tarball depuis GitHub et examine l'export. Le calcul utilise le pilote de cette révision exportée ; l'extracteur local doit être la version revue de C2-B1. Le rapprochement du SHA publié, du tarball et de l'empreinte doit être revu séparément avant d'autoriser un run. Une empreinte calculée avant le commit final ne vaut pas pour la révision définitive :
+
+```bash
+reviewed_sha='<SHA complet à examiner>'
+export_dir=$(mktemp -d /tmp/bunny-reviewed-export.XXXXXXXX)
+trap 'rm -rf "$export_dir"' EXIT
+gh api "repos/ntapiaDev/bunny-talks/tarball/$reviewed_sha" > "$export_dir/source.tar.gz"
+python3 -IB - "$export_dir/source.tar.gz" "$export_dir/source" <<'PY'
+import importlib.util
+from pathlib import Path
+import sys
+spec = importlib.util.spec_from_file_location('feasibility', 'apps/mobile/scripts/run-ios-hosted-feasibility.py')
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+module.export_source(Path(sys.argv[1]), Path(sys.argv[2]))
+export = Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location('published_feasibility', export / 'apps/mobile/scripts/run-ios-hosted-feasibility.py')
+published = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(published)
+print(published.c2.tree_digest(published.c2.manifest(export)))
+PY
+```
+
+Ne pas enregistrer le jeton dans le dépôt ou le rapport ; utiliser une authentification locale déjà configurée si disponible. L'exemple ne constitue pas une approbation. L'artefact Actions `14723035221` fournit le ZIP dont l'empreinte imposée est `57908367212fb83b17b830e1aa69c0e4282e7afbb4fd368294943216f625d841` ; son indisponibilité ou un écart interrompt le run avant le simulateur. Le staging réutilise les deux copies C2 et leurs contrôles, sans génération Expo, CocoaPods ou compilation.
+
+La chaîne C1 est vérifiée, puis `hosted-feasibility` crée et démarre un unique simulateur dans son jeu privé. Le script de certificats factices et la fixture C2 sont réutilisés ; les sept sockets IPv4 loopback sont vérifiées dans le processus de fixture et le contrôle local doit répondre. Les commandes de lecture seule sondent les interfaces, routes, sockets et l'énumération des interfaces de capture ; leur disponibilité ne démontre ni l'accès effectif à une capture de paquets, ni une frontière d'egress. Aucune interface ni règle de pare-feu n'est modifiée. Le processus de fixture, le simulateur et les répertoires temporaires sont nettoyés ; le checkout éphémère est vidé dans une étape finale. Les sorties d'outils, certificats, clés, UUID et chemins restent hors du rapport. Un arrêt forcé du runner ou une panne de plateforme peut interrompre le nettoyage ou la publication : le job et son rapport ne doivent alors pas être considérés comme une preuve de nettoyage.
+
+Le rapport compact a le scope `ios-hosted-feasibility-c2-b1` et sépare révision, export, ZIP et staging, chaîne, simulateur, fixture, observation et nettoyage. `PASS` signifie seulement que ces opérations limitées et leur nettoyage ont réussi. `fullConfinement`, `nativeEquivalence`, `candidateRuntime` et `standardHttpsRuntime` restent `NOT_RUN`, y compris en cas de succès. La compatibilité effective de `/tmp` et `/private/tmp`, les droits d'observation et la disponibilité du ZIP et de la chaîne restent à observer sur le runner Apple. Aucun run Apple C2-B1 n'a été exécuté pendant cette préparation.
+
+**Contrôles locaux C2-B1.** Dix tests ciblés couvrent notamment les exports refusés, les divergences de checkout, les refus de SHA et de ZIP, les échecs de boot et de fixture simulés, les interruptions et le nettoyage. La fixture et ses sept écoutes ont également été exercées sur Linux avec plateforme Node simulée et sortie réseau limitée à loopback ; cela ne prouve pas leur fonctionnement sur macOS. La suite C2-B0 a donné douze succès et un cas ZIP réel optionnel ignoré ; le ZIP réel a été vérifié séparément. La syntaxe YAML, Bash et Python du workflow a été vérifiée. Aucun nettoyage historique n’a été exécuté : C1, C2 et leurs preuves restent utiles.
+
+**Correction finale C2-B1.** Le test ciblé vérifie la présence d'un jeton factice dans la seule commande d'approvisionnement et son absence des environnements transmis aux commandes Apple, aux certificats et à la fixture. Les contrôles C1 et C2 correspondants restent applicables ; aucune exécution Apple supplémentaire n'a été effectuée.
