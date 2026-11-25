@@ -95,6 +95,22 @@ class FeasibilityTest(unittest.TestCase):
                 self.run.start_fixture()
         self.assertEqual(error.exception.record['code'], 'fixture-start-failed')
 
+    def test_openssl_four_falls_back_to_homebrew_three(self):
+        self.run.scratch = self.root
+        self.run.work = self.root / 'work'
+        binary = self.root / 'openssl@3/bin/openssl'
+        binary.parent.mkdir(parents=True)
+        binary.touch()
+        with patch.object(self.run, 'command',
+                          side_effect=['OpenSSL 4.0.0', str(binary.parent.parent), 'OpenSSL 3.5.0', '']) as command, \
+             patch.object(f.subprocess, 'Popen', side_effect=OSError):
+            with self.assertRaises(OSError):
+                self.run.start_fixture()
+        self.assertEqual(command.call_args_list[1].args[0], ('brew', '--prefix', 'openssl@3'))
+        self.assertEqual(command.call_args_list[2].args[0], ('openssl', 'version'))
+        self.assertEqual(command.call_args_list[3].args[0][0], 'bash')
+        self.assertEqual(self.run.process_env['PATH'].split(os.pathsep)[0], str(binary.parent))
+
     @unittest.skipUnless(shutil.which('node') and shutil.which('lsof') and shutil.which('openssl'),
                          'local fixture prerequisites unavailable')
     def test_real_loopback_fixture_and_control_with_simulated_platform(self):

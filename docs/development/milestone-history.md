@@ -1,3 +1,7 @@
+# Jalon 4.5B2C4-C2-B — qualification fonctionnelle de la candidate iOS acceptée
+
+La revue humaine accepte la dixième campagne, run `45735483847`, job `139627576081`, révision `82d3f00926d817c70e58752dba9057555fbcf3bf`. Les 35 scénarios et le nettoyage sont `PASS` pour la seule candidate Release sur iPhone 17 Simulator arm64, iOS 26.5, avec Hermes et le profil `hosted-observed`. L’observation réseau, le confinement intégral, l’équivalence native et le runtime HTTPS standard restent `NOT_RUN`. Les verdicts des campagnes précédentes sont conservés. [Rapport original](evidence/ios-https-candidate-45735483847/report.json) · [Clôture, garanties et historique des tentatives](native-https-foundation.md#clôture-humaine-de-45b2c4-c2-b)
+
 # Jalon 4.5B2C4-C1 — runtime initial de la Release iOS standard accepté
 
 - Le premier run `45241273024`, révision `983a9a721d0bfd0bbcd53ab711d9ad5a5ad605ae`, est `FAIL` au contrôle de révision (`approval-check-failed`). Les étapes suivantes, dont compilation et runtime, sont `NOT_RUN`. [Rapport de la première tentative](https://github.com/ntapiaDev/bunny-talks/actions/runs/45241273024/artifacts/14851138614)

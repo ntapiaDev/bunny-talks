@@ -660,7 +660,8 @@ async function serveStandardFixture(work, certificates) {
 export function standardPhaseLog(raw, pid, runId, fixtureId, phase) {
   const boundMarker = '[BunnyIosStandardHttpsRun] ' + runId + ' ' + fixtureId + ' ' + phase;
   const lines = [];
-  for (const line of raw.split(/\r?\n/).filter(Boolean)) {
+  for (const [index, line] of raw.split(/\r?\n/).filter(Boolean).entries()) {
+    if (index === 0 && line.startsWith('Filtering the log data using ')) continue;
     const row = JSON.parse(line);
     const message = row.eventMessage;
     if (typeof message !== 'string' || !message.startsWith('[BunnyIosStandardHttps')) continue;

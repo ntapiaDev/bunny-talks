@@ -3,12 +3,14 @@
 import argparse
 import hashlib
 import importlib.util
+from itertools import zip_longest
 import json
 import os
 import re
 import shlex
 import shutil
 import signal
+import struct
 import subprocess
 import sys
 import tarfile
@@ -45,12 +47,35 @@ inspection = load_support("standard_inspection", MOBILE / "scripts/inspect-ios-s
 vendor = load_support("xcframeworks", MOBILE / NATIVE / "verify_xcframeworks.py")
 require, StageError = c1.require, c1.StageError
 APP_IDS = {"standard": inspection.BUNDLE_ID, "candidate": inspection.CANDIDATE_BUNDLE_ID}
+CANDIDATE_SCOPE = "ios-https-candidate-only-c2-b"
 STAGES = ("revision", "archive", "staging", "environment", "fixture", "confinement", "nativeEquivalence",
           "installation", "candidateRuntime", "stop", "cleanup")
 BUILD_KEYS = ("executableSha256", "hermesBundleSha256", "podfileLockSha256", "linkMapSha256")
+CANDIDATE_RELEASE_KEYS = ("configuration", "platform", "architecture", "minimumOS", "ats",
+                          "qualificationFlagsResourcesAndDiagnostics", "linkedArchiveSha256")
 SOURCES = ("ApplicationHttpsModule.swift", "CurlHttpsTransport.swift", "ApplicationHttps.podspec",
            "Native/BunnyHttpsNative.c", "Native/BunnyHttpsNative.h", "Native/module.modulemap")
 OBJECTS = ("ApplicationHttpsModule.o", "CurlHttpsTransport.o", "BunnyHttpsNative.o")
+PATH_OPTIONS = ("-I", "-F", "-L", "-o", "-isystem", "-iquote", "-iframework", "-isysroot", "-sdk",
+                "-include", "-include-pch", "-resource-dir", "-module-cache-path", "-fmodules-cache-path",
+                "-ivfsoverlay", "-vfsoverlay", "-fmodule-map-file", "-emit-module-path",
+                "-emit-module-interface-path", "-emit-objc-header-path", "-serialize-diagnostics-path",
+                "-emit-dependencies-path", "-index-store-path", "-index-unit-output-path",
+                "-working-directory", "-primary-file")
+JOINED_PATH_OPTIONS = ("-I", "-F", "-L", "-isystem", "-iquote", "-iframework")
+EQUALS_PATH_OPTIONS = ("-fmodule-map-file", "-fmodules-cache-path", "-resource-dir")
+OPTION_VALUES = ("-D", "-U", "-target", "-module-name", "-swift-version")
+SECURITY_OPTIONS = ("-fstack-protector", "-fstack-protector-strong", "-fno-stack-protector", "-fstack-protector-all")
+FILELIST = "\0filelist:"
+OUTPUT_MAP = "\0output-file-map:"
+MODULE_MAP_DIGEST = "\0module-map-sha256:"
+TEMP_ROOT = Path("/tmp")
+PATH_COMPONENTS = frozenset(("Build", "Intermediates.noindex", "Products", "Release-iphonesimulator",
+                             "Pods", "Headers", "Private", "Public", "Target Support Files", "ApplicationHttps",
+                             "ApplicationHttps.build", "Pods.build", "Objects-normal", "arm64", "Native",
+                             "ModuleCache.noindex", "ExplicitPrecompiledModules", "SDKStatCaches.noindex"))
+PATH_EXTENSIONS = frozenset((".c", ".h", ".swift", ".modulemap", ".yaml", ".json", ".pcm", ".o", ".sdk", ".rsp"))
+DIAGNOSTIC_PATH_OPTIONS = ("-fdebug-compilation-dir", "-ffile-compilation-dir", "-working-directory")
 PORTS = range(29443, 29450)
 PHASES = ("before", "after")
 
@@ -118,7 +143,7 @@ def verify_archive(path):
     }
 
 
-def stage_pair(source, work, tree, archive, revision):
+def stage_pair(source, work, tree, archive, revision, *, candidate_only=False):
     require(hex_value(revision, 40), "reviewed-sha-mismatch")
     reference = manifest(source)
     require(hex_value(tree) and tree_digest(reference) == tree, "reviewed-tree-mismatch")
@@ -127,17 +152,19 @@ def stage_pair(source, work, tree, archive, revision):
     expected_app, expected_package = candidate_config(source)
     work.mkdir(mode=0o700)
     try:
-        for name in APP_IDS:
+        names = ("candidate",) if candidate_only else APP_IDS
+        for name in names:
             shutil.copytree(source, work / name, copy_function=shutil.copy2)
-        standard, candidate = (work / name for name in APP_IDS)
+        candidate = work / "candidate"
         for relative, value in ((CONFIG, expected_app), (PACKAGE, expected_package)):
             (candidate / relative).write_text(json.dumps(value, indent=2) + "\n")
-        require(manifest(standard) == reference and changed_files(reference, manifest(candidate)) == CHANGES,
+        require((candidate_only or manifest(work / "standard") == reference)
+                and changed_files(reference, manifest(candidate)) == CHANGES,
                 "unexpected-staging-delta")
         require(c1.read_json(candidate / CONFIG) == expected_app and c1.read_json(candidate / PACKAGE) == expected_package,
                 "candidate-source-identity")
-        for root in (standard, candidate):
-            mobile = root / MOBILE_RELATIVE
+        for name in names:
+            mobile = work / name / MOBILE_RELATIVE
             inspection.check_https_sources(mobile)
             for file in (inspection.CANDIDATE_ENTRY, "qualification/ios-libcurl-scenarios.ts"):
                 path = mobile / file
@@ -147,7 +174,7 @@ def stage_pair(source, work, tree, archive, revision):
         run_id = uuid.uuid4().hex
         context = {"runId": run_id, "treeSha256": tree, "revision": revision, "zipSha256": vendor.ZIP_SHA256}
         (work / OWNER).write_text(json.dumps(context))
-        return {**context, "changes": sorted(CHANGES), "bundleIds": APP_IDS}
+        return {**context, "changes": sorted(CHANGES), "bundleIds": {name: APP_IDS[name] for name in names}}
     except BaseException:
         shutil.rmtree(work)
         raise
@@ -170,16 +197,55 @@ def remove_workspace(work, context):
 def output_file_map(path, normalize):
     data = c1.read_json(path)
     require(isinstance(data, dict), "compile-evidence-incomplete", verdict="NOT_RUN")
-    return json.dumps({normalize(key): {kind: normalize(value) for kind, value in outputs.items()}
-                       for key, outputs in data.items()}, sort_keys=True)
+    result = {}
+    for key, outputs in data.items():
+        normalized = normalize(key)
+        require(normalized not in result and isinstance(outputs, dict)
+                and all(isinstance(value, str) for value in outputs.values()),
+                "compile-evidence-incomplete", verdict="NOT_RUN")
+        result[normalized] = {kind: normalize(value) for kind, value in outputs.items()}
+    return json.dumps(result, sort_keys=True)
+
+
+def path_operand(value, previous):
+    option, separator, operand = value.partition("=")
+    if separator and option in EQUALS_PATH_OPTIONS:
+        return option, option + "=", operand
+    for option in JOINED_PATH_OPTIONS:
+        if value.startswith((option + "/", option + "{")):
+            return option, option, value[len(option):]
+    return previous if previous in PATH_OPTIONS else None, "", value
+
+
+def preceding_option(args, index):
+    if not index:
+        return None
+    if index >= 3 and args[index - 1] == args[index - 3] == "-Xcc":
+        return args[index - 2]
+    return args[index - 1]
 
 
 def compile_commands(commands, root, derived):
-    roots = ((str(derived.resolve()), "{derived}"), (str(root.resolve()), "{source}"))
+    roots = ((derived.resolve(), "{derived}"), (root.resolve(), "{source}"))
+    temp_real = TEMP_ROOT.resolve()
+    spellings = []
+    for logical, (physical, label) in zip((derived, root), roots, strict=True):
+        spellings.append((physical, physical, label))
+        if logical.is_absolute() and logical != physical:
+            spellings.append((logical, physical, label))
+        if TEMP_ROOT != temp_real and physical.is_relative_to(temp_real):
+            spellings.append((TEMP_ROOT / physical.relative_to(temp_real), physical, label))
 
     def normalize(value):
-        for path, label in roots:
-            value = re.sub(re.escape(path) + r"(?=/|$)", lambda _: label, value)
+        path = Path(value)
+        if not path.is_absolute() or ".." in path.parts:
+            return value
+        for spelling, physical, label in spellings:
+            prefix = str(spelling)
+            if value == prefix or value.startswith(prefix + "/"):
+                if path.resolve().is_relative_to(physical):
+                    return label + value[len(prefix):]
+                return value
         return value
 
     def argument_file(value):
@@ -190,25 +256,47 @@ def compile_commands(commands, root, derived):
         return path
 
     def expand(args, depth=0):
-        require(depth <= 3 and isinstance(args, list) and args and all(isinstance(a, str) for a in args),
+        require(depth <= 3 and isinstance(args, list) and args
+                and all(isinstance(a, str) and "\0" not in a for a in args),
                 "compile-evidence-incomplete", verdict="NOT_RUN")
         output = []
-        for index, value in enumerate(args):
+        for value in args:
             if value.startswith("@"):
                 output.extend(expand(shlex.split(argument_file(value[1:]).read_text()), depth + 1))
-            elif index and args[index - 1] == "-filelist":
-                output.extend(normalize(line) for line in argument_file(value).read_text().splitlines())
-            elif index and args[index - 1] == "-output-file-map":
-                output.append(output_file_map(argument_file(value), normalize))
             else:
-                output.append(normalize(value))
+                output.append(value)
         return output
+
+    def invocation(raw):
+        args = expand(raw)
+        output, listed = [], []
+        for index, value in enumerate(args):
+            previous = preceding_option(args, index)
+            if value == "-Xcc":
+                output.append(value)
+            elif previous == "-filelist":
+                files = [normalize(line) for line in argument_file(value).read_text().splitlines()]
+                output.append(FILELIST + json.dumps(files))
+                listed.extend(files)
+            elif previous == "-output-file-map":
+                output.append(OUTPUT_MAP + output_file_map(argument_file(value), normalize))
+            elif previous in OPTION_VALUES:
+                output.append(value)
+            else:
+                option, prefix, operand = path_operand(value, previous)
+                normalized = normalize(operand)
+                if option == "-fmodule-map-file" and normalized != operand:
+                    file = argument_file(operand)
+                    normalized += MODULE_MAP_DIGEST + c1.digest(file)
+                output.append(prefix + normalized)
+        return output, listed
 
     require(set(commands) == {"swift", "c"}, "compile-evidence-incomplete", verdict="NOT_RUN")
     result = {}
     for language, rows in commands.items():
         require(isinstance(rows, list) and rows, "compile-evidence-incomplete", verdict="NOT_RUN")
-        result[language] = sorted(expand(row) for row in rows)
+        scanned = [invocation(row) for row in rows]
+        result[language] = sorted(argv for argv, _ in scanned)
         for argv in result[language]:
             require(not any("BUNNY_HTTPS_QUALIFICATION" in a or "BUNNY_IOS_HTTPS_QUALIFICATION" in a for a in argv),
                     "qualification-flags")
@@ -216,11 +304,149 @@ def compile_commands(commands, root, derived):
                     and any("iPhoneSimulator" in a for a in argv) and
                     any(re.fullmatch(r"-O(?:[1-3sz]|size)?", a) for a in argv),
                     "compile-evidence-incomplete", verdict="NOT_RUN")
-        flattened = [a for row in result[language] for a in row]
+        flattened = [a for argv, listed in scanned for a in (*argv, *listed)]
         needles = ("BunnyHttpsNative.c", "CURL_STATICLIB=1") if language == "c" else SOURCES[:2]
         require(all(any(a.endswith(needle) for a in flattened) for needle in needles),
                 "compile-evidence-incomplete", verdict="NOT_RUN")
     return result
+
+
+def object_fingerprints(path):
+    """Retain section and relocation fingerprints without publishing object contents."""
+    try:
+        if path.stat().st_size > 64 * 1024**2:
+            return {}
+        data = path.read_bytes()
+        magic, cpu, _, kind, count, length, _, _ = struct.unpack_from("<8I", data)
+        if (magic, cpu, kind) != (0xFEEDFACF, 0x0100000C, 1) or 32 + length > len(data):
+            return {}
+        position, result = 32, {}
+        for _ in range(count):
+            command, size = struct.unpack_from("<2I", data, position)
+            if size < 8 or position + size > 32 + length:
+                return {}
+            if command == 0x19 and size >= 72:  # LC_SEGMENT_64
+                sections = struct.unpack_from("<I", data, position + 64)[0]
+                if 72 + sections * 80 > size or len(result) + sections > 64:
+                    return {}
+                for index in range(sections):
+                    start = position + 72 + index * 80
+                    section, segment, _, length_bytes, offset, _, reloc, reloc_count, flags = struct.unpack_from(
+                        "<16s16s2Q5I", data, start)
+                    label = "/".join(value.rstrip(b"\0").decode("ascii") for value in (segment, section))
+                    if not re.fullmatch(r"__[A-Za-z0-9_]+/__[A-Za-z0-9_]+", label) or label in result:
+                        return {}
+                    row = {"size": length_bytes, "relocations": reloc_count}
+                    if (flags & 0xff) not in (1, 0x0c, 0x12):  # Zero-fill section types have no file data.
+                        if offset + length_bytes > len(data):
+                            return {}
+                        row["bytesSha256"] = hashlib.sha256(data[offset:offset + length_bytes]).hexdigest()
+                    if reloc_count:
+                        if reloc + 8 * reloc_count > len(data):
+                            return {}
+                        row["relocationsSha256"] = hashlib.sha256(data[reloc:reloc + 8 * reloc_count]).hexdigest()
+                    result[label] = row
+            position += size
+        return result if position == 32 + length else {}
+    except (OSError, struct.error, UnicodeError):
+        return {}
+
+
+def evidence_digest(value):
+    return hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
+
+
+def path_summary(value, option):
+    path, separator, content = value.partition(MODULE_MAP_DIGEST)
+    root, spelling, suffix = "external" if path.startswith("/") else "relative", None, path
+    for prefix, logical, form in (("{source}", "staging", None), ("{derived}", "derived-data", None),
+                                  ("/private/tmp", "temporary", "private-tmp"), ("/tmp", "temporary", "tmp")):
+        if path == prefix or path.startswith(prefix + "/"):
+            root, spelling, suffix = logical, form, path[len(prefix):]
+            break
+    components = [part for part in Path(suffix).parts if part in PATH_COMPONENTS][:8]
+    extension = Path(suffix).suffix
+    category = "other"
+    if option == "-fmodule-map-file" or extension == ".modulemap":
+        category = "module-map"
+    elif option in ("-module-cache-path", "-fmodules-cache-path") or "ModuleCache.noindex" in components:
+        category = "module-cache"
+    elif option in ("-isysroot", "-sdk"):
+        category = "sdk"
+    elif option in ("-I", "-F", "-L", "-isystem", "-iquote", "-iframework"):
+        category = "search-path"
+    elif root == "derived-data" or any(c in components for c in ("Intermediates.noindex", "Target Support Files")):
+        category = "generated"
+    elif extension in (".c", ".h", ".swift"):
+        category = "source"
+    summary = {"root": root, "underBuildRoot": root in ("staging", "derived-data"),
+               "category": category, "components": components, "suffixSha256": evidence_digest(suffix)}
+    if spelling:
+        summary["spelling"] = spelling
+    if extension in PATH_EXTENSIONS:
+        summary["extension"] = extension
+    if separator and hex_value(content):
+        summary["contentSha256"] = content
+    return summary
+
+
+def argument_summary(row, index):
+    if index >= len(row):
+        return {"kind": "absent"}
+    value = row[index]
+    previous = preceding_option(row, index)
+    if re.fullmatch(r"-O(?:[0-3sz]|size|none|unchecked)?|arm64-apple-ios16\.4(?:\.0)?-simulator", value):
+        return {"kind": "optimization" if value.startswith("-O") else "target", "value": value}
+    if value in SECURITY_OPTIONS:
+        return {"kind": "security-option", "option": value}
+    if value in (*PATH_OPTIONS, *OPTION_VALUES, "-filelist", "-output-file-map", "-Xcc"):
+        return {"kind": "option", "option": value}
+    summary = {"kind": "opaque", "sha256": evidence_digest(value)}
+    if value.startswith(FILELIST):
+        summary["kind"] = "filelist"
+    elif value.startswith(OUTPUT_MAP):
+        summary["kind"] = "output-file-map"
+    elif previous == "-target":
+        summary.update(kind="target", option=previous)
+    elif value.startswith(("-D_FORTIFY_SOURCE", "-fstack-protector", "-fno-stack-protector",
+                           "-fvisibility", "-fno-visibility")):
+        summary["kind"] = "security-option"
+    elif previous in ("-D", "-U") or value.startswith(("-D", "-U")):
+        summary.update(kind="macro", option=previous if previous in ("-D", "-U") else value[:2])
+    else:
+        option, _, path = path_operand(value, previous)
+        name, separator, operand = value.partition("=")
+        if not option and separator and name in DIAGNOSTIC_PATH_OPTIONS:
+            option, path = name, operand
+        if option or path.startswith(("/", "{source}", "{derived}")):
+            summary.update(kind="path", path=path_summary(path, option))
+            if option:
+                summary["option"] = option
+        elif value.startswith("-"):
+            summary["kind"] = "option"
+    return summary
+
+
+def command_difference(left, right):
+    rows = []
+    for index, (a, b) in enumerate(zip_longest(left, right, fillvalue=())):
+        if a == b:
+            continue
+        arguments = []
+        for position, (x, y) in enumerate(zip_longest(a, b)):
+            if x != y:
+                left_summary, right_summary = argument_summary(a, position), argument_summary(b, position)
+                delta = {"index": position, "standard": left_summary, "candidate": right_summary}
+                if "path" in left_summary and "path" in right_summary:
+                    delta["pathDifferences"] = [key for key in ("root", "spelling", "suffixSha256", "contentSha256")
+                                                if left_summary["path"].get(key) != right_summary["path"].get(key)]
+                arguments.append(delta)
+                if len(arguments) == 4:
+                    break
+        rows.append({"index": index, "arguments": arguments})
+        if len(rows) == 2:
+            break
+    return rows
 
 
 def compare_builds(standard, candidate):
@@ -232,33 +458,81 @@ def compare_builds(standard, candidate):
         require(set(evidence.get("nativeSources", {})) == set(SOURCES) and
                 all(map(hex_value, evidence["nativeSources"].values())) and evidence.get("commands") and
                 evidence.get("objects"), "native-evidence-incomplete", verdict="NOT_RUN")
-    for key in ("nativeSources", "commands"):
-        require(standard[key] == candidate[key], "native-input-or-command-mismatch")
-    for key in ("podfileLockSha256", "linkedArchiveSha256", "transportLinkSelection"):
+        commands = evidence["commands"]
+        require(isinstance(commands, dict) and set(commands) == {"c", "swift"} and all(
+            isinstance(rows, list) and rows and all(isinstance(row, list) and row and all(
+                isinstance(arg, str) for arg in row) for row in rows) for rows in commands.values()),
+            "compile-evidence-incomplete", verdict="NOT_RUN")
+    different_sources = [name for name in SOURCES if standard["nativeSources"][name] != candidate["nativeSources"][name]]
+    categories = ["sources"] if different_sources else []
+    categories.extend(language for language in ("c", "swift")
+                      if standard["commands"][language] != candidate["commands"][language])
+    if categories:
+        error = StageError("native-" + {"sources": "source", "c": "c-command", "swift": "swift-command"}[categories[0]]
+                           + "-mismatch")
+        error.record["comparison"] = {
+            "categories": categories, "differentSources": different_sources,
+            "builds": {name: {"sourceSha256": evidence["nativeSources"],
+                              "commands": {lang: {"sha256": evidence_digest(rows), "count": len(rows),
+                                                  "argumentCount": sum(map(len, rows))}
+                                           for lang, rows in evidence["commands"].items()}}
+                       for name, evidence in zip(APP_IDS, (standard, candidate), strict=True)},
+            "commandDifferences": {language: command_difference(standard["commands"][language],
+                                                                 candidate["commands"][language])
+                                   for language in categories if language != "sources"},
+        }
+        raise error
+    link_fields = ("podfileLockSha256", "linkedArchiveSha256", "transportLinkSelection")
+    for key in link_fields:
         left, right = standard["release"].get(key), candidate["release"].get(key)
         require(left and right, "native-link-evidence-incomplete", verdict="NOT_RUN")
-        require(left == right, "native-link-mismatch")
+    different_links = [key for key in link_fields if standard["release"][key] != candidate["release"][key]]
+    if different_links:
+        error = StageError("native-link-mismatch")
+        error.record["comparison"] = {"differentFields": different_links,
+                                      "builds": {name: {key: evidence_digest(evidence["release"][key])
+                                                        for key in link_fields}
+                                                 for name, evidence in zip(APP_IDS, (standard, candidate), strict=True)}}
+        raise error
     require(all(set(row["objects"]) == set(OBJECTS) and all(map(hex_value, row["objects"].values()))
                 for row in (standard, candidate)), "native-objects-unavailable", verdict="NOT_RUN")
-    require(standard["objects"] == candidate["objects"], "native-object-difference", verdict="NOT_RUN")
+    if standard["objects"] != candidate["objects"]:
+        error = StageError("native-object-difference", verdict="NOT_RUN")
+        different_objects = [name for name in OBJECTS if standard["objects"][name] != candidate["objects"][name]]
+        error.record["differentObjects"] = different_objects
+        error.record["comparison"] = {
+            name: {"objects": evidence["objects"],
+                   "commandsSha256": evidence_digest(evidence["commands"]),
+                   **{key: evidence["release"][key] for key in BUILD_KEYS}}
+            for name, evidence in zip(APP_IDS, (standard, candidate), strict=True)
+        }
+        for name, evidence in zip(APP_IDS, (standard, candidate), strict=True):
+            error.record["comparison"][name]["differingObjectSections"] = {
+                label: object_fingerprints(path) for label, path in evidence.get("objectPaths", {}).items()
+                if label in different_objects
+            }
+        raise error
     return {name: {"bundleId": APP_IDS[name], **{k: evidence["release"][k] for k in BUILD_KEYS}}
             for name, evidence in zip(APP_IDS, (standard, candidate), strict=True)}
 
 
-def inspect_build(workspace, derived, source_map, settings, compilation, provenance, *, name):
+def inspect_build(workspace, derived, source_map, settings, compilation, provenance, *, name, collect_objects=True):
     mobile = workspace / MOBILE_RELATIVE
     inspection.check_generated(mobile / "ios", bundle_id=APP_IDS[name], resources=False)
     release = inspection.inspect_release(derived, source_map, settings, provenance, mobile=mobile,
                                          bundle_id=APP_IDS[name], c2=True)
     commands = compile_commands(c1.read_json(compilation), workspace, derived)
+    evidence = {"release": release, "commands": commands,
+                "nativeSources": {name: c1.digest(mobile / NATIVE / name) for name in SOURCES}}
+    if not collect_objects:
+        return evidence
     files = {}
     for object_name in OBJECTS:
         matches = [p for p in derived.rglob(object_name) if
                    any(part == "ApplicationHttps.build" for part in p.parts)]
         require(len(matches) == 1, "native-objects-unavailable", verdict="NOT_RUN")
-        files[object_name] = c1.digest(matches[0])
-    return {"release": release, "commands": commands, "objects": files,
-            "nativeSources": {name: c1.digest(mobile / NATIVE / name) for name in SOURCES}}
+        files[object_name] = matches[0]
+    return {**evidence, "objectPaths": files, "objects": {name: c1.digest(path) for name, path in files.items()}}
 
 
 def private_file(work, name):
@@ -341,7 +615,7 @@ def boot_environment(work, context, network, *, hosted_feasibility=False, comman
     runner = simulator(work, context, command=command)
     if not hosted_feasibility:
         require_full(verify_confinement(network, work, context, window="before-boot"))
-    # The hosted feasibility profile only produces a laboratory receipt. Prebuild still requires full proof.
+    # A hosted laboratory receipt carries no authorization to compile by itself.
     runner.verify_toolchain(require_hosted=hosted_feasibility or os.environ.get("RUNNER_ENVIRONMENT") == "github-hosted")
     runner.find_runtime()
     require(not (work / "environment.json").exists() and not runner.device_set.exists(), "environment-already-prepared")
@@ -440,7 +714,7 @@ def run_protocol(actions, revision, approved, cleanup):
     return report
 
 
-def read_runtime(paths):
+def read_runtime(paths, *, command=c1.run_command):
     # Fixed executable and parser. Tool chatter and input contents never reach the report.
     evidence = []
     for path in paths:
@@ -448,7 +722,7 @@ def read_runtime(paths):
         require(path.is_file() and path.stat().st_size <= 4 * 1024 * 1024,
                 "runtime-evidence-unavailable", verdict="NOT_RUN")
         evidence.append(str(path.absolute()))
-    result = c1.run_command(("node", str(MOBILE / "qualification/verify-ios-libcurl-runtime.mjs"),
+    result = command(("node", str(MOBILE / "qualification/verify-ios-libcurl-runtime.mjs"),
                              "--standard", *evidence), cwd=MOBILE, timeout=15, capture=True)
     require(result.exit_code in (0, 1, 2), "runtime-evidence-unavailable", verdict="NOT_RUN")
     report = json.loads(result.output)
@@ -457,11 +731,11 @@ def read_runtime(paths):
     return report
 
 
-def verify_staging(source, work, tree):
+def verify_staging(source, work, tree, *, candidate_only=False):
     entries = manifest(source)
     require(tree_digest(entries) == tree, "reviewed-tree-mismatch")
     candidate_app, candidate_package = candidate_config(source)
-    for name in APP_IDS:
+    for name in (("candidate",) if candidate_only else APP_IDS):
         root = work / name
         if name == "candidate":
             require(c1.read_json(root / CONFIG) == candidate_app and c1.read_json(root / PACKAGE) == candidate_package,
@@ -495,26 +769,30 @@ def load_fixture(work, context, environment):
     return fixture
 
 
-def verify_lab_ready(work, context, environment):
-    attach_device(simulator(work, context), environment)
+def verify_lab_ready(work, context, environment, *, command=c1.run_command):
+    attach_device(simulator(work, context, command=command), environment)
     pilot = MOBILE / "qualification/run-ios-libcurl-runtime.mjs"
-    result = c1.run_command(("node", str(pilot), "--standard-check", str(work)),
+    result = command(("node", str(pilot), "--standard-check", str(work)),
                             cwd=MOBILE, timeout=10)
     require(result.exit_code == 0, "fixture-readiness-unconfirmed", verdict="NOT_RUN")
 
 
-def prebuild_evidence(work, context, inputs):
+def prebuild_evidence(work, context, inputs, *, hosted_observed=False):
     environment = load_receipt(work, "environment", context)
     fixture = load_fixture(work, context, environment)
     if environment["target"] == "hosted-observed":
-        if inputs.get("confinement"):
-            verify_confinement(inputs["confinement"], work, context, window="before-build")
-        error = StageError("hosted-feasibility-only", verdict="NOT_RUN")
-        error.record.update(profile="hosted-observed", fullConfinement="NOT_RUN")
-        raise error
-    require(environment["target"] == "full", "environment-unconfirmed", verdict="NOT_RUN")
-    network = verify_confinement(inputs.get("confinement"), work, context, window="before-build")
-    require_full(network)
+        network = {"profile": "hosted-observed", "fullConfinement": "NOT_RUN"}
+        observed = verify_confinement(inputs["confinement"], work, context, window="before-build") \
+            if inputs.get("confinement") else network
+        if not hosted_observed:
+            error = StageError("hosted-feasibility-only", verdict="NOT_RUN")
+            error.record.update(network)
+            raise error
+        require(observed == network, "environment-profile-mismatch")
+    else:
+        require(environment["target"] == "full" and not hosted_observed,
+                "environment-unconfirmed", verdict="NOT_RUN")
+        network = require_full(verify_confinement(inputs.get("confinement"), work, context, window="before-build"))
     require(not (work / "fixture-stopped.json").exists(), "fixture-not-running", verdict="NOT_RUN")
     verify_lab_ready(work, context, environment)
     return {"device": environment["device"], "fixtureId": fixture["fixtureId"],
@@ -537,13 +815,18 @@ def phase_wire(work, context, binding, phase):
     return wire
 
 
-def verify_phases(work, context, launch):
-    binding = phase_binding(work, launch)
+def verify_trust_transition(work, context, binding):
     fixture = load_receipt(work, "fixture", context)
     trusted = load_receipt(work, "trust", context)
     require(trusted.get("binding") == binding and trusted.get("rootSha256") == fixture["rootSha256"]
             and trusted.get("beforeWireSha256") == c1.digest(private_file(work, "before-wire.json")),
             "trust-transition-mismatch")
+    return fixture
+
+
+def verify_phases(work, context, launch):
+    binding = phase_binding(work, launch)
+    fixture = verify_trust_transition(work, context, binding)
     identities = {}
     paths = []
     for phase in PHASES:
@@ -577,6 +860,8 @@ def cleanup_simulator(work, context, *, command=c1.run_command):
     runner.creation_attempted = runner.device_set.exists()
     shutdown_error = runner.cleanup_device()
     if shutdown_error is not None:
+        if runner.evidence.get("simulatorRemoved") is True:
+            shutdown_error.record["simulatorRemoved"] = "PASS"
         raise shutdown_error
     return save_receipt(work, "device-cleanup", context, device=runner.device, inventoryEmpty=True)
 
@@ -594,16 +879,40 @@ def review(args):
                                 hosted_feasibility=args.hosted_feasibility)
 
     if args.mode == "prebuild":
+        candidate_only = getattr(args, "candidate_only", False)
         verify_archive(Path(inputs["archive"]))
-        verify_staging(source, work, context["treeSha256"])
-        return save_receipt(work, "prebuild", context, **prebuild_evidence(work, context, inputs))
+        verify_staging(source, work, context["treeSha256"], candidate_only=candidate_only)
+        return save_receipt(work, "prebuild", context, **prebuild_evidence(
+            work, context, inputs, hosted_observed=getattr(args, "hosted_observed", False)),
+            **({"qualificationScope": CANDIDATE_SCOPE} if candidate_only else {}))
 
     if args.mode == "prelaunch":
+        candidate_only = getattr(args, "candidate_only", False)
         prebuild = load_receipt(work, "prebuild", context)
-        current = prebuild_evidence(work, context, inputs)
+        current = prebuild_evidence(work, context, inputs, hosted_observed=getattr(args, "hosted_observed", False))
+        require(prebuild.get("qualificationScope") == (CANDIDATE_SCOPE if candidate_only else None),
+                "prebuild-scope-mismatch")
         require(all(prebuild[key] == value for key, value in current.items()), "prebuild-evidence-mismatch")
         _, archive = verify_archive(Path(inputs["archive"]))
-        staging = verify_staging(source, work, context["treeSha256"])
+        staging = verify_staging(source, work, context["treeSha256"], candidate_only=candidate_only)
+        if candidate_only:
+            name = "candidate"
+            paths = inputs["builds"][name]
+            evidence = inspect_build(work / name, *(Path(paths[key]) for key in
+                                     ("derived", "sourceMap", "podSettings", "compileCommands")),
+                                     archive, name=name, collect_objects=False)
+            release = evidence["release"]
+            require(release.get("bundleId") == APP_IDS[name], "release-identity")
+            require(release.get("verdict") == "PASS", "inspection-incomplete", verdict="NOT_RUN")
+            require(all(hex_value(release.get(key)) for key in BUILD_KEYS), "build-fingerprints-unavailable",
+                    verdict="NOT_RUN")
+            provenance = {key: release[key] for key in CANDIDATE_RELEASE_KEYS}
+            provenance.update(nativeSources=evidence["nativeSources"], targetedSymbols=sorted(release["definitions"]),
+                              transportLinkSelectionSha256=evidence_digest(release["transportLinkSelection"]))
+            return save_receipt(work, "prelaunch", context, **current, qualificationScope=CANDIDATE_SCOPE,
+                                builds={name: {"bundleId": APP_IDS[name], **{key: release[key] for key in BUILD_KEYS}}},
+                                provenance=provenance, archive=archive, staging=staging,
+                                prebuildSha256=c1.digest(private_file(work, "prebuild.json")))
         reports = []
         for name in APP_IDS:
             paths = inputs["builds"][name]
@@ -731,6 +1040,9 @@ def main():
         report.add_argument("--reviewed-tree-sha256", required=True)
         if mode == "environment":
             report.add_argument("--hosted-feasibility", action="store_true")
+        if mode in ("prebuild", "prelaunch"):
+            report.add_argument("--hosted-observed", action="store_true")
+            report.add_argument("--candidate-only", action="store_true")
     args = parser.parse_args()
     signal.signal(signal.SIGINT, c1.interrupt)
     signal.signal(signal.SIGTERM, c1.interrupt)

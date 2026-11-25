@@ -180,8 +180,15 @@ class RuntimeRun:
                                   merge_output=merge_output)
         except subprocess.TimeoutExpired:
             raise StageError(timeout_code) from None
-        except OSError:
-            raise StageError("command-unavailable", verdict="NOT_RUN") from None
+        except OSError as failure:
+            error = StageError("command-unavailable", verdict="NOT_RUN")
+            executable = Path(args[0]).name
+            families = ("xcrun", "xcodebuild", "node", "corepack", "pnpm", "pod", "bash", "ps",
+                        "sw_vers", "uname", "lsof", "python3")
+            family = executable if executable in families else "other"
+            error.record["command"] = {"family": family, "operation": code,
+                                       "errno": failure.errno if type(failure.errno) is int else None}
+            raise error from None
         if result.exit_code not in allowed:
             raise StageError(code, exit_code=result.exit_code)
         return result
@@ -225,7 +232,7 @@ class RuntimeRun:
     def find_runtime(self):
         def inventory(kind):
             return json.loads(self.call("xcrun", "simctl", "list", kind, "--json",
-                                        code="simulator-inventory-failed",
+                                        code="simulator-inventory-failed", timeout=90,
                                         timeout_code="simulator-inventory-timeout", capture=True).output)[kind]
 
         runtime = next((row for row in inventory("runtimes") if row["identifier"] == RUNTIME
@@ -290,21 +297,14 @@ class RuntimeRun:
             self.call("python3", "-IB", inspector, "pods", str(pod_settings), code="pod-settings-rejected")
         try:
             with self.stage("build"):
-                result = self.call(
-                    "xcodebuild", "build", "-workspace", "BunnyTalks.xcworkspace", "-scheme", EXECUTABLE,
-                    "-configuration", "Release", "-sdk", "iphonesimulator", "-destination",
-                    "generic/platform=iOS Simulator", "-derivedDataPath", str(derived), "ARCHS=arm64",
-                    "CODE_SIGNING_ALLOWED=NO", "-resultBundlePath", str(scratch / "build.xcresult"),
-                    f"SOURCEMAP_FILE={source_map}", "LD_GENERATE_MAP_FILE=YES",
-                    "LD_MAP_FILE_PATH=$(TARGET_TEMP_DIR)/$(TARGET_NAME)-LinkMap-$(CURRENT_ARCH).txt",
-                    cwd=ios, output=scratch / "xcodebuild.log", merge_output=True, timeout=1500,
-                    code="xcodebuild-failed",
-                )
+                result = self.compile_release(ios, scratch)
                 self.evidence["xcodeExitCode"] = result.exit_code
         except StageError as error:
             if "exitCode" in error.record:
-                (scratch / "xcodebuild.exit").write_text(str(error.record["exitCode"]) + "\n")
-                self.collect_build_diagnostics()
+                diagnostics = self.collect_build_diagnostics(scratch, error.record["exitCode"])
+                quality = diagnostics.get("quality")
+                if quality in ("technical-error", "phase-only", "generic", "unknown"):
+                    self.evidence["buildDiagnosticQuality"] = quality
             raise
         with self.stage("staticInspection"):
             apps = list((derived / "Build/Products/Release-iphonesimulator").glob("*.app"))
@@ -334,16 +334,34 @@ class RuntimeRun:
             self.evidence["podfileLockSha256"] = lock_hash
         return app
 
-    def collect_build_diagnostics(self):
+    def compile_release(self, ios, output, *, verbose=False):
+        return self.call(
+            "xcodebuild", "build", "-workspace", "BunnyTalks.xcworkspace", "-scheme", EXECUTABLE,
+            "-configuration", "Release", "-sdk", "iphonesimulator", "-destination",
+            "generic/platform=iOS Simulator", "-derivedDataPath", str(output / "DerivedData"), "ARCHS=arm64",
+            "CODE_SIGNING_ALLOWED=NO", "-resultBundlePath", str(output / "build.xcresult"),
+            f"SOURCEMAP_FILE={output / 'bundle.map'}", "LD_GENERATE_MAP_FILE=YES",
+            "LD_MAP_FILE_PATH=$(TARGET_TEMP_DIR)/$(TARGET_NAME)-LinkMap-$(CURRENT_ARCH).txt",
+            *(("-verbose",) if verbose else ()),
+            cwd=ios, output=output / "xcodebuild.log", merge_output=True, timeout=1500, code="xcodebuild-failed",
+        )
+
+    def collect_build_diagnostics(self, build_dir, exit_code):
         try:
+            if exit_code is not None:
+                (build_dir / "xcodebuild.exit").write_text(f"{exit_code}\n")
             output = self.call("python3", "-IB", "scripts/collect-ios-build-diagnostics.py",
-                               str(self.scratch), "failure", capture=True, timeout=50,
+                               str(build_dir), "failure", capture=True, timeout=50,
                                code="build-diagnostics-unavailable").output
-            quality = json.loads(output).get("quality")
-            if quality in ("technical-error", "phase-only", "generic", "unknown"):
-                self.evidence["buildDiagnosticQuality"] = quality
-        except (StageError, ValueError, TypeError, AttributeError):
+            report = json.loads(output)
+            if isinstance(report, dict) and report.get("verdict") in ("PASS", "NOT_RUN"):
+                return report
+        except Interrupted:
+            raise
+        except Exception:
+            # Diagnostics are best effort and must not supersede the build error.
             pass
+        return {"verdict": "NOT_RUN", "reason": "build-diagnostics-unavailable"}
 
     def app_hashes(self, app):
         require(app.is_dir() and not app.is_symlink(), "app-missing")
@@ -360,6 +378,7 @@ class RuntimeRun:
 
     def devices(self):
         output = self.sim("list", "devices", "--json", code="device-list-failed",
+                          timeout=90,
                           timeout_code="simulator-inventory-timeout", capture=True).output
         result = json.loads(output)["devices"]
         return [row for devices in result.values() for row in devices]
@@ -399,19 +418,37 @@ class RuntimeRun:
         finally:
             screenshot.unlink(missing_ok=True)
 
-    def process_running(self):
+    def launch_pid(self, *launch_args):
+        result = self.sim("launch", self.device, self.bundle_id, *launch_args, code="launch-refused", capture=True)
+        pattern = re.escape(self.bundle_id) + r": ([1-9][0-9]{0,8})"
+        match = re.fullmatch(pattern, result.output)
+        require(len(re.findall(r"^" + pattern + r"$", result.output, flags=re.M)) <= 1,
+                "launch-pid-ambiguous", verdict="NOT_RUN")
+        require(match, "launch-pid-unavailable", verdict="NOT_RUN")
+        return int(match[1])
+
+    def process_status(self):
         process = self.call("/bin/ps", "-p", str(self.pid), "-o", "state=",
                             code="process-query-failed", allowed=(0, 1), capture=True, timeout=5)
         if process.exit_code == 1 and not process.output:
-            return False
+            return "absent"
         state = process.output
         require(process.exit_code == 0 and re.fullmatch(r"[A-Za-z<>+\-]{1,12}", state),
                 "process-identity-unavailable", verdict="NOT_RUN")
         if state.startswith("Z") or "E" in state:
-            return False
-        require(process_path(self.pid) == self.installed / EXECUTABLE,
+            return "absent"
+        path = process_path(self.pid)
+        if path is None:
+            return "unconfirmed"
+        return "matching" if path == self.installed / EXECUTABLE else "wrong-executable"
+
+    def process_running(self, *, explicit_identity=False):
+        state = self.process_status()
+        if explicit_identity:
+            require(state != "wrong-executable", "installed-process-mismatch")
+        require(state in ("matching", "absent"),
                 "process-identity-unavailable", verdict="NOT_RUN")
-        return True
+        return state == "matching"
 
     def crash_signal(self):
         # An Apple .ips report can arrive late. Only a correlated fatal report proves a crash.
@@ -426,7 +463,7 @@ class RuntimeRun:
                         header = json.loads(handle.readline())
                         report = json.load(handle)
                     if (str(header.get("bug_type")) != "309" or report.get("pid") != self.pid
-                            or report.get("bundleInfo", {}).get("CFBundleIdentifier") != BUNDLE_ID
+                            or report.get("bundleInfo", {}).get("CFBundleIdentifier") != self.bundle_id
                             or report.get("isNonFatal") is True
                             or Path(report["procPath"]).resolve() != self.installed / EXECUTABLE):
                         continue
@@ -437,8 +474,8 @@ class RuntimeRun:
                     continue
         return None
 
-    def check_alive(self):
-        if self.process_running():
+    def check_alive(self, *, explicit_identity=False):
+        if self.process_running(explicit_identity=explicit_identity):
             return
         for attempt in range(3):
             if attempt:
@@ -467,10 +504,7 @@ class RuntimeRun:
         self.evidence["negativeRenderControl"] = baseline is False
 
         with self.stage("launch"):
-            result = self.sim("launch", self.device, BUNDLE_ID, code="launch-refused", capture=True)
-            pid = re.fullmatch(re.escape(BUNDLE_ID) + r": ([1-9][0-9]{0,8})", result.output)
-            require(pid, "launch-pid-unavailable", verdict="NOT_RUN")
-            self.pid = int(pid[1])
+            self.pid = self.launch_pid()
             self.evidence["launchPid"] = self.pid
 
         with self.stage("processStability"):

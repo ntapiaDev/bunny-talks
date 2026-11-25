@@ -1,6 +1,6 @@
 import { registerRootComponent, requireNativeModule } from 'expo';
 import { useEffect, useRef } from 'react';
-import { Linking, Platform, Text } from 'react-native';
+import { Platform, Settings, Text } from 'react-native';
 import {
   ApplicationHttpError,
   createApplicationHttpClient,
@@ -15,12 +15,14 @@ import {
   incompletePost,
   interruptions,
   limit,
+  parseStandardHttpsLaunch,
   prefix,
   standardHttpsBefore,
   standardHttpsMarker,
   standardHttpsPlan,
   standardHttpsProbes,
   standardHttpsReady,
+  standardHttpsStartupMarker,
 } from './ios-libcurl-scenarios';
 
 const ports: Record<Destination, number> = {
@@ -77,12 +79,20 @@ function cookieWitness(spec: Probe) {
 }
 
 async function qualify() {
-  const launch = await Linking.getInitialURL();
-  const scope = /^bunnytalks:\/\/c2-(before|after)\/([a-f0-9]{32})\/([a-f0-9]{32})$/.exec(
-    launch ?? '',
-  );
-  assert(scope && scope[0] === launch);
   assert(Platform.OS === 'ios' && !__DEV__ && !!Reflect.get(globalThis, 'HermesInternal'));
+  const startup = (status: string) => console.log(standardHttpsStartupMarker + status);
+  startup('READY js');
+  const parameters: unknown = Settings.get('BunnyC2Launch');
+  if (parameters == null) {
+    startup('FAIL parameters-missing');
+    return;
+  }
+  const scope = parseStandardHttpsLaunch(parameters);
+  if (!scope) {
+    startup('FAIL parameters-invalid');
+    return;
+  }
+  startup('PASS parameters');
   const native = requireNativeModule<ApplicationHttpsModule>('ApplicationHttps');
   const adapter = createNativeHttpsTransport(() => native);
   const client = (address = origin(), transport = adapter) =>

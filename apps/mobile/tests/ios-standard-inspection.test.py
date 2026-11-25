@@ -149,7 +149,7 @@ class StandardInspectionTest(unittest.TestCase):
             archive.write_bytes(b"unexpected archive")
             with self.assertRaisesRegex(inspection.CheckFailed, "linked-archive-sha256"):
                 inspection.check_linked_archives(raw_map, archives, digest)
-            with self.assertRaisesRegex(inspection.CheckFailed, "linked-archive-path"):
+            with self.assertRaisesRegex(inspection.EvidenceUnavailable, "linked-archive-path-unavailable"):
                 inspection.check_linked_archives(rows[0].encode(), archives, digest)
 
 

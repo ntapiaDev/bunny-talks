@@ -255,6 +255,13 @@ const standardProbeIds = [
 ] as const;
 
 export const standardHttpsMarker = '[BunnyIosStandardHttps] ';
+export const standardHttpsStartupMarker = '[BunnyIosCandidateStartup] ';
+
+export function parseStandardHttpsLaunch(value: unknown) {
+  if (typeof value !== 'string') return null;
+  const match = /^(before|after):([a-f0-9]{32}):([a-f0-9]{32})$/.exec(value);
+  return match && match[0] === value ? match : null;
+}
 export const standardHttpsReady = 'READY ApplicationHttps Release Hermes';
 export const standardHttpsLocalCases = ['direct-http', 'expired-before'] as const;
 export const standardHttpsProbes = standardProbeIds.map((id) => {

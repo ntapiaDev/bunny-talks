@@ -155,15 +155,15 @@ class Feasibility:
         c2.require(checkout_inventory(checkout) == entries, "checkout-source-mismatch")
         return {"treeSha256": digest, "origin": "github-sha-tarball", "checkoutMatches": True}
 
-    def archive(self):
+    def archive(self, *, candidate_only=False):
         path = self.scratch / "xcframeworks.zip"
         self.command(("gh", "api", "repos/ntapiaDev/bunny-talks/actions/artifacts/14723035221/zip"),
                      timeout=120, output=path, github=True)
         raw, proof = c2.verify_archive(path)
         staging = c2.stage_pair(self.scratch / "source", self.work, self.env["REVIEWED_TREE_SHA256"],
-                                raw, self.report["revision"])
+                                raw, self.report["revision"], candidate_only=candidate_only)
         self.context = {key: staging[key] for key in ("runId", "treeSha256", "revision", "zipSha256")}
-        c2.verify_staging(self.scratch / "source", self.work, self.context["treeSha256"])
+        c2.verify_staging(self.scratch / "source", self.work, self.context["treeSha256"], candidate_only=candidate_only)
         return {"artifactId": 14723035221, "sha256": proof["zipSha256"], "staging": "PASS"}
 
     def toolchain(self):
@@ -219,12 +219,14 @@ class Feasibility:
 
     def cleanup(self):
         ok = True
-        fixture_started = self.fixture is not None
-        simulator_created = self.context is not None and (self.work / "simulators").exists()
+        evidence = dict.fromkeys(("fixtureStopped", "simulatorRemoved", "workspaceRemoved"), "NOT_RUN")
         if self.fixture is not None:
             try:
                 if self.fixture.poll() is None:
-                    os.killpg(self.fixture.pid, signal.SIGTERM)
+                    try:
+                        os.killpg(self.fixture.pid, signal.SIGTERM)
+                    except ProcessLookupError:
+                        pass
                 self.fixture.wait(timeout=15)
                 if (self.work / "fixture-start.json").exists():
                     started = c2.load_receipt(self.work, "fixture-start", self.context)
@@ -241,29 +243,39 @@ class Feasibility:
                     self.fixture.wait(timeout=5)
                 except (OSError, subprocess.TimeoutExpired):
                     pass
+            evidence["fixtureStopped"] = "PASS" if ok else "FAIL"
         if self.context is not None:
+            simulator_created = (self.work / "simulators").exists()
             try:
                 c2.cleanup_simulator(self.work, self.context, command=self.isolated_command)
-            except Exception:
+                if simulator_created:
+                    evidence["simulatorRemoved"] = "PASS"
+            except Exception as error:
                 ok = False
+                evidence["simulatorRemoved"] = (error.record.get("simulatorRemoved", "FAIL")
+                                                if isinstance(error, c2.StageError) else "FAIL")
         if self.scratch is not None:
             try:
                 shutil.rmtree(self.scratch)
-                ok = ok and not self.scratch.exists()
+                evidence["workspaceRemoved"] = "FAIL" if self.scratch.exists() else "PASS"
             except OSError:
-                ok = False
-        c2.require(ok, "cleanup-unconfirmed")
-        return {"fixtureStopped": "PASS" if fixture_started else "NOT_RUN",
-                "simulatorRemoved": "PASS" if simulator_created else "NOT_RUN",
-                "workspaceRemoved": "PASS" if self.scratch is not None else "NOT_RUN"}
+                evidence["workspaceRemoved"] = "FAIL"
+        if not ok or "FAIL" in evidence.values():
+            error = c2.StageError("cleanup-unconfirmed")
+            error.record.update(evidence)
+            raise error
+        return evidence
+
+    def steps(self):
+        return (("revision", self.revision), ("source", self.source), ("archive", self.archive),
+                ("toolchain", self.toolchain), ("simulator", self.simulator),
+                ("fixture", self.start_fixture), ("networkObservation", self.network))
 
     def run(self):
         self.save()
         interrupted = False
         try:
-            for name, action in (("revision", self.revision), ("source", self.source), ("archive", self.archive),
-                                 ("toolchain", self.toolchain), ("simulator", self.simulator),
-                                 ("fixture", self.start_fixture), ("networkObservation", self.network)):
+            for name, action in self.steps():
                 self.stage(name, action)
         except c1.Interrupted:
             interrupted = True
@@ -275,7 +287,7 @@ class Feasibility:
                 self.stage("cleanup", self.cleanup)
             except Exception:
                 pass
-        states = [self.report["stages"][name]["verdict"] for name in STAGES]
+        states = [item["verdict"] for item in self.report["stages"].values()]
         self.report["complete"] = not interrupted and all(
             item.get("code") != "interrupted" for item in self.report["stages"].values())
         self.report["verdict"] = "FAIL" if "FAIL" in states else "PASS" if all(x == "PASS" for x in states) else "NOT_RUN"

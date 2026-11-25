@@ -133,7 +133,7 @@ class FakeTools:
         if args[:3] == ("python3", "-IB", "scripts/collect-ios-build-diagnostics.py"):
             if self.fault == "build-diagnostics-interrupted":
                 raise runtime.Interrupted
-            return result(0, json.dumps({"quality": "technical-error", "untrusted": SECRET}))
+            return result(0, json.dumps({"verdict": "PASS", "quality": "technical-error", "untrusted": SECRET}))
         if args[:4] == ("python3", "-IB", "modules/application-https/ios/verify_xcframeworks.py", "archive"):
             if self.fault == "archive-different":
                 return runtime.run_command(args, **kwargs)

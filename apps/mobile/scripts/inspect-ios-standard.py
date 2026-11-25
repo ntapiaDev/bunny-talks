@@ -174,6 +174,8 @@ def check_linked_archives(raw_map, archives, digest):
         archive = f"{library}.a"
         paths = set(re.findall(rb"^\[ *\d+\][ \t]+([^\n]+/" + re.escape(archive.encode()) + rb")\(",
                                raw_map, re.M))
+        if not paths:
+            raise EvidenceUnavailable("linked-archive-path-unavailable")
         check(len(paths) == 1, "linked-archive-path")
         actual = digest(Path(next(iter(paths)).decode()))
         check(actual == archives[f"{library}.xcframework/ios-arm64-simulator/{archive}"],
@@ -188,6 +190,8 @@ def inspect_release(derived, source_map, pod_settings, provenance, *, mobile=MOB
     check_bundle_sources(source_map, candidate=bundle_id == CANDIDATE_BUNDLE_ID)
     link = link_helpers()
     apps = list((derived / "Build/Products/Release-iphonesimulator").glob("*.app"))
+    if not apps:
+        raise EvidenceUnavailable("release-application-unavailable")
     check(len(apps) == 1, "release-application")
     app = apps[0]
     plist = read_plist(app / "Info.plist")
@@ -225,7 +229,11 @@ def inspect_release(derived, source_map, pod_settings, provenance, *, mobile=MOB
           "dynamic-transport-provider")
 
     maps = list(derived.rglob(f"{TARGET}-LinkMap-arm64.txt"))
-    check(len(maps) == 1 and maps[0].stat().st_size <= 128 * 1024 * 1024, "release-link-map")
+    if not maps:
+        raise EvidenceUnavailable("release-link-map-unavailable")
+    check(len(maps) == 1, "release-link-map-ambiguous")
+    if maps[0].stat().st_size > 128 * 1024 * 1024:
+        raise EvidenceUnavailable("release-link-map-too-large")
     raw_map = maps[0].read_bytes()
     link_map = link.inspect_map(raw_map, app.name, executable)
     definitions = link.inspect_definitions(link.command("xcrun", "nm", "-m", "-U", binary))

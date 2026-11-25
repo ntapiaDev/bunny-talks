@@ -12,6 +12,7 @@ import {
   interruptions,
   memoryCases,
   memoryPhases,
+  parseStandardHttpsLaunch,
   plan,
   prefix,
   probes,
@@ -22,6 +23,7 @@ import {
   standardHttpsPlan,
   standardHttpsProbes,
   standardHttpsReady,
+  standardHttpsStartupMarker,
 } from '../ios-libcurl-scenarios.ts';
 import {
   standardPhaseLog,
@@ -58,15 +60,45 @@ test('C2 capture binds the log to its phase, actual PID and fresh run and fixtur
   const runId = 'a'.repeat(32);
   const fixtureId = 'b'.repeat(32);
   const marker = '[BunnyIosStandardHttpsRun] ' + runId + ' ' + fixtureId + ' before';
-  const raw = [marker, '[BunnyIosStandardHttps] DONE']
+  const raw = [
+    standardHttpsStartupMarker + 'READY js',
+    standardHttpsStartupMarker + 'PASS parameters',
+    marker,
+    '[BunnyIosStandardHttps] DONE',
+  ]
     .map((eventMessage) => JSON.stringify({ processID: 42, eventMessage, unrelated: 'private' }))
     .join('\n');
   const actual = standardPhaseLog(raw, 42, runId, fixtureId, 'before');
   assert.equal(actual, marker + '\n[BunnyIosStandardHttps] DONE\n');
+  assert.equal(
+    standardPhaseLog(
+      'Filtering the log data using a predicate\n' + raw,
+      42,
+      runId,
+      fixtureId,
+      'before',
+    ),
+    actual,
+  );
   assert.throws(() => standardPhaseLog(raw, 43, runId, fixtureId, 'before'));
   assert.throws(() => standardPhaseLog(raw, 42, 'c'.repeat(32), fixtureId, 'before'));
   assert.throws(() => standardPhaseLog(raw, 42, runId, fixtureId, 'after'));
   assert.throws(() => standardPhaseLog(raw + '\n' + raw, 42, runId, fixtureId, 'before'));
+});
+
+test('C2 candidate startup accepts only complete run, fixture and phase launch arguments', () => {
+  const runId = 'a'.repeat(32);
+  const fixtureId = 'b'.repeat(32);
+  for (const phase of ['before', 'after']) {
+    const value = `${phase}:${runId}:${fixtureId}`;
+    assert.deepEqual(parseStandardHttpsLaunch(value)?.slice(1), [phase, runId, fixtureId]);
+    assert.equal(parseStandardHttpsLaunch(value + ':extra'), null);
+    assert.equal(parseStandardHttpsLaunch(value + '\n'), null);
+  }
+  assert.equal(parseStandardHttpsLaunch(`other:${runId}:${fixtureId}`), null);
+  assert.equal(parseStandardHttpsLaunch(`before:${runId}:short`), null);
+  assert.equal(parseStandardHttpsLaunch(undefined), null);
+  assert.equal(parseStandardHttpsLaunch({ phase: 'before' }), null);
 });
 
 test('requires correlated finite diagnostics for a newly qualified length conflict', () => {
@@ -273,6 +305,7 @@ test('correlates the reduced standard plan before and after trust without publis
   assert.deepEqual(result.beforeTrust.counters, { requests: 0, connections: 1 });
   assert.equal(result.afterTrust.checks['cookie-fetch-after'].verdict, 'PASS');
   assert.equal(result.afterTrust.checks.capacity.verdict, 'PASS');
+  assert.equal(standardHttpsPlan.length + 1, 35);
   assert.ok(standardHttpsPlan.length < plan.length / 2);
   assert.doesNotMatch(
     JSON.stringify(result),

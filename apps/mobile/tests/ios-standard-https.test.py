@@ -114,6 +114,64 @@ class StandardHttpsTest(unittest.TestCase):
                                          "vendor/xcframeworks.zip"), proof["zipSha256"])
         self.assertTrue(c2.remove_workspace(work, self.context(result)))
 
+    def test_candidate_only_prelaunch_requires_scoped_receipt_and_inspection(self):
+        source = self.make_source()
+        work = self.root / "run"
+        tree = c2.tree_digest(c2.manifest(source))
+
+        def install(vendor, archive):
+            vendor.mkdir()
+            (vendor / "xcframeworks.zip").write_bytes(archive)
+
+        with patch.object(c2.vendor, "install_zip", side_effect=install) as stage:
+            context = self.context(c2.stage_pair(source, work, tree, b"fixture zip", REVISION, candidate_only=True))
+        stage.assert_called_once()
+        self.assertFalse((work / "standard").exists())
+        paths = dict.fromkeys(("derived", "sourceMap", "podSettings", "compileCommands"), "private")
+        payload = {"reviewedSource": str(source), "workspace": str(work), "context": context,
+                   "archive": "private.zip", "builds": {"candidate": paths}}
+        input_path = self.root / "private.json"
+        input_path.write_text(json.dumps(payload))
+        args = SimpleNamespace(mode="prelaunch", input=input_path, reviewed_revision=REVISION,
+                               reviewed_tree_sha256=tree, hosted_observed=True, candidate_only=True)
+        archive = {"zipSha256": c2.vendor.ZIP_SHA256}
+        evidence = self.compiled("candidate")
+        del evidence["objects"]
+        evidence["release"].update(configuration="Release", platform="IOSSIMULATOR", architecture="arm64",
+                                   minimumOS="16.4", ats="default", definitions={"_curl_version_info": [{}]},
+                                   qualificationFlagsResourcesAndDiagnostics="absent-in-checked-scope")
+        original_digest = c2.c1.digest
+        with (patch.object(c2.c1, "digest", side_effect=lambda p: c2.vendor.ZIP_SHA256
+                           if p.name == "xcframeworks.zip" else original_digest(p)),
+              patch.object(c2, "verify_archive", return_value=(b"fixture zip", archive)),
+              patch.object(c2, "prebuild_evidence", return_value={"device": "device"}),
+              patch.object(c2, "inspect_build", return_value=evidence) as inspect,
+              patch.object(c2, "compare_builds") as compare):
+            with self.assertRaises(c2.StageError) as missing:
+                c2.review(args)
+            self.assertEqual(missing.exception.record["verdict"], "NOT_RUN")
+            inspect.assert_not_called()
+            args.mode = "prebuild"
+            gate = c2.review(args)
+            self.assertEqual(gate["qualificationScope"], c2.CANDIDATE_SCOPE)
+            args.mode = "prelaunch"
+            args.candidate_only = False
+            with self.assertRaisesRegex(c2.StageError, "prebuild-scope-mismatch"):
+                c2.review(args)
+            args.candidate_only = True
+            digest = evidence["release"].pop("executableSha256")
+            with self.assertRaisesRegex(c2.StageError, "build-fingerprints-unavailable") as missing:
+                c2.review(args)
+            self.assertEqual(missing.exception.record["verdict"], "NOT_RUN")
+            self.assertFalse((work / "prelaunch.json").exists())
+            evidence["release"]["executableSha256"] = digest
+            launch = c2.review(args)
+            self.assertEqual(set(launch["builds"]), {"candidate"})
+            self.assertEqual(launch["qualificationScope"], c2.CANDIDATE_SCOPE)
+            self.assertEqual(launch["provenance"]["nativeSources"], evidence["nativeSources"])
+            self.assertEqual(inspect.call_args.kwargs, {"name": "candidate", "collect_objects": False})
+            compare.assert_not_called()
+
     def test_effective_compile_arguments_and_response_files(self):
         def record(root):
             root.mkdir()
@@ -138,6 +196,108 @@ class StandardHttpsTest(unittest.TestCase):
             c2.compile_commands(commands, derived.parent, derived)
         self.assertEqual(error.exception.record["code"], "qualification-flags")
 
+    def test_generated_paths_and_filelists_keep_operand_boundaries(self):
+        def build(name, *, separate=False, reordered=False, macro=False, output_kind="object"):
+            root = self.root / name
+            derived = root / "build"
+            derived.mkdir(parents=True)
+            first = str(root / "ApplicationHttpsModule.swift")
+            second = str(root / "CurlHttpsTransport.swift")
+            listing = derived / "swift.files"
+            listing.write_text("\n".join([first] if separate else [second, first] if reordered else [first, second]) + "\n")
+            outputs = derived / "outputs.json"
+            outputs.write_text(json.dumps({first: {output_kind: str(derived / "module.o")}}))
+            (derived / "module.modulemap").write_text("module Fixture {}\n")
+            response = derived / "driver.rsp"
+            response.write_text("-filelist")
+            args = ["-target", "arm64-apple-ios16.4-simulator", "-sdk", "/Xcode/iPhoneSimulator.sdk", "-O"]
+            return c2.compile_commands({
+                "c": [["clang", *args, "-DCURL_STATICLIB=1", "-I" + str(root / "Headers"),
+                       "-fmodule-map-file=" + str(derived / "module.modulemap"), str(root / "BunnyHttpsNative.c"),
+                       *(["-DROOT=" + str(root)] if macro else [])]],
+                "swift": [["swiftc", *args, "@" + str(response), str(listing), *([second] if separate else []),
+                           "-output-file-map", str(outputs), "-module-cache-path", str(derived / "cache")]],
+            }, root, derived)
+
+        baseline = build("standard")
+        self.assertEqual(baseline, build("candidate"))
+        for name, options in (("split", {"separate": True}), ("reversed", {"reordered": True}),
+                              ("output-kind", {"output_kind": "swiftmodule"})):
+            with self.subTest(name=name):
+                self.assertNotEqual(baseline["swift"], build(name, **options)["swift"])
+        self.assertNotEqual(build("macro-a", macro=True)["c"], build("macro-b", macro=True)["c"])
+
+    def test_verified_temp_alias_and_forwarded_module_maps_preserve_content_and_order(self):
+        physical = self.root / "private-tmp"
+        physical.mkdir()
+        alias = self.root / "tmp"
+        alias.symlink_to(physical, target_is_directory=True)
+        def build(name, *, use_alias=False, content="module Fixture {}\n", cache=None, external_input=None):
+            root = physical / name / "source"
+            derived = physical / name / "derived"
+            pods = root / "Pods/Target Support Files/ApplicationHttps"
+            pods.mkdir(parents=True)
+            derived.mkdir()
+            module_file = pods / "ApplicationHttps.modulemap"
+            if external_input:
+                module_file.symlink_to(external_input)
+            else:
+                module_file.write_text(content)
+            operand_root = alias / name / "source" if use_alias else root
+            operand_derived = alias / name / "derived" if use_alias else derived
+            module_map = str(operand_root / "Pods/Target Support Files/ApplicationHttps/ApplicationHttps.modulemap")
+            common = ["-target", "arm64-apple-ios16.4-simulator", "-sdk", "/Xcode/iPhoneSimulator.sdk", "-O"]
+            commands = {
+                "c": [["clang", *common, "-DCURL_STATICLIB=1", f"-fmodule-map-file={module_map}",
+                       str(operand_root / "BunnyHttpsNative.c")]],
+                "swift": [["swiftc", *common, "-Xcc", "-fmodule-map-file", "-Xcc", module_map,
+                           "-Xcc", "-fmodules-cache-path=" + str(cache or operand_derived / "ModuleCache.noindex"),
+                           str(operand_root / "ApplicationHttpsModule.swift"),
+                           str(operand_root / "CurlHttpsTransport.swift")]],
+            }
+            return c2.compile_commands(commands, root, derived)
+
+        with patch.object(c2, "TEMP_ROOT", alias):
+            standard = build("standard")
+            self.assertEqual(standard, build("candidate", use_alias=True))
+            # An alias of each build's root does not prove identical input bytes across builds.
+            changed = build("different", use_alias=True, content="module Different {}\n")
+            self.assertNotEqual(standard["c"], changed["c"])
+            differences = c2.command_difference(standard["swift"], changed["swift"])
+            argument = differences[0]["arguments"][0]
+            self.assertEqual(argument["pathDifferences"], ["contentSha256"])
+            for side in ("standard", "candidate"):
+                self.assertEqual(argument[side]["option"], "-fmodule-map-file")
+                self.assertEqual(argument[side]["path"]["root"], "staging")
+                self.assertTrue(argument[side]["path"]["underBuildRoot"])
+                self.assertEqual(argument[side]["path"]["category"], "module-map")
+                self.assertEqual(argument[side]["path"]["components"], ["Pods", "Target Support Files", "ApplicationHttps"])
+            self.assertNotIn(str(self.root), json.dumps(differences))
+            outside = physical / "ModuleCache.noindex"
+            self.assertNotEqual(build("outside-a", cache=outside)["swift"],
+                                build("outside-b", cache=alias / outside.name)["swift"])
+            outside_map = physical / "external.modulemap"
+            outside_map.write_text("module Fixture {}\n")
+            escaped = build("escape", use_alias=True, external_input=outside_map)
+            argument = c2.command_difference(standard["swift"], escaped["swift"])[0]["arguments"][0]
+            self.assertFalse(argument["candidate"]["path"]["underBuildRoot"])
+            self.assertNotIn("contentSha256", argument["candidate"]["path"])
+
+    def test_path_diagnostics_distinguish_spelling_and_suffix_without_revealing_names(self):
+        first = [["swiftc", "-module-cache-path", "/tmp/fixture-secret/ModuleCache.noindex"]]
+        second = [["swiftc", "-module-cache-path", "/private/tmp/fixture-secret/ModuleCache.noindex"]]
+        delta = c2.command_difference(first, second)[0]["arguments"][0]
+        self.assertEqual(delta["pathDifferences"], ["spelling"])
+        self.assertFalse(delta["standard"]["path"]["underBuildRoot"])
+        self.assertEqual(delta["standard"]["path"]["category"], "module-cache")
+        second[0][-1] += "/random-fixture-secret"
+        delta = c2.command_difference(first, second)[0]["arguments"][0]
+        self.assertEqual(delta["pathDifferences"], ["spelling", "suffixSha256"])
+        self.assertNotIn("fixture-secret", json.dumps(delta))
+        option = c2.argument_summary(["clang", "-fdebug-compilation-dir=/tmp/fixture-secret"], 1)
+        self.assertEqual(option["option"], "-fdebug-compilation-dir")
+        self.assertNotIn("fixture-secret", json.dumps(option))
+
     def compiled(self, name):
         return {
             "release": {"bundleId": c2.APP_IDS[name], "verdict": "PASS",
@@ -154,7 +314,7 @@ class StandardHttpsTest(unittest.TestCase):
         self.assertEqual(c2.compare_builds(std, candidate)["candidate"]["executableSha256"], "d" * 64)
         for key, value, verdict in (("objects", {c2.OBJECTS[0]: DIGEST}, "NOT_RUN"),
                                     ("objects", dict.fromkeys(c2.OBJECTS, "e" * 64), "NOT_RUN"),
-                                    ("commands", {"swift": [["swiftc", "-Onone"]]}, "FAIL")):
+                                    ("commands", {"swift": [["swiftc", "-Onone"]], "c": [["clang", "-Os"]]}, "FAIL")):
             changed = copy.deepcopy(candidate)
             changed[key] = value
             with self.subTest(key=key, verdict=verdict), self.assertRaises(c2.StageError) as error:
@@ -164,6 +324,54 @@ class StandardHttpsTest(unittest.TestCase):
         with self.assertRaises(c2.StageError) as error:
             c2.compare_builds(std, candidate)
         self.assertEqual(error.exception.record["code"], "release-identity")
+
+    def test_comparison_diagnostics_distinguish_inputs_and_are_bounded(self):
+        standard = self.compiled("standard")
+        cases = (
+            ("native-source-mismatch", "sources", lambda row: row["nativeSources"].update({c2.SOURCES[0]: "a" * 64})),
+            ("native-c-command-mismatch", "c", lambda row: row["commands"]["c"][0].append("-fno-stack-protector")),
+            ("native-swift-command-mismatch", "swift", lambda row: row["commands"]["swift"][0].__setitem__(1, "-Osize")),
+        )
+        for code, category, mutate in cases:
+            with self.subTest(code=code):
+                candidate = self.compiled("candidate")
+                mutate(candidate)
+                with self.assertRaises(c2.StageError) as raised:
+                    c2.compare_builds(standard, candidate)
+                record = raised.exception.record
+                detail = record["comparison"]
+                self.assertEqual((record["code"], record["verdict"], detail["categories"]), (code, "FAIL", [category]))
+                if category == "sources":
+                    self.assertEqual(detail["differentSources"], [c2.SOURCES[0]])
+                else:
+                    args = detail["commandDifferences"][category][0]["arguments"]
+                    self.assertEqual(args[0]["index"], 2 if category == "c" else 1)
+                    self.assertIn("-fno-stack-protector" if category == "c" else "-Osize", json.dumps(args))
+
+        standard["commands"]["swift"] = [["swiftc", *["/private/fixture-secret-a"] * 30]] * 10
+        candidate = self.compiled("candidate")
+        candidate["commands"]["swift"] = [["swiftc", *["-DSECRET=fixture-secret-b"] * 30]] * 10
+        with self.assertRaises(c2.StageError) as raised:
+            c2.compare_builds(standard, candidate)
+        detail = raised.exception.record["comparison"]
+        safe = json.dumps(detail)
+        self.assertNotIn("fixture-secret", safe)
+        self.assertNotIn("-DSECRET", safe)
+        self.assertEqual(detail["builds"]["standard"]["commands"]["swift"]["argumentCount"], 310)
+        rows = detail["commandDifferences"]["swift"]
+        self.assertEqual([len(row["arguments"]) for row in rows], [4, 4])
+        self.assertEqual(rows[0]["arguments"][0]["standard"]["kind"], "path")
+        self.assertEqual(rows[0]["arguments"][0]["candidate"]["kind"], "macro")
+
+    def test_link_comparison_reports_only_differing_fields_and_digests(self):
+        standard, candidate = self.compiled("standard"), self.compiled("candidate")
+        candidate["release"]["transportLinkSelection"].append(["libcurl.a", "fixture-secret.o"])
+        with self.assertRaises(c2.StageError) as error:
+            c2.compare_builds(standard, candidate)
+        record = error.exception.record
+        self.assertEqual(record["code"], "native-link-mismatch")
+        self.assertEqual(record["comparison"]["differentFields"], ["transportLinkSelection"])
+        self.assertNotIn("fixture-secret", json.dumps(record))
 
     @staticmethod
     def context(proof):
@@ -323,6 +531,14 @@ class StandardHttpsTest(unittest.TestCase):
                 c2.review(args)
             self.assertEqual(error.exception.record["code"], "hosted-feasibility-only")
             live.assert_not_called()
+
+            hosted = {"scope": "network-before-build", "context": context, "profile": "hosted-observed"}
+            gate = c2.prebuild_evidence(work, context, {"confinement": hosted}, hosted_observed=True)
+            self.assertEqual(gate["confinement"], {"profile": "hosted-observed", "fullConfinement": "NOT_RUN"})
+            with self.assertRaises(c2.StageError) as violation:
+                c2.prebuild_evidence(work, context, {"confinement": hosted | {"outsidePackets": 1}},
+                                     hosted_observed=True)
+            self.assertEqual(violation.exception.record["verdict"], "FAIL")
 
             environment_file.write_text(json.dumps(environment))
             fixture_file.write_text(json.dumps(fixture | {"environmentSha256": digest(environment_file)}))

@@ -1,0 +1,152 @@
+name: Bunny Talks iOS HTTPS candidate-only qualification C2-B
+
+on:
+  workflow_dispatch:
+    inputs:
+      reviewed_sha:
+        description: Full SHA separately approved for this qualification campaign
+        required: true
+        type: string
+      reviewed_tree_sha256:
+        description: Independently reviewed SHA-256 inventory of the GitHub SHA tarball export
+        required: true
+        type: string
+
+      hosted_observed:
+        description: Explicitly approve the hosted-observed laboratory profile for this campaign
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ios-https-candidate-c2
+  cancel-in-progress: false
+
+jobs:
+  qualification:
+    if: github.repository == 'ntapiaDev/bunny-talks' && github.run_attempt == '1'
+    runs-on: macos-26
+    timeout-minutes: 100
+    defaults:
+      run:
+        shell: bash
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      EXPO_NO_DOTENV: '1'
+      EXPO_OFFLINE: '1'
+    steps:
+      - name: Gate the reviewed revision and inventory
+        id: approval
+        env:
+          HOSTED_OBSERVED: ${{ inputs.hosted_observed }}
+          REVIEWED_SHA: ${{ inputs.reviewed_sha }}
+          REVIEWED_TREE_SHA256: ${{ inputs.reviewed_tree_sha256 }}
+        run: |
+          [[ "$HOSTED_OBSERVED" == true ]]
+          [[ "$GITHUB_SHA" =~ ^[a-f0-9]{40}$ && "$REVIEWED_SHA" == "$GITHUB_SHA" ]]
+          [[ "$REVIEWED_TREE_SHA256" =~ ^[a-f0-9]{64}$ ]]
+
+      - name: Check out the reviewed revision
+        id: checkout
+        timeout-minutes: 3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          set-safe-directory: false
+
+      - name: Select Node 24 arm64
+        id: node
+        timeout-minutes: 4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24.22.3'
+          architecture: arm64
+          package-manager-cache: false
+
+      - name: Build and qualify the candidate Release
+        id: campaign
+        if: ${{ steps.approval.outcome == 'success' && steps.checkout.outcome == 'success' && steps.checkout.outputs.commit == github.sha && steps.node.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HOSTED_OBSERVED: ${{ inputs.hosted_observed }}
+          REVIEWED_SHA: ${{ inputs.reviewed_sha }}
+          REVIEWED_TREE_SHA256: ${{ inputs.reviewed_tree_sha256 }}
+          CHECKED_OUT_SHA: ${{ steps.checkout.outputs.commit }}
+        run: |
+          exec python3 -IB apps/mobile/scripts/run-ios-https-campaign.py "$RUNNER_TEMP/bunny-ios-c2-b-proof/report.json"
+
+      - name: Remove checkout and preserve a sanitized report
+        if: always()
+        env:
+          APPROVAL: ${{ steps.approval.outcome }}
+          CHECKOUT: ${{ steps.checkout.outcome }}
+          CHECKOUT_MATCH: ${{ steps.checkout.outputs.commit == github.sha }}
+          NODE: ${{ steps.node.outcome }}
+          CAMPAIGN: ${{ steps.campaign.outcome }}
+        run: |
+          umask 077
+          python3 -I - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import shutil
+
+          proof = Path(os.environ['RUNNER_TEMP']) / 'bunny-ios-c2-b-proof'
+          proof.mkdir(mode=0o700, exist_ok=True)
+          report_path = proof / 'report.json'
+          if report_path.exists():
+              report = json.loads(report_path.read_text())
+          else:
+              stages = ('revision', 'source', 'archive', 'toolchain', 'simulator', 'fixture',
+                        'prebuild', 'candidateBuild', 'candidateProvenance',
+                        'installation', 'candidateRuntime', 'cleanup')
+              sha = os.environ.get('GITHUB_SHA', '')
+              report = {'schemaVersion': 1, 'scope': 'ios-https-candidate-only-c2-b',
+                        'revision': sha if re.fullmatch('[a-f0-9]{40}', sha) else None,
+                        'run': None, 'verdict': 'NOT_RUN', 'complete': False,
+                        'profile': 'hosted-observed', 'networkObservation': {'verdict': 'NOT_RUN'},
+                        'phaseStops': {'before': 'NOT_RUN', 'after': 'NOT_RUN'},
+                        'stages': {name: {'verdict': 'NOT_RUN'} for name in stages},
+                        **{name: 'NOT_RUN' for name in ('fullConfinement', 'nativeEquivalence',
+                                                        'candidateRuntime', 'standardHttpsRuntime')}}
+              if any(os.environ.get(name) == 'failure' for name in ('APPROVAL', 'CHECKOUT', 'NODE')) or (
+                  os.environ.get('CHECKOUT') == 'success' and os.environ.get('CHECKOUT_MATCH') != 'true'):
+                  report['verdict'] = 'FAIL'
+          checkout_cleanup = 'NOT_RUN'
+          if os.environ.get('CHECKOUT') in ('success', 'failure'):
+              try:
+                  workspace = Path(os.environ['GITHUB_WORKSPACE']).resolve(strict=True)
+                  runner_work = Path(os.environ['RUNNER_WORKSPACE']).resolve(strict=True)
+                  if (os.environ.get('RUNNER_ENVIRONMENT') != 'github-hosted' or workspace.parent != runner_work
+                          or workspace == runner_work):
+                      raise ValueError('workspace ownership unconfirmed')
+                  for child in workspace.iterdir():
+                      if child.is_dir() and not child.is_symlink():
+                          shutil.rmtree(child)
+                      else:
+                          child.unlink()
+                  checkout_cleanup = 'PASS' if not any(workspace.iterdir()) else 'FAIL'
+              except (OSError, ValueError):
+                  checkout_cleanup = 'FAIL'
+          report['checkoutCleanup'] = checkout_cleanup
+          if checkout_cleanup == 'FAIL' or (os.environ.get('CAMPAIGN') == 'success' and checkout_cleanup != 'PASS'):
+              report['verdict'] = 'FAIL'
+          report_path.write_text(json.dumps(report, sort_keys=True, separators=(',', ':')) + '\n')
+          if checkout_cleanup == 'FAIL':
+              raise SystemExit(1)
+          PY
+
+      - name: Upload sanitized HTTPS qualification report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-https-candidate-only-c2-b-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/bunny-ios-c2-b-proof/report.json
+          if-no-files-found: error
+          retention-days: 7
