@@ -471,6 +471,9 @@ class RuntimeTest(unittest.TestCase):
         code, report, tools = self.execute("stop-refused")
         self.assertEqual(code, 1)
         self.assertEqual(report["stages"]["reactNativeRendering"]["verdict"], "PASS")
+        self.assertEqual(report["evidence"]["renderingMethod"],
+                         "simulator-screenshot-vision-ocr-product-witness")
+        self.assertEqual(report["evidence"]["renderingWitness"], "Bunny Talks")
         self.assertEqual(report["stages"]["stop"]["code"], "stop-refused")
         self.assertEqual(report["stages"]["cleanup"]["verdict"], "PASS")
 

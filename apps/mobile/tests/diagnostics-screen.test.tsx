@@ -33,7 +33,7 @@ vi.mock('react-native', () => ({
   ScrollView: 'ScrollView',
   Text: 'Text',
 }));
-import { DiagnosticsScreen } from '../src/features/diagnostics/DiagnosticsScreen';
+import { DiagnosticsScreen } from '../qualification/crypto/diagnostics/DiagnosticsScreen';
 
 beforeEach(() => {
   hooks.states = [];

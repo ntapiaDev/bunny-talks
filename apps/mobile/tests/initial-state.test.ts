@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { assertFreshDiagnosticStores } from '../src/features/diagnostics/initial-state';
+import { assertFreshDiagnosticStores } from '../qualification/crypto/diagnostics/initial-state';
 
 function emptyStore() {
   return {

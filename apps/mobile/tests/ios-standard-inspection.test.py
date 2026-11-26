@@ -48,7 +48,7 @@ class StandardInspectionTest(unittest.TestCase):
             ]))
             source_map = root / "bundle.json"
             source_map.write_text(json.dumps({"sources": [
-                "apps/mobile/index.ts", "apps/mobile/src/composition/App.tsx",
+                "apps/mobile/index.ts", "apps/mobile/src/product/App.tsx",
             ]}))
 
             def fake_command(*args):
@@ -88,13 +88,27 @@ class StandardInspectionTest(unittest.TestCase):
     def test_refuses_qualification_bundle_sources(self):
         with tempfile.TemporaryDirectory() as directory:
             source_map = Path(directory) / "bundle.map"
-            sources = ["apps/mobile/index.ts", "apps/mobile/src/composition/App.tsx"]
+            sources = ["apps/mobile/index.ts", "apps/mobile/src/product/App.tsx"]
             source_map.write_text(json.dumps({"sources": sources}))
             inspection.check_bundle_sources(source_map)
             sources.append("apps/mobile/qualification/standard-json-entry.tsx")
             source_map.write_text(json.dumps({"sources": sources}))
             with self.assertRaisesRegex(inspection.CheckFailed, "qualification-js-entry"):
                 inspection.check_bundle_sources(source_map)
+
+    def test_refuses_crypto_qualification_sources(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source_map = Path(directory) / "bundle.map"
+            for marker in (
+                "node_modules/@open-e2ee/signal-protocol-sdk/client.js",
+                "packages/crypto/backup/tests/fixtures/account-vault-v1.json",
+            ):
+                with self.subTest(marker=marker):
+                    source_map.write_text(json.dumps({"sources": [
+                        "apps/mobile/index.ts", "apps/mobile/src/product/App.tsx", marker,
+                    ]}))
+                    with self.assertRaisesRegex(inspection.CheckFailed, "crypto-qualification-js-entry"):
+                        inspection.check_bundle_sources(source_map)
 
     def test_refuses_qualification_resources_markers_and_ats_exceptions(self):
         inspection.check_ats({"NSAppTransportSecurity": {"NSAllowsArbitraryLoads": False}})

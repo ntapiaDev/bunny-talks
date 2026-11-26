@@ -24,6 +24,10 @@ QUALIFICATION_MARKERS = (
     b"qualificationProfile", b"qualificationCompletion", b"weird-reply-before-headers",
     b"fr.bunnytalks.mobile.httpsqualification", b"bunny-https-libcurl-runtime", b"Bunny fixture",
 )
+CRYPTO_QUALIFICATION_MARKERS = (
+    b"@open-e2ee/signal-protocol-sdk", b"account-vault-v1.json",
+    b"key-envelope-recovery.json", b"native-vault-v1.json",
+)
 CERTIFICATE_PAYLOAD = re.compile(
     rb"-----BEGIN (?:(?:(?:TRUSTED|X509) )?CERTIFICATE|(?:[A-Z0-9]+ )*PRIVATE KEY)-----"
     rb"(?:\r?\n|(?:\\r)?\\n)[A-Za-z0-9+/]{32}"
@@ -152,14 +156,16 @@ def check_bundle_sources(path, *, laboratory_sources=None):
         }
         check(
             fixture_sources == laboratory_sources
-            and not any(name.endswith("src/composition/App.tsx") for name in sources),
+            and not any(name.endswith("src/product/App.tsx") for name in sources),
             "laboratory-js-entry",
         )
         return
     check(any(name in ("index.ts", "./index.ts") or ("/" + name).endswith("/apps/mobile/index.ts")
               for name in sources)
-          and any(name.endswith("src/composition/App.tsx") for name in sources), "standard-js-entry")
+          and any(name.endswith("src/product/App.tsx") for name in sources), "standard-js-entry")
     check(not any("/qualification/" in "/" + name for name in sources), "qualification-js-entry")
+    check(not any(any(marker.decode() in name for marker in CRYPTO_QUALIFICATION_MARKERS)
+                  for name in sources), "crypto-qualification-js-entry")
 
 
 def command(*args):
@@ -254,7 +260,11 @@ def inspect_release(
         if laboratory_sources is None
         else diagnostic_fields
     )
-    check(not re.search(js_forbidden, bundle.read_bytes()), "qualification-marker")
+    bundle_bytes = bundle.read_bytes()
+    check(not re.search(js_forbidden, bundle_bytes), "qualification-marker")
+    if laboratory_sources is None:
+        check(not any(marker in bundle_bytes for marker in CRYPTO_QUALIFICATION_MARKERS),
+              "crypto-qualification-marker")
     return {
         "verdict": "PASS", "bundleId": bundle_id, "displayName": "Bunny Talks",
         "configuration": "Release", "platform": "IOSSIMULATOR", "architecture": "arm64",

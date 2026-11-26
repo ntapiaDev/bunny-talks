@@ -1,4 +1,4 @@
-import type { ApiDiagnosticResult } from '../../features/diagnostics/api-diagnostics';
+import type { ApiDiagnosticResult } from './api-diagnostics';
 
 const localAndroidUrl = 'http://10.0.2.2:3000/health/live';
 const timeoutMs = 5000;

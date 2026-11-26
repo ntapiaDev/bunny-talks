@@ -1,0 +1,17 @@
+if (System.getenv('BUNNY_CRYPTO_QUALIFICATION') != 'synthetic') {
+  throw new GradleException('Crypto qualification requires BUNNY_CRYPTO_QUALIFICATION=synthetic')
+}
+
+gradle.beforeProject { project ->
+  if (project.path != ':app') return
+  project.plugins.withId('com.android.application') {
+    project.extensions.getByName('androidComponents').finalizeDsl { android ->
+      if (android.defaultConfig.applicationId != 'fr.bunnytalks.mobile.cryptoqualification') {
+        throw new GradleException('Synthetic crypto qualification application identity mismatch')
+      }
+      def qualification = new File(project.rootDir.parentFile, 'qualification/crypto')
+      def react = project.extensions.getByName('react')
+      react.entryFile.set(new File(qualification, 'entry.tsx'))
+    }
+  }
+}

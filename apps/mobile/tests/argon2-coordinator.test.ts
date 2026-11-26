@@ -1,7 +1,7 @@
 import { argon2id } from '@sonnetstationsolutions/expo-argon2';
 import { describe, expect, it, vi } from 'vitest';
 import { ARGON2ID_V1 } from '@bunny-talks/crypto-backup';
-import { applicationVaultArgon2Provider } from '../src/composition/crypto-composition';
+import { applicationVaultArgon2Provider } from '../qualification/crypto/composition/crypto-composition';
 import { createArgon2Coordinator } from '../src/infrastructure/crypto/argon2-coordinator';
 import { createVaultNativeProvider } from '../src/infrastructure/crypto/vault-native-provider';
 vi.mock('@sonnetstationsolutions/expo-argon2', () => ({ argon2id: vi.fn() }));

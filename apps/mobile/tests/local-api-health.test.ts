@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createApiDiagnostic } from '../src/features/diagnostics/api-diagnostics';
-import { createLocalApiHealthCheck } from '../src/infrastructure/http/local-api-health';
+import { createApiDiagnostic } from '../qualification/crypto/diagnostics/api-diagnostics';
+import { createLocalApiHealthCheck } from '../qualification/crypto/diagnostics/local-api-health';
 
 const createCheck = (
   transport: (url: string, init: RequestInit) => Promise<Response>,

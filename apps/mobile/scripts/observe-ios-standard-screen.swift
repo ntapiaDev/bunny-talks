@@ -13,7 +13,7 @@ func screenMatches(_ url: URL) throws -> Bool {
     try VNImageRequestHandler(url: url, options: [:]).perform([request])
 
     let locale = Locale(identifier: "fr_FR")
-    let anchors = ["diagnostic local opene2ee", "tester connexion api", "controles rapides du coffre"]
+    let anchors = ["bunny talks"]
     var above: CGFloat = 1
     for anchor in anchors {
         let rows = (request.results ?? []).filter { row in

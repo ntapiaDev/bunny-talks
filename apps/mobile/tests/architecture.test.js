@@ -4,6 +4,7 @@ import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 const mobile = path.resolve(import.meta.dirname, '..');
 const repository = path.resolve(mobile, '../..');
+const qualification = path.join(mobile, 'qualification');
 function files(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const name = path.join(directory, entry.name);
@@ -40,7 +41,7 @@ function imports(file) {
 }
 describe('mobile architecture boundaries', () => {
   it('keeps the diagnostic presentation independent of storage, crypto and scenarios', () => {
-    const screen = path.join(mobile, 'src/features/diagnostics/DiagnosticsScreen.tsx');
+    const screen = path.join(mobile, 'qualification/crypto/diagnostics/DiagnosticsScreen.tsx');
     expect(imports(screen).sort()).toEqual(['./diagnostic-entry', 'react', 'react-native']);
   });
   it('keeps shared packages independent of mobile in source and manifests', () => {
@@ -79,11 +80,10 @@ describe('mobile architecture boundaries', () => {
     expect(imports(entry)).toEqual([
       './src/infrastructure/crypto/random-provider',
       'expo',
-      './src/composition/App',
+      './src/product/App',
     ]);
   });
   it('keeps qualification code outside the application import graph', () => {
-    const qualification = path.join(mobile, 'qualification');
     for (const file of [path.join(mobile, 'index.ts'), ...files(path.join(mobile, 'src'))]) {
       for (const specifier of imports(file)) {
         if (!specifier.startsWith('.')) continue;
@@ -92,6 +92,28 @@ describe('mobile architecture boundaries', () => {
         expect(resolved.startsWith(qualification + path.sep), file).toBe(false);
       }
     }
+    const experimental = [
+      '@open-e2ee/signal-protocol-sdk',
+      'account-vault-v1.json',
+      'key-envelope-recovery.json',
+      'native-vault-v1.json',
+    ];
+    const productFiles = [path.join(mobile, 'index.ts'), ...files(path.join(mobile, 'src'))];
+    for (const file of productFiles) {
+      const source = readFileSync(file, 'utf8');
+      for (const marker of experimental) expect(source, file).not.toContain(marker);
+    }
+  });
+  it('exposes diagnostics only through the crypto qualification entry', () => {
+    const entry = path.join(qualification, 'crypto/entry.tsx');
+    expect(imports(entry)).toEqual([
+      '../../src/infrastructure/crypto/random-provider',
+      'expo',
+      './composition/App',
+    ]);
+    expect(imports(path.join(qualification, 'crypto/composition/App.tsx'))).toContain(
+      '../diagnostics/diagnostics',
+    );
   });
   it('has no cycles among mobile source imports', () => {
     const sourceFiles = files(path.join(mobile, 'src'));

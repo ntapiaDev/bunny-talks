@@ -1,10 +1,10 @@
 import { Platform } from 'react-native';
-import { createApiDiagnostic } from '../features/diagnostics/api-diagnostics';
-import { runDiagnostics } from '../features/diagnostics/diagnostics';
-import { DiagnosticsScreen } from '../features/diagnostics/DiagnosticsScreen';
-import { createNativeVaultDiagnostics } from '../features/diagnostics/native-vault-diagnostics';
-import { runVaultDiagnostics } from '../features/diagnostics/vault-diagnostics';
-import { createLocalApiHealthCheck } from '../infrastructure/http/local-api-health';
+import { createApiDiagnostic } from '../diagnostics/api-diagnostics';
+import { runDiagnostics } from '../diagnostics/diagnostics';
+import { DiagnosticsScreen } from '../diagnostics/DiagnosticsScreen';
+import { createLocalApiHealthCheck } from '../diagnostics/local-api-health';
+import { createNativeVaultDiagnostics } from '../diagnostics/native-vault-diagnostics';
+import { runVaultDiagnostics } from '../diagnostics/vault-diagnostics';
 import { applicationVaultArgon2Provider } from './crypto-composition';
 
 const runApiDiagnostic = createApiDiagnostic(

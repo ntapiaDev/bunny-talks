@@ -490,7 +490,8 @@ class RuntimeRun:
             require(installed == self.evidence["inspectedApp"], "installed-app-mismatch")
             self.evidence["installedApp"] = installed
         baseline = self.screen()
-        self.evidence["renderingMethod"] = "simulator-screenshot-vision-ocr"
+        self.evidence["renderingMethod"] = "simulator-screenshot-vision-ocr-product-witness"
+        self.evidence["renderingWitness"] = "Bunny Talks"
         self.evidence["negativeRenderControl"] = baseline is False
 
         with self.stage("launch"):
