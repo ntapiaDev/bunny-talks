@@ -66,7 +66,7 @@ async function qualify() {
       observeRetry = false,
     }: {
       destination?: keyof typeof offsets;
-      method?: 'GET' | 'POST';
+      method?: 'GET' | 'POST' | 'DELETE';
       bearer?: string;
       timeoutMs?: number;
       signal?: AbortSignal;
@@ -144,6 +144,16 @@ async function qualify() {
         }
       },
     };
+  }
+
+  async function expectRejection(
+    operation: ReturnType<typeof call>,
+    kinds: readonly string[],
+    checkNative = true,
+  ) {
+    const error = await operation.pending.catch((reason: unknown) => reason);
+    assert(error instanceof ApplicationHttpError && kinds.includes(error.kind));
+    if (checkNative) assert(operation.nativeRejected());
   }
 
   const scenarios = probes.map((probe) => ({
@@ -242,13 +252,19 @@ async function qualify() {
         const controller = new AbortController();
         const cancelled = call('/slow/concurrency-one', { signal: controller.signal }).pending;
         const neighbour = call('/slow/neighbour').pending;
+        const third = call('/third-reservation').pending;
         const timer = setTimeout(() => controller.abort(), 450);
         try {
-          const [first, second] = await Promise.allSettled([cancelled, neighbour]);
+          const [first, second, refused] = await Promise.allSettled([cancelled, neighbour, third]);
           assert(
             first.status === 'rejected' &&
               first.reason instanceof ApplicationHttpError &&
               first.reason.kind === 'cancelled',
+          );
+          assert(
+            refused.status === 'rejected' &&
+              refused.reason instanceof ApplicationHttpError &&
+              refused.reason.kind === 'network',
           );
           assert(second.status === 'fulfilled');
           expectJson(second.value);
@@ -260,7 +276,58 @@ async function qualify() {
         }
       },
     },
+    {
+      id: 'session-delete',
+      async run() {
+        const bearer = firstBearer;
+        assert(
+          (await call('/session-delete', { method: 'DELETE', bearer, status: 204 }).pending) ===
+            undefined,
+        );
+        const lost = call('/session-delete-loss', { method: 'DELETE', bearer });
+        await expectRejection(lost, ['network', 'response']);
+        const check = await call('/session-delete-loss', { bearer }).pending.catch(
+          (error: unknown) => error,
+        );
+        assert(
+          check instanceof ApplicationHttpError && check.kind === 'status' && check.status === 401,
+        );
+        return 'success';
+      },
+    },
+    {
+      id: 'framing-recovery',
+      async run() {
+        await expectRejection(call('/recover-bad-length'), ['network', 'response']);
+        expectJson(await call('/recover-json').pending);
+        return 'success';
+      },
+    },
   );
+
+  if (Platform.OS === 'ios') {
+    scenarios.push({
+      id: 'cancel-retried-get',
+      async run() {
+        const controller = new AbortController();
+        const operation = call('/loss-get-cancel', {
+          bearer: firstBearer,
+          signal: controller.signal,
+          observeRetry: true,
+        });
+        const timer = setTimeout(() => controller.abort(), 900);
+        try {
+          await expectRejection(operation, ['cancelled'], false);
+          await operation.observeTerminal();
+          assert(operation.nativeRejected());
+          await wait(100);
+          return 'success';
+        } finally {
+          clearTimeout(timer);
+        }
+      },
+    });
+  }
 
   for (const { id, run } of scenarios) {
     calls.length = 0;

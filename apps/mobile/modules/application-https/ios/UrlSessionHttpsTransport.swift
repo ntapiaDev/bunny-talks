@@ -1,7 +1,6 @@
 import ExpoModulesCore
 import Foundation
 
-// The qualification copy is the only target that includes this transport.
 final class UrlSessionHttpsTransport: NSObject, URLSessionDataDelegate, @unchecked Sendable {
   private final class Slot {
     let deadline: DispatchTime
@@ -14,9 +13,11 @@ final class UrlSessionHttpsTransport: NSObject, URLSessionDataDelegate, @uncheck
     var limit = 0
     var bytes = Data()
     var failure: String?
+    #if BUNNY_HTTPS_URLSESSION_QUALIFICATION
     var qualificationReason: String?
     var qualificationStatus: Int?
     var qualificationBytes: Int?
+    #endif
 
     init(deadline: DispatchTime, timer: DispatchSourceTimer) {
       self.deadline = deadline
@@ -31,6 +32,19 @@ final class UrlSessionHttpsTransport: NSObject, URLSessionDataDelegate, @uncheck
   private var session: URLSession?
   private var active: [String: Slot] = [:]
   private var requests: [Int: String] = [:]
+
+  #if !BUNNY_HTTPS_URLSESSION_QUALIFICATION
+  private let approvedOrigin: URLComponents? = {
+    guard let value = Bundle.main.object(forInfoDictionaryKey: "BunnyApplicationHttpsOrigin") as? String,
+          let origin = URLComponents(string: value), origin.scheme == "https",
+          let host = origin.host, !host.isEmpty, origin.percentEncodedHost?.contains("%") == false,
+          origin.user == nil, origin.password == nil, origin.query == nil, origin.fragment == nil,
+          origin.path.isEmpty || origin.path == "/",
+          (1...65535).contains(origin.port ?? 443)
+    else { return nil }
+    return origin
+  }()
+  #endif
 
   override init() {
     super.init()
@@ -88,7 +102,8 @@ final class UrlSessionHttpsTransport: NSObject, URLSessionDataDelegate, @uncheck
                body: String?, limit: Int, promise: Promise) {
     // Validate and prepare the upload outside the delegate queue.
     let request = makeRequest(url: url, method: method, headers: headers)
-    let upload = body.map { Data($0.utf8) }
+    // Mutations use the same one-shot stream, including a bodyless DELETE.
+    let upload = method == "GET" ? nil : Data((body ?? "").utf8)
     queue.sync {
       guard let session, let slot = active[id], slot.task == nil else {
         promise.resolve(failure("network", reason: "reservation"))
@@ -100,7 +115,7 @@ final class UrlSessionHttpsTransport: NSObject, URLSessionDataDelegate, @uncheck
         return
       }
       guard (1...1_048_576).contains(limit), var request,
-            (method == "GET" && upload == nil) || (method == "POST" && upload != nil)
+            (method == "POST") == (body != nil)
       else {
         finish(id: id, slot: slot, result: failure("network", reason: "request"))
         return
@@ -127,11 +142,25 @@ final class UrlSessionHttpsTransport: NSObject, URLSessionDataDelegate, @uncheck
   }
 
   private func makeRequest(url: String, method: String, headers: [String: String]) -> URLRequest? {
-    guard let target = URL(string: url), target.scheme == "https",
-          target.host == "localhost", let port = target.port, (29443...29447).contains(port),
-          target.user == nil, target.password == nil, target.query == nil, target.fragment == nil,
-          target.path.hasPrefix("/v1/https-qualification/standard-json/")
+    guard let components = URLComponents(string: url), components.scheme == "https",
+          components.user == nil, components.password == nil, components.query == nil,
+          components.fragment == nil, let target = components.url,
+          let host = components.host, let encodedHost = components.percentEncodedHost,
+          !encodedHost.contains("%"), (1...65535).contains(components.port ?? 443),
+          components.percentEncodedPath.range(of: #"^/v1/[a-z0-9-]+(?:/[a-z0-9-]+)*$"#,
+                                            options: .regularExpression) != nil,
+          ["GET", "POST", "DELETE"].contains(method)
     else { return nil }
+    #if BUNNY_HTTPS_URLSESSION_QUALIFICATION
+    guard host == "localhost", let port = components.port, (29443...29447).contains(port),
+          components.path.hasPrefix("/v1/https-qualification/standard-json/")
+    else { return nil }
+    #else
+    guard let origin = approvedOrigin, host.lowercased() == origin.host?.lowercased(),
+          (components.port ?? 443) == (origin.port ?? 443),
+          method == "POST" || components.path == "/v1/session"
+    else { return nil }
+    #endif
     var request = URLRequest(url: target, cachePolicy: .reloadIgnoringLocalCacheData)
     request.httpMethod = method
     request.httpShouldHandleCookies = false
@@ -146,17 +175,23 @@ final class UrlSessionHttpsTransport: NSObject, URLSessionDataDelegate, @uncheck
   }
 
   private func failure(_ kind: String, reason: String, slot: Slot? = nil) -> [String: Any] {
+    #if BUNNY_HTTPS_URLSESSION_QUALIFICATION
     var result: [String: Any] = ["ok": false, "kind": kind, "qualificationReason": reason]
     result["qualificationStatus"] = slot?.qualificationStatus
     result["qualificationBytes"] = slot?.qualificationBytes
     return result
+    #else
+    return ["ok": false, "kind": kind]
+    #endif
   }
 
   private func stop(id: String, kind: String, reason: String = "network") {
     guard let slot = active[id], slot.failure == nil else { return }
     slot.timer.cancel()
     slot.failure = kind
+    #if BUNNY_HTTPS_URLSESSION_QUALIFICATION
     slot.qualificationReason = kind == "timeout" ? "deadline" : reason
+    #endif
     slot.bytes = Data()
     slot.upload = nil
     if let task = slot.task {
@@ -171,8 +206,13 @@ final class UrlSessionHttpsTransport: NSObject, URLSessionDataDelegate, @uncheck
     active.removeValue(forKey: id)
     slot.timer.cancel()
     if let task = slot.task { requests.removeValue(forKey: task.taskIdentifier) }
+    #if BUNNY_HTTPS_URLSESSION_QUALIFICATION
+    let reason = slot.qualificationReason ?? "network"
+    #else
+    let reason = "network"
+    #endif
     let outcome = slot.expired ? failure("timeout", reason: "deadline", slot: slot)
-      : slot.failure.map { failure($0, reason: slot.qualificationReason ?? "network", slot: slot) } ?? result
+      : slot.failure.map { failure($0, reason: reason, slot: slot) } ?? result
     slot.promise?.resolve(outcome)
   }
 
@@ -181,8 +221,10 @@ final class UrlSessionHttpsTransport: NSObject, URLSessionDataDelegate, @uncheck
                   completionHandler: @escaping (URLRequest?) -> Void) {
     completionHandler(nil)
     if let id = requests[task.taskIdentifier] {
+      #if BUNNY_HTTPS_URLSESSION_QUALIFICATION
       active[id]?.qualificationStatus = response.statusCode
       active[id]?.qualificationBytes = 0
+      #endif
       stop(id: id, kind: "redirect", reason: "redirect")
     }
   }
@@ -232,11 +274,15 @@ final class UrlSessionHttpsTransport: NSObject, URLSessionDataDelegate, @uncheck
       completionHandler(.cancel)
       return
     }
+    #if BUNNY_HTTPS_URLSESSION_QUALIFICATION
     slot.qualificationStatus = (response as? HTTPURLResponse)?.statusCode
     slot.qualificationBytes = 0
+    #endif
     func reject(_ kind: String, reason: String) {
       slot.failure = kind
+      #if BUNNY_HTTPS_URLSESSION_QUALIFICATION
       slot.qualificationReason = reason
+      #endif
       slot.bytes = Data()
       completionHandler(.cancel)
     }
@@ -269,8 +315,10 @@ final class UrlSessionHttpsTransport: NSObject, URLSessionDataDelegate, @uncheck
   func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
     guard let id = requests[dataTask.taskIdentifier], let slot = active[id], slot.failure == nil
     else { return }
+    #if BUNNY_HTTPS_URLSESSION_QUALIFICATION
     // The extra value means that the native delegate received more than the body limit.
     slot.qualificationBytes = slot.bytes.count + min(data.count, slot.limit + 1 - slot.bytes.count)
+    #endif
     if slot.expired {
       stop(id: id, kind: "timeout")
     } else if data.count > slot.limit - slot.bytes.count {
@@ -294,10 +342,14 @@ final class UrlSessionHttpsTransport: NSObject, URLSessionDataDelegate, @uncheck
       } else if slot.response != nil {
         result = failure("response", reason: "body", slot: slot)
       } else {
+        #if BUNNY_HTTPS_URLSESSION_QUALIFICATION
         let tlsCodes: [URLError.Code] = [.secureConnectionFailed, .serverCertificateHasBadDate,
           .serverCertificateUntrusted, .serverCertificateHasUnknownRoot, .serverCertificateNotYetValid,
           .clientCertificateRejected, .clientCertificateRequired]
         result = failure("network", reason: code.map { tlsCodes.contains($0) } == true ? "tls" : "network", slot: slot)
+        #else
+        result = failure("network", reason: "network")
+        #endif
       }
     } else if let response = slot.response, let length = slot.length, length == slot.bytes.count {
       result = ["ok": true, "status": response.statusCode,

@@ -10,7 +10,7 @@ static CURLMcode record_multi_cleanup(CURLM *);
 #define curl_multi_remove_handle record_remove
 #define curl_easy_cleanup record_easy_cleanup
 #define curl_multi_cleanup record_multi_cleanup
-#include "../../modules/application-https/ios/Native/BunnyHttpsNative.c"
+#include "../archive/libcurl/Native/BunnyHttpsNative.c"
 #undef curl_multi_perform
 #undef curl_multi_remove_handle
 #undef curl_easy_cleanup

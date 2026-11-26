@@ -91,8 +91,7 @@ if [[ "$urlsession" == 1 ]]; then
   entry=qualification/standard-json-entry.tsx
   mkdir -p "$native" "$mobile/src/infrastructure/http"
   cp "$module/expo-module.config.json" "$native/../"
-  cp "$module/ios/ApplicationHttpsModule.swift" "$native/"
-  cp apps/mobile/qualification/urlsession/{ApplicationHttps.podspec,UrlSessionHttpsTransport.swift} "$native/"
+  cp "$module/ios/"{ApplicationHttpsModule.swift,ApplicationHttps.podspec,UrlSessionHttpsTransport.swift} "$native/"
   cp apps/mobile/qualification/{standard-json-entry.tsx,standard-json-diagnostics.ts,standard-json-scenarios.ts,verify-standard-json.ts,server.ts,certificates.sh} \
     "$mobile/qualification/"
   cp apps/mobile/src/infrastructure/http/{application-http,native-https-transport}.ts "$mobile/src/infrastructure/http/"
@@ -101,8 +100,10 @@ else
   python3 "$module/ios/verify_xcframeworks.py" archive "$xcframework_zip" >/dev/null
   mkdir -p "$native/Native" "$native/vendor"
   cp "$module/expo-module.config.json" "$native/../"
-  cp "$module/ios/"{ApplicationHttps.podspec,ApplicationHttpsModule.swift,CurlHttpsTransport.swift,verify_xcframeworks.py} "$native/"
-  cp "$module/ios/Native/"{BunnyHttpsNative.c,BunnyHttpsNative.h,module.modulemap} "$native/Native/"
+  legacy=apps/mobile/qualification/archive/libcurl
+  cp "$legacy/"{ApplicationHttps.podspec,ApplicationHttpsModule.swift,CurlHttpsTransport.swift} "$native/"
+  cp "$module/ios/verify_xcframeworks.py" "$native/"
+  cp "$legacy/Native/"{BunnyHttpsNative.c,BunnyHttpsNative.h,module.modulemap} "$native/Native/"
   cp "$xcframework_zip" "$native/vendor/xcframeworks.zip"
   python3 "$native/verify_xcframeworks.py" archive "$native/vendor/xcframeworks.zip" >/dev/null
   cp "apps/mobile/.eas/build/$profile.yml" "$mobile/.eas/build/"

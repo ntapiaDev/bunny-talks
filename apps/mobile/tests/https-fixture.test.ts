@@ -1190,3 +1190,106 @@ it('reports diagnostic evidence by TLS destination and preserves isolation check
     server: { destination: 'unknown', receptions: 1 },
   });
 });
+
+it('correlates revocation after a lost DELETE and cancellation during an observed GET retry', async () => {
+  function send(path: string, method = 'GET', stopAfterPrefix = false) {
+    return new Promise<number>((resolve, reject) => {
+      const req = request(
+        {
+          hostname: '127.0.0.1',
+          port,
+          ca,
+          path: standardPrefix + path,
+          method,
+          agent: false,
+          signal: AbortSignal.timeout(2000),
+          headers: {
+            host: 'localhost:' + port,
+            ...(path.startsWith('/recover-') ? {} : { authorization: 'Bearer ' + firstBearer }),
+            'cache-control': 'no-store',
+            'accept-encoding': 'identity',
+          },
+        },
+        (response) => {
+          response.on('data', () => {
+            if (stopAfterPrefix) setTimeout(() => req.destroy(new Error('fixture abort')), 20);
+          });
+          response.on('error', reject);
+          response.on('end', () => resolve(response.statusCode ?? 0));
+        },
+      );
+      req.on('error', reject);
+      req.end();
+    });
+  }
+
+  await expect(send('/session-delete', 'DELETE')).resolves.toBe(204);
+  await expect(send('/session-delete-loss', 'DELETE')).rejects.toThrow();
+  await expect(send('/session-delete-loss')).resolves.toBe(401);
+  await expect(send('/recover-bad-length')).rejects.toThrow();
+  await expect(send('/recover-json')).resolves.toBe(200);
+  const openedAtMs = Date.now();
+  await expect(send('/loss-get-cancel')).rejects.toThrow();
+  await expect(send('/loss-get-cancel', 'GET', true)).rejects.toThrow('fixture abort');
+  const settledAtMs = Date.now();
+  const log = [
+    'READY standard-json-known-length-urlsession',
+    ...plan.flatMap((id) => [
+      `START ${id}`,
+      `PASS ${id} success${
+        id === 'cancel-retried-get'
+          ? ' ' +
+            JSON.stringify({
+              calls: [
+                {
+                  reservation: 'accepted',
+                  native: 'rejected',
+                  nativeKind: 'network',
+                  application: 'cancelled',
+                },
+              ],
+              retryWindow: { openedAtMs, settledAtMs },
+            })
+          : ''
+      }`,
+    ]),
+    'DONE',
+  ]
+    .map((line) => marker + line)
+    .join('\n');
+  type Snapshot = Parameters<typeof verifyStandardJson>[2];
+  const assessment = (id: string, snapshot: Snapshot) => {
+    const scenario = verifyStandardJson('ios', log, snapshot).scenarios.find(
+      (row) => row.id === id,
+    );
+    return scenario && 'diagnostic' in scenario ? scenario.diagnostic : undefined;
+  };
+
+  await vi.waitFor(async () => {
+    const snapshot = (await (
+      await fetch(`http://127.0.0.1:${port + 5}/runtime`)
+    ).json()) as Snapshot;
+    for (const id of ['session-delete', 'framing-recovery', 'cancel-retried-get'])
+      expect(assessment(id, snapshot)?.verdict, id).toBe('PASS');
+
+    const mutation = snapshot.events.find(
+      ({ path, method }) => path === standardPrefix + '/session-delete-loss' && method === 'DELETE',
+    )!;
+    expect(
+      assessment('session-delete', {
+        ...snapshot,
+        events: [...snapshot.events, mutation],
+      })?.verdict,
+    ).toBe('FAIL');
+
+    expect(
+      assessment('cancel-retried-get', {
+        ...snapshot,
+        events: snapshot.events.filter(
+          ({ path, responseStarted }) =>
+            path !== standardPrefix + '/loss-get-cancel' || !responseStarted,
+        ),
+      }),
+    ).toEqual({ verdict: 'NOT_RUN', reason: 'retry-not-observed-before-cancel' });
+  });
+});

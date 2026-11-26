@@ -89,7 +89,13 @@ jobs:
         run: |
           case "$CANDIDATE_TRANSPORT" in
             urlsession) driver=apps/mobile/scripts/run-ios-urlsession-campaign.py ;;
-            libcurl) driver=apps/mobile/scripts/run-ios-https-campaign.py ;;
+            libcurl)
+              if [[ -f apps/mobile/modules/application-https/ios/UrlSessionHttpsTransport.swift ]]; then
+                printf '%s\n' 'Use the reviewed historical libcurl revision for this campaign.'
+                exit 1
+              fi
+              driver=apps/mobile/scripts/run-ios-https-campaign.py
+              ;;
             *) exit 1 ;;
           esac
           exec python3 -IB "$driver" "$RUNNER_TEMP/bunny-ios-c2-b-proof/report.json"

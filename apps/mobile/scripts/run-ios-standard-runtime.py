@@ -30,7 +30,7 @@ BUILD_NUMBER = r"[0-9]{2}[A-Z][0-9]{1,5}[a-z]?"
 SHA256 = r"[0-9a-f]{64}"
 UUID = r"[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}"
 REQUIRED_STAGES = (
-    "revision", "toolchain", "archive", "simulatorAvailability", "simulatorPreparation",
+    "revision", "toolchain", "simulatorAvailability", "simulatorPreparation",
     "dependencies", "project", "build", "staticInspection", "installation", "installedExecutable",
     "launch", "reactNativeRendering", "processStability", "stop", "cleanup",
 )
@@ -201,7 +201,7 @@ class RuntimeRun:
                 and self.env.get("GITHUB_REPOSITORY") == "ntapiaDev/bunny-talks"
                 and self.env.get("GITHUB_RUN_ATTEMPT") == "1"), "runner-not-approved")
         forbidden = {
-            "BUNNY_IOS_HTTPS_QUALIFICATION", "XCODE_XCCONFIG_FILE", "ENTRY_FILE",
+            "BUNNY_IOS_HTTPS_QUALIFICATION", "BUNNY_HTTPS_URLSESSION_QUALIFICATION", "XCODE_XCCONFIG_FILE", "ENTRY_FILE",
             "EXTRA_PACKAGER_ARGS", "BUNDLE_COMMAND", "SKIP_BUNDLING",
         }
         require(not any(name in forbidden or name.startswith(("EXPO_PUBLIC_", "SIMCTL_CHILD_"))
@@ -249,9 +249,6 @@ class RuntimeRun:
 
     def prepare_and_build(self):
         scratch = self.scratch
-        archive = scratch / "xcframeworks.zip"
-        provenance = scratch / "provenance.json"
-        verifier = "modules/application-https/ios/verify_xcframeworks.py"
         inspector = "scripts/inspect-ios-standard.py"
         ios = MOBILE / "ios"
         pod_settings = scratch / "pod-settings.json"
@@ -260,11 +257,6 @@ class RuntimeRun:
 
         with self.stage("toolchain"):
             self.verify_toolchain()
-        with self.stage("archive"):
-            require(archive.is_file(), "archive-missing")
-            self.call("python3", "-IB", verifier, "archive", str(archive), output=provenance,
-                      code="archive-rejected")
-            self.evidence["archive"] = {"id": 14723035221, "sha256": digest(archive)}
         with self.stage("simulatorAvailability"):
             self.find_runtime()
         with self.stage("simulatorPreparation"):
@@ -278,9 +270,8 @@ class RuntimeRun:
                       code="dependency-install-failed", timeout=360)
             self.call("pnpm", "--filter", "@bunny-talks/mobile^...", "run", "--if-present", "build",
                       cwd=MOBILE.parents[1], code="package-build-failed", timeout=180)
-            self.call("bash", "scripts/preflight-ios-standard.sh", str(archive),
+            self.call("bash", "scripts/preflight-ios-standard.sh",
                       code="standard-preflight-failed", timeout=120)
-            self.call("python3", "-IB", verifier, "install", str(archive), code="archive-install-failed")
         with self.stage("project"):
             pods = self.call("pod", "--version", code="pods-version-unavailable", capture=True).output
             require(re.fullmatch(r"[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,2}", pods),
@@ -311,12 +302,9 @@ class RuntimeRun:
             require(len(apps) == 1, "built-app-missing-or-ambiguous")
             app = apps[0]
             built = self.app_hashes(app)
-            native = "modules/application-https/ios/vendor"
-            self.call("python3", "-IB", verifier, "verify", f"{native}/xcframeworks.zip", f"{native}/package",
-                      code="extracted-archives-rejected")
             report = scratch / "release.json"
             result = self.call("python3", "-IB", inspector, "release", str(derived), str(source_map),
-                               str(pod_settings), str(provenance), output=report, timeout=120,
+                               str(pod_settings), output=report, timeout=120,
                                allowed=(0, 1), code="inspection-command-failed")
             static = read_json(report)
             require(static["verdict"] != "FAIL", "static-inspection-rejected")

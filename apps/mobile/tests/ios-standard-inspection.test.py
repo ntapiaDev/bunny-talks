@@ -33,6 +33,20 @@ class StandardInspectionTest(unittest.TestCase):
         with self.assertRaisesRegex(inspection.CheckFailed, "sqlcipher-flags"):
             inspection.check_pod_settings(settings)
 
+    def test_foundation_pod_requires_release_without_fixture_or_curl_flags(self):
+        https = {"CONFIGURATION": "Release", "OTHER_SWIFT_FLAGS": ""}
+        sqlite = {"CONFIGURATION": "Release", "OTHER_CFLAGS": "-DSQLITE_HAS_CODEC=1 -DSQLCIPHER_CRYPTO_CC"}
+        settings = [
+            {"target": "ApplicationHttps", "buildSettings": https},
+            {"target": "ExpoSQLite", "buildSettings": sqlite},
+        ]
+        inspection.check_pod_settings(settings, urlsession=True)
+        for flag in ("-D BUNNY_HTTPS_URLSESSION_QUALIFICATION", "-DCURL_STATICLIB=1", "-lssl"):
+            with self.subTest(flag=flag):
+                https["OTHER_SWIFT_FLAGS"] = flag
+                with self.assertRaisesRegex(inspection.CheckFailed, "standard-transport-flags"):
+                    inspection.check_pod_settings(settings, urlsession=True)
+
     def test_refuses_qualification_bundle_sources(self):
         with tempfile.TemporaryDirectory() as directory:
             source_map = Path(directory) / "bundle.map"
@@ -89,7 +103,7 @@ class StandardInspectionTest(unittest.TestCase):
                 inspection.check_resources(root)
 
     def test_checks_normal_curl_options_and_refuses_alternate_trust(self):
-        native = inspection.MOBILE / "modules/application-https/ios/Native/BunnyHttpsNative.c"
+        native = inspection.MOBILE / "qualification/archive/libcurl/Native/BunnyHttpsNative.c"
         source = native.read_text()
         inspection.check_curl_options(source)
         for original, replacement in (
@@ -119,7 +133,7 @@ class StandardInspectionTest(unittest.TestCase):
             (mobile / "assets").mkdir()
             for name in ("index.ts", "app.json", "package.json", "metro.config.js"):
                 (mobile / name).touch()
-            real_native = inspection.MOBILE / "modules/application-https/ios/Native/BunnyHttpsNative.c"
+            real_native = inspection.MOBILE / "qualification/archive/libcurl/Native/BunnyHttpsNative.c"
             (native / real_native.name).write_bytes(real_native.read_bytes())
             inspection.check_https_sources(mobile)
             certificate = mobile / "assets/fixture.DER"

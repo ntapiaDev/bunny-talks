@@ -6,7 +6,6 @@ import okhttp3.ConnectionPool
 import okhttp3.CookieJar
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
-import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
@@ -31,8 +30,7 @@ internal object HttpsClient {
     .proxy(Proxy.NO_PROXY)
     .cache(null)
     .retryOnConnectionFailure(false)
-    .connectionPool(if (BuildConfig.STANDARD_JSON_QUALIFICATION) ConnectionPool()
-                    else ConnectionPool(0, 1, TimeUnit.SECONDS))
+    .connectionPool(ConnectionPool())
     // A single native total deadline owns all phases.
     .connectTimeout(0, TimeUnit.MILLISECONDS)
     .readTimeout(0, TimeUnit.MILLISECONDS)
@@ -53,7 +51,8 @@ internal object HttpsClient {
   fun request(url: String, method: String, headers: Map<String, String>, body: String?): Request {
     require(method in methods && (method == "POST" || body == null))
     val target = url.toHttpUrl()
-    require(target.isHttps && target.username.isEmpty() && target.password.isEmpty() && target.fragment == null)
+    require(target.isHttps && target.username.isEmpty() && target.password.isEmpty() &&
+            target.fragment == null && target.query == null)
     val builder = Request.Builder().url(target)
     for ((name, value) in headers) {
       require(name.lowercase(Locale.ROOT) in allowedHeaders)
@@ -62,11 +61,10 @@ internal object HttpsClient {
     builder.header("Cache-Control", "no-store")
     if (BuildConfig.STANDARD_JSON_QUALIFICATION) {
       require(target.host == "10.0.2.2" && target.port in 29443..29447 &&
-              target.encodedPath.startsWith("/v1/https-qualification/standard-json/") &&
-              target.query == null)
-      // An explicit request header disables OkHttp's transparent gzip decoder.
-      builder.header("Accept-Encoding", "identity")
+              target.encodedPath.startsWith("/v1/https-qualification/standard-json/"))
     }
+    // An explicit request header disables OkHttp's transparent gzip decoder.
+    builder.header("Accept-Encoding", "identity")
     return builder
       .tag(AtomicBoolean::class.java, AtomicBoolean())
       .method(method, if (method == "POST") (body ?: "").toByteArray().toRequestBody() else null)
@@ -79,16 +77,9 @@ internal object HttpsClient {
         call.cancel()
         return failure("redirect")
       }
-      if (!BuildConfig.STANDARD_JSON_QUALIFICATION && !hasExplicitFraming(it)) throw IOException()
-      // OkHttp removes this header for transparently decoded gzip.
-      val encodings = it.headers("Content-Encoding")
-      if (encodings.isNotEmpty() && (BuildConfig.STANDARD_JSON_QUALIFICATION ||
-            !encodings.singleOrNull().equals("identity", ignoreCase = true))) {
-        call.cancel()
-        return failure("response")
-      }
+      if (it.headers("Content-Encoding").isNotEmpty()) throw IOException()
       val body = it.body ?: throw IOException()
-      val length = if (BuildConfig.STANDARD_JSON_QUALIFICATION) knownLength(it) else body.contentLength()
+      val length = knownLength(it)
       val bytes = BoundedBodyReader.read(body.byteStream(), limit, length)
       mapOf("ok" to true, "status" to it.code, "contentType" to it.header("Content-Type"), "bytes" to bytes)
     } catch (_: BodyLimitExceeded) {
@@ -111,20 +102,5 @@ internal object HttpsClient {
     val value = values.singleOrNull() ?: throw IOException()
     if (value.isEmpty() || value.any { it !in '0'..'9' }) throw IOException()
     return value.toLongOrNull() ?: throw IOException()
-  }
-
-  private fun hasExplicitFraming(response: Response): Boolean {
-    if (response.code == 204 || response.protocol !in setOf(Protocol.HTTP_1_0, Protocol.HTTP_1_1)) {
-      return true
-    }
-    // The raw response retains the encoded length even when OkHttp has decoded gzip.
-    val headers = (response.networkResponse ?: response).headers
-    val length = headers.values("Content-Length")
-    val encoding = headers.values("Transfer-Encoding")
-    // Close-delimited HTTP/1 bodies cannot be distinguished from a premature socket close.
-    if (encoding.isNotEmpty()) {
-      return length.isEmpty() && encoding.singleOrNull().equals("chunked", ignoreCase = true)
-    }
-    return length.singleOrNull()?.toLongOrNull()?.let { it >= 0 } == true
   }
 }

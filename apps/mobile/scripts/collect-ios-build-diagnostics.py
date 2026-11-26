@@ -26,7 +26,7 @@ TARGETS = frozenset({
 })
 FILES = frozenset({
     "AppDelegate.swift", "ExpoModulesProvider.swift", "ApplicationHttpsModule.swift",
-    "CurlHttpsTransport.swift", "BunnyHttpsNative.c", "BunnyHttpsNative.h",
+    "UrlSessionHttpsTransport.swift", "CurlHttpsTransport.swift", "BunnyHttpsNative.c", "BunnyHttpsNative.h",
     "module.modulemap", "sqlite3.c", "sqlite3.h", "Podfile", "index.ts",
 })
 COMPONENTS = TARGETS | FILES | frozenset({

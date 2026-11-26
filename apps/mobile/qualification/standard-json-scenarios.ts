@@ -69,5 +69,13 @@ export const probes: readonly Scenario[] = [
   { id: 'timeout', path: '/slow/timeout', result: 'timeout' },
 ];
 
-export const supplementalCases = ['reuse', 'identity-isolation', 'cancel-neighbour'] as const;
+export const supplementalCases = [
+  'reuse',
+  'identity-isolation',
+  'cancel-neighbour',
+  'session-delete',
+  'framing-recovery',
+  'cancel-retried-get',
+] as const;
 export const plan = [...probes.map(({ id }) => id), ...supplementalCases];
+export const androidPlan = plan.filter((id) => id !== 'cancel-retried-get');

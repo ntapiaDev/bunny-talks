@@ -44,6 +44,7 @@ it('resolves the standard Expo identity, minimum iOS and ATS settings', () => {
     'ios.deploymentTarget': '16.4',
     'expo.sqlite.useSQLCipher': 'true',
   });
+  expect(ios.infoPlist.BunnyApplicationHttpsOrigin).toBeUndefined();
   expect(ios.infoPlist.NSAppTransportSecurity).toEqual({ NSAllowsArbitraryLoads: false });
   expect(JSON.stringify(config.plugins)).not.toContain('qualification');
 });

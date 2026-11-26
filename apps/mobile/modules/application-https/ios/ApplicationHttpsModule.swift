@@ -1,15 +1,8 @@
-#if !BUNNY_HTTPS_URLSESSION_QUALIFICATION
-import BunnyHttpsNative
-#endif
 import ExpoModulesCore
 import Foundation
 
 public final class ApplicationHttpsModule: Module {
-  #if BUNNY_HTTPS_URLSESSION_QUALIFICATION
   private let transport = UrlSessionHttpsTransport()
-  #else
-  private let transport = CurlHttpsTransport()
-  #endif
 
   public func definition() -> ModuleDefinition {
     Name("ApplicationHttps")
@@ -17,10 +10,6 @@ public final class ApplicationHttpsModule: Module {
 
     #if BUNNY_HTTPS_URLSESSION_QUALIFICATION
     Function("qualificationProfile") { "standard-json-known-length-urlsession" }
-    #elseif BUNNY_HTTPS_QUALIFICATION
-    Function("qualificationProfile") {
-      bunny_https_runtime_profile().map { String(cString: $0) } ?? "unavailable"
-    }
     #endif
 
     Function("reserve") { (timeoutMs: Int) in

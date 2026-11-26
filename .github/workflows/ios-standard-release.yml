@@ -10,7 +10,6 @@ on:
 
 permissions:
   contents: read
-  actions: read
 
 concurrency:
   group: ios-standard-release
@@ -57,32 +56,17 @@ jobs:
           architecture: arm64
           package-manager-cache: false
 
-      - name: Fetch the original approved ZIP
-        id: artifact
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          umask 077
-          gh api --method GET "repos/$GITHUB_REPOSITORY/actions/artifacts/14723035221/zip" \
-            > "$RUNNER_TEMP/bunny-ios-standard/xcframeworks.zip"
-
-      - name: Verify the ZIP and standard source configuration
+      - name: Verify standard source configuration
         id: preflight
         env:
           CHECKED_OUT_SHA: ${{ steps.checkout.outputs.commit }}
         run: |
           [[ "$CHECKED_OUT_SHA" == "$GITHUB_SHA" ]]
-          scratch="$RUNNER_TEMP/bunny-ios-standard"
-          archive="$scratch/xcframeworks.zip"
-          verifier=apps/mobile/modules/application-https/ios/verify_xcframeworks.py
-          python3 -I "$verifier" archive "$archive" > "$scratch/provenance.json"
-          mv "$scratch/provenance.json" "$RUNNER_TEMP/bunny-ios-proof/provenance.json"
           corepack enable
           [[ "$(pnpm --version)" == 10.34.9 ]]
           pnpm install --frozen-lockfile
           pnpm --filter '@bunny-talks/mobile^...' run --if-present build
-          bash apps/mobile/scripts/preflight-ios-standard.sh "$archive"
-          python3 -I "$verifier" install "$archive" >/dev/null
+          bash apps/mobile/scripts/preflight-ios-standard.sh
           python3 -I - "$RUNNER_TEMP/bunny-ios-proof/environment.json" <<'PY'
           import json
           import os
@@ -153,10 +137,8 @@ jobs:
           umask 077
           scratch="$RUNNER_TEMP/bunny-ios-standard"
           proof="$RUNNER_TEMP/bunny-ios-proof"
-          native=modules/application-https/ios
-          python3 -I "$native/verify_xcframeworks.py" verify "$native/vendor/xcframeworks.zip" "$native/vendor/package" >/dev/null
           python3 -IB scripts/inspect-ios-standard.py release "$scratch/DerivedData" \
-            "$scratch/bundle.map" "$scratch/pod-settings.json" "$proof/provenance.json" > "$proof/release.json"
+            "$scratch/bundle.map" "$scratch/pod-settings.json" > "$proof/release.json"
 
       - name: Collect sanitized Xcode diagnostics
         if: always() && (steps.build.outcome == 'success' || steps.build.outcome == 'failure')
@@ -172,7 +154,6 @@ jobs:
       - name: Record compilation and inspection results
         if: always()
         env:
-          ARTIFACT: ${{ steps.artifact.outcome }}
           PREFLIGHT: ${{ steps.preflight.outcome }}
           PODS: ${{ steps.pods.outcome }}
           BUILD: ${{ steps.build.outcome }}
@@ -189,7 +170,7 @@ jobs:
           from pathlib import Path
 
           stages = {name.lower(): os.environ[name] or "not-run"
-                    for name in ("ARTIFACT", "PREFLIGHT", "PODS", "BUILD", "INSPECTION")}
+                    for name in ("PREFLIGHT", "PODS", "BUILD", "INSPECTION")}
           proof = Path(sys.argv[1])
           def read_report(filename):
               try:
@@ -244,7 +225,6 @@ jobs:
           path: |
             ${{ runner.temp }}/bunny-ios-proof/report.json
             ${{ runner.temp }}/bunny-ios-proof/environment.json
-            ${{ runner.temp }}/bunny-ios-proof/provenance.json
             ${{ runner.temp }}/bunny-ios-proof/build-diagnostics.json
             ${{ runner.temp }}/bunny-ios-proof/release.json
           if-no-files-found: error

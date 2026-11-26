@@ -10,7 +10,6 @@ on:
 
 permissions:
   contents: read
-  actions: read
 
 concurrency:
   group: ios-standard-runtime
@@ -56,19 +55,6 @@ jobs:
           architecture: arm64
           package-manager-cache: false
 
-      - name: Fetch the original approved ZIP
-        timeout-minutes: 2
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CHECKED_OUT_SHA: ${{ steps.checkout.outputs.commit }}
-        run: |
-          umask 077
-          [[ "$CHECKED_OUT_SHA" == "$GITHUB_SHA" ]]
-          scratch="$RUNNER_TEMP/bunny-ios-c1"
-          gh api --method GET "repos/$GITHUB_REPOSITORY/actions/artifacts/14723035221/zip" \
-            > "$scratch/download.tmp" 2> "$scratch/download.log"
-          mv "$scratch/download.tmp" "$scratch/xcframeworks.zip"
-
       - name: Prepare the simulator, then build and observe the standard Release
         if: ${{ !cancelled() && steps.approval.outcome == 'success' && steps.checkout.outcome == 'success' && steps.checkout.outputs.commit == github.sha && steps.node.outcome == 'success' }}
         env:
@@ -98,7 +84,7 @@ jobs:
           import sys
           from pathlib import Path
 
-          stages = "revision toolchain archive simulatorAvailability simulatorPreparation dependencies project build staticInspection installation installedExecutable launch reactNativeRendering processStability stop cleanup httpsRuntime runtimeMinimumIOS physicalDevice"
+          stages = "revision toolchain simulatorAvailability simulatorPreparation dependencies project build staticInspection installation installedExecutable launch reactNativeRendering processStability stop cleanup httpsRuntime runtimeMinimumIOS physicalDevice"
           result = {name: {"verdict": "NOT_RUN"} for name in stages.split()}
           failure = next((code for step, code in (
               ("APPROVAL", "approval-check-failed"),

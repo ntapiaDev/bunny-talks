@@ -134,11 +134,6 @@ class FakeTools:
             if self.fault == "build-diagnostics-interrupted":
                 raise runtime.Interrupted
             return result(0, json.dumps({"verdict": "PASS", "quality": "technical-error", "untrusted": SECRET}))
-        if args[:4] == ("python3", "-IB", "modules/application-https/ios/verify_xcframeworks.py", "archive"):
-            if self.fault == "archive-different":
-                return runtime.run_command(args, **kwargs)
-            kwargs["output"].write_text("{}")
-            return result(0)
         if args[0] in ("corepack", "pnpm", "bash", "python3", "pod", "xcodebuild"):
             return result(0)
         raise AssertionError("Unexpected command")
@@ -240,8 +235,6 @@ class RuntimeTest(unittest.TestCase):
         proof = self.root / "report.json"
         home = self.root / "fixture-home"
         scratch.mkdir()
-        if fault != "archive-missing":
-            (scratch / "xcframeworks.zip").write_bytes(b"synthetic ZIP for mocked verifier")
         env = {
             "GITHUB_SHA": REVISION, "REVIEWED_SHA": REVISION, "CHECKED_OUT_SHA": REVISION,
             "RUNNER_ENVIRONMENT": "github-hosted", "GITHUB_REPOSITORY": "ntapiaDev/bunny-talks",
@@ -288,18 +281,12 @@ class RuntimeTest(unittest.TestCase):
         self.assertEqual(report["stages"]["toolchain"]["code"], "runtime-environment-overrides")
         self.assertEqual(tools.calls, [])
 
-    def test_missing_zip(self):
-        code, report, tools = self.execute("archive-missing")
-        self.assertEqual(code, 1)
-        self.assertEqual(report["stages"]["archive"]["code"], "archive-missing")
-        self.assertEqual(report["stages"]["build"]["verdict"], "NOT_RUN")
-
-    def test_different_zip_is_rejected_by_real_pinned_verifier(self):
-        code, report, tools = self.execute("archive-different")
-        self.assertEqual(code, 1)
-        self.assertEqual(report["stages"]["archive"],
-                         {"verdict": "FAIL", "code": "archive-rejected", "exitCode": 1})
-        self.assertEqual(report["stages"]["build"]["verdict"], "NOT_RUN")
+    def test_standard_runtime_uses_foundation_without_vendor_archive(self):
+        code, report, tools = self.execute()
+        self.assertEqual(code, 0)
+        self.assertNotIn("archive", report["stages"])
+        self.assertIn(("bash", "scripts/preflight-ios-standard.sh"), tools.calls)
+        self.assertFalse(any("xcframework" in " ".join(args) for args in tools.calls))
 
     def test_runtime_unavailable_stops_before_build(self):
         code, report, tools = self.execute("runtime-unavailable")

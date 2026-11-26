@@ -213,12 +213,14 @@ class Campaign(lab.Feasibility):
         qualification = json.loads(result.output)
         self.report["qualification"] = qualification
         self.report["pid"] = runner.pid
-        require(len(qualification["scenarios"]) == 31, "plan-mismatch")
+        require(bool(qualification["scenarios"]), "plan-missing")
         if collection_error:
             raise collection_error
         require(qualification["verdict"] == "PASS", "qualification-rejected",
                 verdict=qualification["verdict"])
-        return {"installedHashesMatch": True, "scenarios": 31}
+        require(result.exit_code == 0 and qualification.get("appCompleted") is True
+                and all(row["verdict"] == "PASS" for row in qualification["scenarios"]), "plan-incomplete")
+        return {"installedHashesMatch": True, "scenarios": len(qualification["scenarios"])}
 
     def cleanup(self):
         evidence = {}

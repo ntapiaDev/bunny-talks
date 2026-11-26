@@ -116,6 +116,25 @@ def check_https_sources(mobile):
     check_curl_options((native / "Native/BunnyHttpsNative.c").read_text())
 
 
+def check_urlsession_sources(mobile):
+    native = mobile / "modules/application-https/ios"
+    for root in (mobile / "src", mobile / "assets"):
+        if root.exists():
+            check_resources(root)
+    for path in (mobile / "index.ts", mobile / "app.json", mobile / "package.json", mobile / "metro.config.js"):
+        check(path.is_file() and not path.is_symlink(), "https-source-tree")
+        check_resource(path)
+    check(not native.is_symlink() and native.resolve().is_relative_to(mobile.resolve()), "external-resource-link")
+    for name in ("ApplicationHttps.podspec", "ApplicationHttpsModule.swift", "UrlSessionHttpsTransport.swift"):
+        path = native / name
+        check(path.is_file() and not path.is_symlink(), "https-source-tree")
+        check_resource(path, allow_qualification_markers=True)
+    pod = (native / "ApplicationHttps.podspec").read_text()
+    check(re.findall(r"^\s*s\.source_files\s*=\s*(.*)$", pod, re.M) ==
+          ["'ApplicationHttpsModule.swift', 'UrlSessionHttpsTransport.swift'"]
+          and not re.search(r"libcurl|openssl|vendor|CURL_STATICLIB", pod, re.I), "standard-transport-sources")
+
+
 def check_generated(ios, *, bundle_id=BUNDLE_ID, resources=True):
     properties = json.loads((ios / "Podfile.properties.json").read_bytes())
     check(properties.get("ios.deploymentTarget") == "16.4", "project-minimum-ios")
@@ -129,17 +148,22 @@ def check_generated(ios, *, bundle_id=BUNDLE_ID, resources=True):
         check_resources(ios)
 
 
-def check_pod_settings(settings):
+def check_pod_settings(settings, *, urlsession=False):
     targets = {entry["target"]: entry["buildSettings"] for entry in settings}
     for name in ("ApplicationHttps", "ExpoSQLite"):
         check(targets[name].get("CONFIGURATION") == "Release", "pod-configuration")
     https = targets["ApplicationHttps"]
     flags = " ".join(str(https.get(name, "")) for name in (
         "GCC_PREPROCESSOR_DEFINITIONS", "SWIFT_ACTIVE_COMPILATION_CONDITIONS",
-        "OTHER_CFLAGS", "OTHER_CPLUSPLUSFLAGS", "OTHER_SWIFT_FLAGS",
+        "OTHER_CFLAGS", "OTHER_CPLUSPLUSFLAGS", "OTHER_SWIFT_FLAGS", "OTHER_LDFLAGS",
+        "LIBRARY_SEARCH_PATHS", "FRAMEWORK_SEARCH_PATHS",
     ))
     check("BUNNY_HTTPS_QUALIFICATION" not in flags, "qualification-flags")
-    check("CURL_STATICLIB=1" in flags, "static-curl-flags")
+    if urlsession:
+        check(not re.search(r"BUNNY_HTTPS_URLSESSION_QUALIFICATION|CURL_STATICLIB|libcurl|openssl|(?:^|\s)-l(?:curl|ssl|crypto)\b", flags, re.I),
+              "standard-transport-flags")
+    else:
+        check("CURL_STATICLIB=1" in flags, "static-curl-flags")
     sqlite_flags = targets["ExpoSQLite"].get("OTHER_CFLAGS", "").split()
     check({"-DSQLITE_HAS_CODEC=1", "-DSQLCIPHER_CRYPTO_CC"} <= set(sqlite_flags), "sqlcipher-flags")
 
@@ -185,8 +209,8 @@ def check_linked_archives(raw_map, archives, digest):
 
 
 def inspect_release(derived, source_map, pod_settings, provenance, *, mobile=MOBILE, bundle_id=BUNDLE_ID,
-                    c2=False):
-    check_pod_settings(json.loads(pod_settings.read_bytes()))
+                    c2=False, urlsession=False):
+    check_pod_settings(json.loads(pod_settings.read_bytes()), urlsession=urlsession)
     check_bundle_sources(source_map, candidate=bundle_id == CANDIDATE_BUNDLE_ID)
     link = link_helpers()
     apps = list((derived / "Build/Products/Release-iphonesimulator").glob("*.app"))
@@ -212,14 +236,6 @@ def inspect_release(derived, source_map, pod_settings, provenance, *, mobile=MOB
     with bundle.open("rb") as handle:
         check(handle.read(8) == bytes.fromhex("c61fbc03c103191f"), "hermes-bytecode")
 
-    vendor = mobile / "modules/application-https/ios/vendor/package"
-    license_bundles = list(app.rglob("ApplicationHttpsLicenses.bundle"))
-    check(len(license_bundles) == 1, "license-bundle")
-    licenses = {}
-    for name in ("curl-COPYING", "openssl-LICENSE.txt"):
-        licenses[name] = link.digest(license_bundles[0] / name)
-        check(licenses[name] == link.digest(vendor / name), "license-bytes")
-
     podfile_lock = mobile / "ios/Podfile.lock"
     pods = podfile_lock.read_text()
     for name in ("ApplicationHttps", "ExpoSQLite", "ExpoSecureStore", "hermes-engine"):
@@ -235,6 +251,38 @@ def inspect_release(derived, source_map, pod_settings, provenance, *, mobile=MOB
     if maps[0].stat().st_size > 128 * 1024 * 1024:
         raise EvidenceUnavailable("release-link-map-too-large")
     raw_map = maps[0].read_bytes()
+    if urlsession:
+        check(not re.search(r"libcurl|openssl|ApplicationHttpsLicenses", pods, re.I)
+              and not any(re.search(r"ApplicationHttpsLicenses|lib(?:curl|openssl|ssl|crypto)\.", path.name, re.I)
+                          for path in app.rglob("*")), "legacy-transport-dependency")
+        check(re.search(rb"UrlSessionHttpsTransport(?:\.o|[A-Za-z0-9_]+)", raw_map)
+              and not re.search(rb"CurlHttpsTransport|BunnyHttpsNative|libcurl\.|libopenssl\.|libssl\.|libcrypto\.",
+                                raw_map, re.I), "standard-transport-link-map")
+        symbols = link.command("xcrun", "nm", "-j", binary)
+        check(not re.search(r"(?m)^_(?:curl_|SSL_|OPENSSL_|bunny_https_)", symbols)
+              and "Foundation.framework/Foundation" in dependencies, "standard-transport-symbols")
+        for path in (binary, bundle):
+            check(not re.search(rb"qualificationReason|qualificationStatus|qualificationBytes|"
+                                rb"https-qualification/standard-json|BunnyHttpsStandardJson", path.read_bytes()),
+                  "qualification-marker")
+        return {
+            "verdict": "PASS", "bundleId": bundle_id, "displayName": "Bunny Talks",
+            "configuration": "Release", "platform": "IOSSIMULATOR", "architecture": "arm64",
+            "minimumOS": "16.4", "executableSha256": link.digest(binary),
+            "hermesBundleSha256": link.digest(bundle), "podfileLockSha256": link.digest(podfile_lock),
+            "linkMapSha256": link.digest(maps[0]), "ats": "default", "transport": "urlsession",
+            "qualificationFlagsResourcesAndDiagnostics": "absent-in-checked-scope",
+            "sqlcipherReleaseFlags": True, "secureStoreInPodfileLock": True,
+        }
+
+    vendor = mobile / "modules/application-https/ios/vendor/package"
+    license_bundles = list(app.rglob("ApplicationHttpsLicenses.bundle"))
+    check(len(license_bundles) == 1, "license-bundle")
+    licenses = {}
+    for name in ("curl-COPYING", "openssl-LICENSE.txt"):
+        licenses[name] = link.digest(license_bundles[0] / name)
+        check(licenses[name] == link.digest(vendor / name), "license-bytes")
+
     link_map = link.inspect_map(raw_map, app.name, executable)
     definitions = link.inspect_definitions(link.command("xcrun", "nm", "-m", "-U", binary))
     if not all(definitions.values()):
@@ -291,11 +339,11 @@ def main():
     parser = argparse.ArgumentParser()
     commands = parser.add_subparsers(dest="mode", required=True)
     commands.add_parser("generated")
-    commands.add_parser("https-sources")
+    commands.add_parser("urlsession-sources")
     pods = commands.add_parser("pods")
     pods.add_argument("pod_settings", type=Path)
     release = commands.add_parser("release")
-    for name in ("derived", "source_map", "pod_settings", "provenance"):
+    for name in ("derived", "source_map", "pod_settings"):
         release.add_argument(name, type=Path)
     args = parser.parse_args()
     status = 0
@@ -303,15 +351,15 @@ def main():
         if args.mode == "generated":
             check_generated(MOBILE / "ios")
             result = {"verdict": "PASS", "scope": "generated-project"}
-        elif args.mode == "https-sources":
-            check_https_sources(MOBILE)
+        elif args.mode == "urlsession-sources":
+            check_urlsession_sources(MOBILE)
             result = {"verdict": "PASS", "scope": "https-standard-sources", "httpsRuntime": "NOT_RUN"}
         elif args.mode == "pods":
-            check_pod_settings(json.loads(args.pod_settings.read_bytes()))
+            check_pod_settings(json.loads(args.pod_settings.read_bytes()), urlsession=True)
             result = {"verdict": "PASS", "scope": "release-pod-settings"}
         else:
             result = inspect_release(args.derived, args.source_map, args.pod_settings,
-                                     json.loads(args.provenance.read_bytes()))
+                                     None, urlsession=True)
     except CheckFailed as error:
         result, status = {"verdict": "FAIL", "reason": str(error)}, 1
     except EvidenceUnavailable as error:

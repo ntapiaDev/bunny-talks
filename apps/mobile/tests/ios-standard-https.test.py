@@ -62,7 +62,7 @@ class StandardHttpsTest(unittest.TestCase):
         native = mobile / c2.NATIVE
         (native / "Native").mkdir(parents=True)
         for path in c2.SOURCES:
-            shutil.copy2(c2.MOBILE / c2.NATIVE / path, native / path)
+            shutil.copy2(c2.MOBILE / "qualification/archive/libcurl" / path, native / path)
         return source
 
     def test_exact_delta_and_workspace_ownership(self):

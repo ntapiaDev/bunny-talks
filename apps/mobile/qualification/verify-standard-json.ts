@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { httpStatus, readDiagnostic } from './standard-json-diagnostics.ts';
 import {
+  androidPlan,
   firstBearer,
   marker,
   plan,
@@ -67,6 +68,17 @@ const keepEvidence = new Set([
   'redirect',
   'auth-challenge',
   'empty-204',
+  'session-delete',
+  'framing-recovery',
+  'cancel-retried-get',
+]);
+const supplementalPaths = new Map([
+  ['reuse', ['/reuse/one', '/reuse/two']],
+  ['identity-isolation', ['/identity']],
+  ['cancel-neighbour', ['/slow/concurrency-one', '/slow/neighbour', '/third-reservation']],
+  ['session-delete', ['/session-delete', '/session-delete-loss']],
+  ['framing-recovery', ['/recover-bad-length', '/recover-json']],
+  ['cancel-retried-get', ['/loss-get-cancel']],
 ]);
 const knownLength = (event: Event) =>
   event.headersSent && event.configuredFraming === 'length' && event.responseCoding === 'absent';
@@ -112,7 +124,7 @@ const elapsed = (end: number | undefined, start: number | undefined) =>
     ? end - start
     : undefined;
 
-function readApp(log: string, profile: string) {
+function readApp(log: string, profile: string, scenarioIds: readonly string[]) {
   const lines = log.split(/\r?\n/).flatMap((line) => {
     const at = line.lastIndexOf(marker);
     if (at < 0) return [];
@@ -124,7 +136,7 @@ function readApp(log: string, profile: string) {
   const started = new Set<string>();
   if (!ready)
     return { observed, diagnostics, started, done: false, missing: 'app-readiness-unconfirmed' };
-  for (const id of plan) {
+  for (const id of scenarioIds) {
     const start = lines.shift();
     if (start === undefined)
       return { observed, diagnostics, started, done: false, missing: 'scenario-start-missing' };
@@ -165,7 +177,8 @@ function readApp(log: string, profile: string) {
 
 export function verifyStandardJson(platform: 'ios' | 'android', log: string, snapshot: Snapshot) {
   const { events, connections, overflow } = snapshot;
-  const app = readApp(log, platform === 'ios' ? 'urlsession' : 'okhttp');
+  const scenarioIds = platform === 'ios' ? plan : androidPlan;
+  const app = readApp(log, platform === 'ios' ? 'urlsession' : 'okhttp', scenarioIds);
   const rows = (path: string, destination = 'A') =>
     events.filter((event) => event.path === prefix + path && event.destination === destination);
   const clean = (event: Event) =>
@@ -297,6 +310,108 @@ export function verifyStandardJson(platform: 'ios' | 'android', log: string, sna
           ? 'PASS'
           : 'FAIL';
       }
+      if (
+        events.some(
+          (event) =>
+            event.destination !== 'A' &&
+            supplementalPaths.get(id)?.some((path) => prefix + path === event.path),
+        )
+      )
+        return 'FAIL';
+      if (id === 'session-delete') {
+        const nominal = rows('/session-delete');
+        const lost = rows('/session-delete-loss');
+        if (nominal.length > 1 || lost.length > 2) return 'FAIL';
+        if (nominal.length !== 1 || lost.length !== 2)
+          return missing('revocation-receptions-unconfirmed');
+        const [revoked] = nominal;
+        const [mutation, check] = lost;
+        return [...nominal, ...lost].every(
+          (event) => clean(event) && event.authorizationMatchesFixture && event.requestComplete,
+        ) &&
+          revoked!.method === 'DELETE' &&
+          revoked!.processed === true &&
+          revoked!.responseStatus === 204 &&
+          revoked!.finished &&
+          revoked!.configuredFraming === 'unobserved' &&
+          revoked!.responseCoding === 'absent' &&
+          mutation!.method === 'DELETE' &&
+          mutation!.processed === true &&
+          !mutation!.headersSent &&
+          cut(mutation!) &&
+          check!.method === 'GET' &&
+          check!.responseStatus === 401 &&
+          knownLength(check!) &&
+          check!.finished
+          ? 'PASS'
+          : 'FAIL';
+      }
+      if (id === 'framing-recovery') {
+        const bad = rows('/recover-bad-length');
+        const good = rows('/recover-json');
+        if (!bad.length || !good.length) return missing('recovery-receptions-unconfirmed');
+        if (
+          (platform === 'android' && bad.length !== 1) ||
+          good.length !== 1 ||
+          ![...bad, ...good].every((event) => event.method === 'GET' && anonymous(event)) ||
+          !bad.every(
+            (event) =>
+              cut(event) && knownLength(event) && event.startedAtMs <= good[0]!.startedAtMs,
+          ) ||
+          !knownLength(good[0]!) ||
+          !good[0]!.finished
+        )
+          return 'FAIL';
+        return 'PASS';
+      }
+      if (id === 'cancel-retried-get') {
+        const attempts = rows('/loss-get-cancel');
+        if (attempts.length > 2) return 'FAIL';
+        if (attempts.length < 2) return missing('retry-not-observed-before-cancel');
+        const [lost, retry] = attempts;
+        const diagnostic = app.diagnostics.get(id);
+        const timing = diagnostic?.retryWindow;
+        if (!timing || lost!.fixtureCutAtMs === undefined || retry!.responseStartedAtMs === null)
+          return missing('retry-cancel-timing-unconfirmed');
+        const call = diagnostic?.calls[0];
+        if (!call || call.native === 'pending') return missing('native-cancel-unconfirmed');
+        if (
+          diagnostic.calls.length !== 1 ||
+          call.reservation !== 'accepted' ||
+          call.native !== 'rejected' ||
+          call.nativeKind !== 'network' ||
+          call.application !== 'cancelled' ||
+          call.bytes !== undefined
+        )
+          return 'FAIL';
+        const closedAt = retry!.startedAtMs + (retry!.closedAfterMs ?? Infinity);
+        return attempts.every(
+          (event) =>
+            event.method === 'GET' &&
+            clean(event) &&
+            event.authorizationMatchesFixture &&
+            event.requestComplete &&
+            event.iosPrimaryTarget &&
+            event.connectionId !== undefined &&
+            tlsConnections.get(event.connectionId) === 'A',
+        ) &&
+          lost!.connectionId !== retry!.connectionId &&
+          cut(lost!) &&
+          !lost!.headersSent &&
+          timing.openedAtMs <= lost!.startedAtMs &&
+          lost!.fixtureCutAtMs <= retry!.startedAtMs &&
+          retry!.responseStartedAtMs < timing.settledAtMs &&
+          closedAt >= timing.settledAtMs - 100 &&
+          closedAt <= timing.settledAtMs + 700 &&
+          timing.settledAtMs < timing.openedAtMs + requestTimeoutMs &&
+          interrupted(retry!)
+          ? 'PASS'
+          : 'FAIL';
+      }
+      const refused = app.diagnostics.get(id)?.calls[2];
+      if (events.some((event) => event.path === prefix + '/third-reservation')) return 'FAIL';
+      if (refused?.reservation !== 'refused' || refused.native !== 'not-called')
+        return missing('third-reservation-unconfirmed');
       const first = rows('/slow/concurrency-one');
       const second = rows('/slow/neighbour');
       if (!first.length || !second.length)
@@ -456,13 +571,7 @@ export function verifyStandardJson(platform: 'ios' | 'android', log: string, sna
   function serverDiagnostic(id: string) {
     const probe = byId.get(id);
     const timing = app.diagnostics.get(id)?.retryWindow;
-    const paths = probe
-      ? [probe.path]
-      : id === 'reuse'
-        ? ['/reuse/one', '/reuse/two']
-        : id === 'identity-isolation'
-          ? ['/identity']
-          : ['/slow/concurrency-one', '/slow/neighbour'];
+    const paths = probe ? [probe.path] : (supplementalPaths.get(id) ?? []);
     const destination = probe?.destination ?? 'A';
     const matchingPath = events.filter((event) =>
       paths.some((path) => event.path === prefix + path),
@@ -496,7 +605,13 @@ export function verifyStandardJson(platform: 'ios' | 'android', log: string, sna
         : {}),
       samples: entries.slice(0, 8).map((event, index) => ({
         connectionIdentified: event.connectionId !== undefined,
-        expectedMethod: event.method === (probe?.method ?? 'GET'),
+        expectedMethod:
+          event.method ===
+          (id === 'session-delete'
+            ? entries.find((row) => row.path === event.path) === event
+              ? 'DELETE'
+              : 'GET'
+            : (probe?.method ?? 'GET')),
         expectedBearer:
           id === 'identity-isolation'
             ? index === 0
@@ -504,7 +619,9 @@ export function verifyStandardJson(platform: 'ios' | 'android', log: string, sna
               : index === 1
                 ? event.authorizationMatchesSecond === true
                 : event.authorization === false
-            : probe?.bearer === firstBearer
+            : probe?.bearer === firstBearer ||
+                id === 'session-delete' ||
+                id === 'cancel-retried-get'
               ? event.authorizationMatchesFixture === true
               : event.authorization === false,
         cookiePresent: event.cookie === true,
@@ -578,7 +695,7 @@ export function verifyStandardJson(platform: 'ios' | 'android', log: string, sna
   }
 
   let stopped = false;
-  const scenarios = plan.map((id) => {
+  const scenarios = scenarioIds.map((id) => {
     const observed = app.observed.get(id);
     if (!observed) {
       return {

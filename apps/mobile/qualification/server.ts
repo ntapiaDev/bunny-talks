@@ -259,6 +259,7 @@ export async function startFixture(
     finished: boolean;
     closedAfterMs: number | null;
   }> = [];
+  const revoked = new Set<string>();
   const handler = (destination: string) => (req: IncomingMessage, res: ServerResponse) => {
     const requestPath = new URL(req.url ?? '/', 'https://fixture.invalid').pathname;
     const runtimeRoute = runtimeRoutes?.get(requestPath);
@@ -268,7 +269,7 @@ export async function startFixture(
       : (runtimeRoute ?? requestPath.replace(/^\/v1\/https-qualification(?=\/)/, ''));
     const safePath = evidencePath(path);
     const standardJsonRoute =
-      /^\/(?:loss-(?:get(?:-always)?|post(?:-prefix)?)|length-conflict|length-and-chunked|identity|slow\/neighbour)$/.test(
+      /^\/(?:loss-(?:get(?:-always|-cancel)?|post(?:-prefix)?)|session-delete(?:-loss)?|recover-(?:bad-length|json)|third-reservation|length-conflict|length-and-chunked|identity|slow\/neighbour)$/.test(
         path,
       )
         ? path
@@ -457,6 +458,56 @@ export async function startFixture(
         });
       return;
     }
+    if (standardJson && ['/session-delete', '/session-delete-loss'].includes(path)) {
+      let bodyBytes = 0;
+      req.on('data', (chunk: Buffer) => {
+        bodyBytes += chunk.length;
+      });
+      req.on('end', () => {
+        event.requestComplete = req.complete && bodyBytes === 0;
+        if (!event.requestComplete || !event.authorizationMatchesFixture) {
+          res.writeHead(400, { 'Content-Length': 2 }).end('{}');
+          return;
+        }
+        if (req.method === 'DELETE' && !revoked.has(path)) {
+          revoked.add(path);
+          event.processed = true;
+          if (path === '/session-delete-loss') {
+            event.fixtureCut = true;
+            res.destroy();
+          } else {
+            res.removeHeader('Content-Type');
+            res.writeHead(204).end();
+          }
+        } else {
+          res.writeHead(revoked.has(path) ? 401 : 405, { 'Content-Length': 2 }).end('{}');
+        }
+      });
+      return;
+    }
+    if (standardJson && path === '/loss-get-cancel') {
+      req.resume();
+      req.on('end', () => {
+        event.requestComplete = req.complete;
+        const first = events.filter((row) => row.path === event.path).length === 1;
+        if (first) {
+          event.processed = req.complete;
+          event.fixtureCut = true;
+          event.fixtureCutAtMs = Date.now();
+          res.destroy();
+          return;
+        }
+        res.setHeader('Content-Length', fixtureBytes.length);
+        res.write(fixtureBytes.subarray(0, 2), (error) => {
+          if (error) return;
+          event.responseStarted = true;
+          event.responseStartedAtMs = Date.now();
+        });
+        const timer = setTimeout(() => res.end(fixtureBytes.subarray(2)), 3500);
+        res.once('close', () => clearTimeout(timer));
+      });
+      return;
+    }
     if (
       path === '/request-body' ||
       (standardJson &&
@@ -571,11 +622,15 @@ export async function startFixture(
       });
       const interval = setInterval(() => res.write('x'), 100);
       res.on('close', () => clearInterval(interval));
-    } else if ((!standardJson && path === '/truncated') || path === '/length') {
+    } else if (
+      (!standardJson && path === '/truncated') ||
+      path === '/length' ||
+      (standardJson && path === '/recover-bad-length')
+    ) {
       event.fixtureCut = false;
       res.setHeader(
-        path === '/length' ? 'Content-Length' : 'Transfer-Encoding',
-        path === '/length' ? '1000' : 'chunked',
+        path === '/truncated' ? 'Transfer-Encoding' : 'Content-Length',
+        path === '/truncated' ? 'chunked' : '1000',
       );
       res.writeHead(200);
       res.flushHeaders();
@@ -753,7 +808,11 @@ export async function startFixture(
       res.setHeader('Content-Encoding', 'gzip');
       res.setHeader('Content-Length', bytes.length);
       res.end(bytes);
-    } else if (path === '/json' || path === '/coding-absent') {
+    } else if (
+      path === '/json' ||
+      path === '/coding-absent' ||
+      (standardJson && path === '/recover-json')
+    ) {
       res.setHeader('Content-Length', Buffer.byteLength(fixtureJson));
       res.end(fixtureJson);
     } else if (path === '/coding-other' || path === '/coding-stacked') {
