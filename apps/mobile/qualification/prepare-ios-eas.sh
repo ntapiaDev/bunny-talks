@@ -8,8 +8,15 @@ app_name='Bunny Talks HTTPS Qualification'
 xcframework_zip=${BUNNY_IOS_XCFRAMEWORK_ZIP:-}
 bundle_id=fr.bunnytalks.mobile.httpsqualification
 runtime=0
+urlsession=0
 profile=ios-https-libcurl-build
-if [[ "${1:-}" == --runtime ]]; then
+if [[ "${1:-}" == --urlsession ]]; then
+  urlsession=1
+  shift
+  [[ $# == 0 ]]
+  app_name='Bunny Talks HTTPS URLSession Qualification'
+  bundle_id=fr.bunnytalks.mobile.httpsqualification.urlsession
+elif [[ "${1:-}" == --runtime ]]; then
   runtime=1
   shift
   profile=ios-https-libcurl-runtime
@@ -21,7 +28,7 @@ if [[ "${1:-}" == --runtime ]]; then
   fi
 fi
 
-if [[ -z "$xcframework_zip" ]]; then
+if [[ "$urlsession" == 0 && -z "$xcframework_zip" ]]; then
   printf '%s\n' 'Set BUNNY_IOS_XCFRAMEWORK_ZIP to the approved XCFramework ZIP.' >&2
   exit 1
 fi
@@ -72,7 +79,7 @@ mkdir -p "$mobile/.eas/build" "$mobile/qualification" "$stage/packages"
 
 cp package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.{base,bundler,node}.json "$stage/"
 grep -E '^(save-exact|engine-strict)=(true|false)$' .npmrc > "$stage/.npmrc"
-cp apps/mobile/{app.json,eas.json,package.json,tsconfig.json,metro.config.js} "$mobile/"
+cp apps/mobile/{app.json,package.json,tsconfig.json,metro.config.js} "$mobile/"
 
 # Preserve workspace layout without local caches, generated projects, or test data.
 rsync -rm --exclude='node_modules/' --exclude='dist/' --exclude='build/' --exclude='tests/' --exclude='.*/' \
@@ -80,26 +87,38 @@ rsync -rm --exclude='node_modules/' --exclude='dist/' --exclude='build/' --exclu
   --include='**/src/**/*.ts' --include='**/src/*.ts' --exclude='*' packages/ "$stage/packages/"
 module=apps/mobile/modules/application-https
 native="$stage/$module/ios"
-python3 "$module/ios/verify_xcframeworks.py" archive "$xcframework_zip" >/dev/null
-mkdir -p "$native/Native" "$native/vendor"
-cp "$module/expo-module.config.json" "$native/../"
-cp "$module/ios/"{ApplicationHttps.podspec,ApplicationHttpsModule.swift,CurlHttpsTransport.swift,verify_xcframeworks.py} "$native/"
-cp "$module/ios/Native/"{BunnyHttpsNative.c,BunnyHttpsNative.h,module.modulemap} "$native/Native/"
-cp "$xcframework_zip" "$native/vendor/xcframeworks.zip"
-python3 "$native/verify_xcframeworks.py" archive "$native/vendor/xcframeworks.zip" >/dev/null
-cp "apps/mobile/.eas/build/$profile.yml" "$mobile/.eas/build/"
-if [[ "$runtime" == 1 ]]; then
-  entry=qualification/ios-libcurl-runtime-entry.tsx
-  cp apps/mobile/qualification/{ios-libcurl-runtime-entry.tsx,ios-libcurl-scenarios.ts,ios-libcurl-diagnostics.ts,server.ts,certificates.sh,run-ios-libcurl-runtime.mjs,verify-ios-libcurl-runtime.mjs,inspect-ios-libcurl-runtime.py,with-ios-libcurl-link-map.cjs} \
+if [[ "$urlsession" == 1 ]]; then
+  entry=qualification/standard-json-entry.tsx
+  mkdir -p "$native" "$mobile/src/infrastructure/http"
+  cp "$module/expo-module.config.json" "$native/../"
+  cp "$module/ios/ApplicationHttpsModule.swift" "$native/"
+  cp apps/mobile/qualification/urlsession/{ApplicationHttps.podspec,UrlSessionHttpsTransport.swift} "$native/"
+  cp apps/mobile/qualification/{standard-json-entry.tsx,standard-json-scenarios.ts,verify-standard-json.ts,server.ts,certificates.sh} \
     "$mobile/qualification/"
-  mkdir -p "$mobile/src/infrastructure/http" "$stage/experiments/libcurl-single-emission"
   cp apps/mobile/src/infrastructure/http/{application-http,native-https-transport}.ts "$mobile/src/infrastructure/http/"
-  cp experiments/libcurl-single-emission/{run.mjs,run-apple.mjs,single-emission.c,SimulatorApp.m,Info.plist} \
-    "$stage/experiments/libcurl-single-emission/"
-  printf '{"reviewedRevision":"%s"}\n' "$BUNNY_IOS_RUNTIME_REVISION" > "$mobile/qualification/ios-libcurl-input.json"
 else
-  entry=qualification/ios-libcurl-build-entry.tsx
-  cp "apps/mobile/$entry" apps/mobile/qualification/inspect-ios-libcurl-build.sh "$mobile/qualification/"
+  cp apps/mobile/eas.json "$mobile/"
+  python3 "$module/ios/verify_xcframeworks.py" archive "$xcframework_zip" >/dev/null
+  mkdir -p "$native/Native" "$native/vendor"
+  cp "$module/expo-module.config.json" "$native/../"
+  cp "$module/ios/"{ApplicationHttps.podspec,ApplicationHttpsModule.swift,CurlHttpsTransport.swift,verify_xcframeworks.py} "$native/"
+  cp "$module/ios/Native/"{BunnyHttpsNative.c,BunnyHttpsNative.h,module.modulemap} "$native/Native/"
+  cp "$xcframework_zip" "$native/vendor/xcframeworks.zip"
+  python3 "$native/verify_xcframeworks.py" archive "$native/vendor/xcframeworks.zip" >/dev/null
+  cp "apps/mobile/.eas/build/$profile.yml" "$mobile/.eas/build/"
+  if [[ "$runtime" == 1 ]]; then
+    entry=qualification/ios-libcurl-runtime-entry.tsx
+    cp apps/mobile/qualification/{ios-libcurl-runtime-entry.tsx,ios-libcurl-scenarios.ts,ios-libcurl-diagnostics.ts,server.ts,standard-json-scenarios.ts,certificates.sh,run-ios-libcurl-runtime.mjs,verify-ios-libcurl-runtime.mjs,inspect-ios-libcurl-runtime.py,with-ios-libcurl-link-map.cjs} \
+      "$mobile/qualification/"
+    mkdir -p "$mobile/src/infrastructure/http" "$stage/experiments/libcurl-single-emission"
+    cp apps/mobile/src/infrastructure/http/{application-http,native-https-transport}.ts "$mobile/src/infrastructure/http/"
+    cp experiments/libcurl-single-emission/{run.mjs,run-apple.mjs,single-emission.c,SimulatorApp.m,Info.plist} \
+      "$stage/experiments/libcurl-single-emission/"
+    printf '{"reviewedRevision":"%s"}\n' "$BUNNY_IOS_RUNTIME_REVISION" > "$mobile/qualification/ios-libcurl-input.json"
+  else
+    entry=qualification/ios-libcurl-build-entry.tsx
+    cp "apps/mobile/$entry" apps/mobile/qualification/inspect-ios-libcurl-build.sh "$mobile/qualification/"
+  fi
 fi
 
 node --input-type=module - "$mobile" "$slug" "$app_name" "$bundle_id" "$entry" "$profile" <<'JS'
@@ -116,10 +135,13 @@ edit('package.json', (data) => {
   data.main = entry;
 });
 const runtime = entry === 'qualification/ios-libcurl-runtime-entry.tsx';
-edit('eas.json', (data) => {
-  if (!data.build?.[profile]) throw new Error('Missing qualification profile.');
-  data.build = { [profile]: data.build[profile] };
-});
+const urlsession = entry === 'qualification/standard-json-entry.tsx';
+if (!urlsession) {
+  edit('eas.json', (data) => {
+    if (!data.build?.[profile]) throw new Error('Missing qualification profile.');
+    data.build = { [profile]: data.build[profile] };
+  });
+}
 edit('app.json', ({ expo }) => {
   expo.name = name;
   expo.slug = slug;
@@ -129,6 +151,10 @@ edit('app.json', ({ expo }) => {
     expo.jsEngine = 'hermes';
     expo.scheme = 'bunnytalks-httpslibcurlqualification';
     expo.plugins.push('./qualification/with-ios-libcurl-link-map.cjs');
+  }
+  if (urlsession) {
+    expo.jsEngine = 'hermes';
+    expo.scheme = 'bunnytalks-httpsurlsessionqualification';
   }
   delete expo.owner;
   if (expo.extra?.eas) delete expo.extra.eas.projectId;

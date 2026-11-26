@@ -1,5 +1,14 @@
 // This init script is loaded explicitly for the fixture Development Build.
 gradle.beforeProject { project ->
+  def standardJson = System.getenv('BUNNY_HTTPS_STANDARD_JSON') == '1'
+  if (standardJson && project.projectDir.name == 'android' &&
+      project.projectDir.parentFile.name == 'application-https') {
+    project.plugins.withId('com.android.library') {
+      project.extensions.getByName('androidComponents').finalizeDsl { android ->
+        android.buildTypes.getByName('debug').buildConfigField 'boolean', 'STANDARD_JSON_QUALIFICATION', 'true'
+      }
+    }
+  }
   if (project.path != ':app') return
   project.plugins.withId('com.android.application') {
     project.extensions.getByName('androidComponents').finalizeDsl { android ->
@@ -19,7 +28,8 @@ gradle.beforeProject { project ->
       android.sourceSets.getByName('debug').res.srcDirs(new File(qualification, 'android/res'), generated)
 
       def react = project.extensions.getByName('react')
-      react.entryFile.set(new File(qualification, 'native-https-entry.tsx'))
+      react.entryFile.set(new File(qualification,
+        standardJson ? 'standard-json-entry.tsx' : 'native-https-entry.tsx'))
       react.debuggableVariants.set([])
       // The alternate JS entry is for the fixture APK only.
       project.tasks.matching { it.name != 'createBundleDebugJsAndAssets' && it.name ==~ /createBundle.*JsAndAssets/ }.configureEach {

@@ -27,10 +27,13 @@ type HttpTransportResult =
 /**
  * The adapter must use HTTPS with platform TLS and hostname verification, refuse redirects
  * before following them, omit ambient credentials (including cookie storage and authentication
- * challenges), and send each request at most once. Authorization comes only from the supplied
- * headers.
+ * challenges) and private caching. Authorization comes only from the supplied headers.
+ * Never retry at the application layer. Only a qualified native profile may recover a lost
+ * session GET transparently, with the same origin and Bearer and within the original deadline.
+ * Sensitive writes require protection against replay after delivery may have reached the server.
  *
  * Enforce maxResponseBytes on decoded bytes in native code before any body crosses into JS.
+ * A profile may require unencoded HTTP responses and reject unexpected content codings.
  * Return only a complete body with stable bytes, or a failure code without details or partial data.
  * The deadline covers the whole transport operation, including queueing and body delivery.
  * Timeout and AbortSignal must stop native work and release resources, including during reads.

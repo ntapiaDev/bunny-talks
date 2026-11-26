@@ -31,7 +31,8 @@ internal object HttpsClient {
     .proxy(Proxy.NO_PROXY)
     .cache(null)
     .retryOnConnectionFailure(false)
-    .connectionPool(ConnectionPool(0, 1, TimeUnit.SECONDS))
+    .connectionPool(if (BuildConfig.STANDARD_JSON_QUALIFICATION) ConnectionPool()
+                    else ConnectionPool(0, 1, TimeUnit.SECONDS))
     // A single native total deadline owns all phases.
     .connectTimeout(0, TimeUnit.MILLISECONDS)
     .readTimeout(0, TimeUnit.MILLISECONDS)
@@ -58,8 +59,15 @@ internal object HttpsClient {
       require(name.lowercase(Locale.ROOT) in allowedHeaders)
       builder.header(name, value)
     }
+    builder.header("Cache-Control", "no-store")
+    if (BuildConfig.STANDARD_JSON_QUALIFICATION) {
+      require(target.host == "10.0.2.2" && target.port in 29443..29447 &&
+              target.encodedPath.startsWith("/v1/https-qualification/standard-json/") &&
+              target.query == null)
+      // An explicit request header disables OkHttp's transparent gzip decoder.
+      builder.header("Accept-Encoding", "identity")
+    }
     return builder
-      .header("Cache-Control", "no-store")
       .tag(AtomicBoolean::class.java, AtomicBoolean())
       .method(method, if (method == "POST") (body ?: "").toByteArray().toRequestBody() else null)
       .build()
@@ -74,7 +82,8 @@ internal object HttpsClient {
       if (!hasExplicitFraming(it)) throw IOException()
       // OkHttp removes this header for transparently decoded gzip.
       val encodings = it.headers("Content-Encoding")
-      if (encodings.isNotEmpty() && !encodings.singleOrNull().equals("identity", ignoreCase = true)) {
+      if (encodings.isNotEmpty() && (BuildConfig.STANDARD_JSON_QUALIFICATION ||
+            !encodings.singleOrNull().equals("identity", ignoreCase = true))) {
         call.cancel()
         return failure("response")
       }

@@ -9,13 +9,21 @@ import type { TLSSocket } from 'node:tls';
 import { createSecureContext } from 'node:tls';
 import { pathToFileURL } from 'node:url';
 import { brotliCompressSync, gzipSync } from 'node:zlib';
+import {
+  firstBearer,
+  limit,
+  message,
+  postBody,
+  prefix as standardJsonScope,
+  secondBearer,
+} from './standard-json-scenarios.ts';
 
-export const fixtureJson = JSON.stringify({ message: 'Bonjour 🐰 — 日本語 — العربية' });
-const exactJson = JSON.stringify({ data: 'x'.repeat(1_048_565) });
+export const fixtureJson = JSON.stringify({ message });
+const exactJson = JSON.stringify({ data: 'x'.repeat(limit - 11) });
 const exactGzip = gzipSync(exactJson);
 const smallGzip = gzipSync('{}');
 const fixtureBytes = Buffer.from(fixtureJson);
-const fixturePostBytes = Buffer.from('{"message":"fixture 🐰"}');
+const fixturePostBytes = Buffer.from(JSON.stringify(postBody));
 const fixtureGzip = gzipSync(fixtureBytes);
 const matrixBodies = new Map([
   ['/chunked-coding-absent', fixtureBytes],
@@ -40,6 +48,11 @@ function coding(value: unknown) {
   const normalized = value.trim().toLowerCase();
   if (normalized === 'identity' || normalized === 'gzip') return normalized;
   return normalized.includes(',') ? 'stacked' : 'other';
+}
+
+function sendRetryStatus(response: ServerResponse, length: boolean) {
+  response.setHeader(length ? 'Content-Length' : 'Transfer-Encoding', length ? '2' : 'chunked');
+  response.writeHead(503, { 'Retry-After': '0' }).end('{}');
 }
 
 // Independent HTTP/1.1 client observations, made before simulator traffic.
@@ -157,7 +170,9 @@ export async function startFixture(
   recordConnectionIds = false,
   runtimeRoutes?: ReadonlyMap<string, string>,
   fixtureId?: string,
+  standardJsonProfile = false,
 ) {
+  const trackWire = runtimeRoutes !== undefined || standardJsonProfile;
   const controls = new Map<string, Control>();
   const connectionIds = new WeakMap<Socket, number>();
   let nextConnectionId = 1;
@@ -175,7 +190,6 @@ export async function startFixture(
   const endpoint = (destination: string, socket: Socket) => destination + ':' + socket.remotePort;
   let overflow = false;
   function trackConnection(destination: string, socket: Socket) {
-    if (!runtimeRoutes) return;
     const address = endpoint(destination, socket);
     const entry = {
       id: nextConnectionId++,
@@ -205,6 +219,8 @@ export async function startFixture(
     httpVersion?: string;
     authorization: boolean;
     authorizationMatchesFixture: boolean;
+    authorizationMatchesSecond?: boolean;
+    requestNoStore?: boolean;
     cookie: boolean;
     expoFixtureCookie: boolean;
     nativeFixtureCookie: boolean;
@@ -220,6 +236,8 @@ export async function startFixture(
     controlBody?: Control['controlBody'];
     heldLengthEnd?: 'peer-close' | 'fixture-watchdog' | 'finished' | 'socket-error';
     fixtureCut?: boolean;
+    fixtureCutAtMs?: number;
+    retryAfterZero?: boolean;
     requestComplete?: boolean;
     processed?: boolean;
     offeredLimitPlusOne?: boolean;
@@ -238,7 +256,17 @@ export async function startFixture(
   const handler = (destination: string) => (req: IncomingMessage, res: ServerResponse) => {
     const requestPath = new URL(req.url ?? '/', 'https://fixture.invalid').pathname;
     const runtimeRoute = runtimeRoutes?.get(requestPath);
-    const path = runtimeRoute ?? requestPath.replace(/^\/v1\/https-qualification(?=\/)/, '');
+    const standardJson = standardJsonProfile && requestPath.startsWith(standardJsonScope + '/');
+    const path = standardJson
+      ? requestPath.slice(standardJsonScope.length)
+      : (runtimeRoute ?? requestPath.replace(/^\/v1\/https-qualification(?=\/)/, ''));
+    const safePath = evidencePath(path);
+    const standardJsonRoute =
+      /^\/(?:loss-(?:get(?:-always)?|post(?:-prefix)?)|length-conflict|length-and-chunked|identity|slow\/neighbour)$/.test(
+        path,
+      )
+        ? path
+        : safePath;
     const runtimeCookieStep =
       runtimeRoute &&
       /^\/curl-cookies\/(baseline|seed|expo-probe|native-probe|native-set|expo-after)$/.exec(
@@ -258,13 +286,17 @@ export async function startFixture(
       .map((cookie) => cookie.split('=', 1)[0]?.trim());
     const event: (typeof events)[number] = {
       destination,
-      path: runtimeRoute ? requestPath : evidencePath(requestPath),
+      path: runtimeRoute
+        ? requestPath
+        : standardJson && standardJsonRoute !== '/unexpected'
+          ? standardJsonScope + standardJsonRoute
+          : evidencePath(requestPath),
       method:
         runtimeRoutes && !['GET', 'POST', 'DELETE'].includes(req.method ?? '')
           ? 'unexpected'
           : (req.method ?? ''),
       authorization: !!req.headers.authorization,
-      authorizationMatchesFixture: req.headers.authorization === 'Bearer fixture-only',
+      authorizationMatchesFixture: req.headers.authorization === 'Bearer ' + firstBearer,
       cookie: !!req.headers.cookie,
       expoFixtureCookie: cookieNames.includes('bunny_fixture_expo'),
       nativeFixtureCookie: cookieNames.includes('bunny_fixture_native'),
@@ -282,14 +314,14 @@ export async function startFixture(
       finished: false,
       closedAfterMs: null as number | null,
     };
-    if (runtimeRoutes) {
+    if (standardJson) {
+      event.authorizationMatchesSecond = req.headers.authorization === 'Bearer ' + secondBearer;
+      event.requestNoStore = req.headers['cache-control'] === 'no-store';
+    }
+    if (trackWire) {
       const connection = socketsByEndpoint.get(endpoint(destination, req.socket));
       if (connection) event.connectionId = connection.id;
       event.httpVersion = req.httpVersion;
-      event.requestedRuntimeCoding = req.headers['accept-encoding'] === 'gzip, identity';
-      if (runtimeCookieStep)
-        event.ambientFixtureCookieMatches =
-          req.headers.cookie?.trim() === 'bunny_fixture_expo=synthetic';
     } else if (recordConnectionIds) {
       let connectionId = connectionIds.get(req.socket);
       if (connectionId === undefined) {
@@ -299,10 +331,18 @@ export async function startFixture(
       event.connectionId = connectionId;
       event.httpVersion = req.httpVersion;
     }
+    if (runtimeRoutes) {
+      event.requestedRuntimeCoding = req.headers['accept-encoding'] === 'gzip, identity';
+      if (runtimeCookieStep)
+        event.ambientFixtureCookieMatches =
+          req.headers.cookie?.trim() === 'bunny_fixture_expo=synthetic';
+    }
     events.push(event);
     const recordHeaders = () => {
       event.headersSent = res.headersSent;
       if (!event.headersSent) return;
+      if (standardJson && path === '/retry-status-length')
+        event.retryAfterZero = res.statusCode === 503 && res.getHeader('Retry-After') === '0';
       event.responseCoding = coding(res.getHeader('Content-Encoding'));
       if (runtimeCookieStep) {
         const field = res.getHeader('Set-Cookie');
@@ -337,6 +377,7 @@ export async function startFixture(
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Cache-Control', 'no-store');
     if (
+      !standardJson &&
       (identityProfile || runtimeRoute) &&
       path !== '/coding-absent' &&
       path !== '/chunked-coding-absent' &&
@@ -389,8 +430,18 @@ export async function startFixture(
         });
       return;
     }
-    if (path === '/request-body') {
-      if (runtimeRoute) {
+    if (
+      path === '/request-body' ||
+      (standardJson &&
+        [
+          '/loss-get',
+          '/loss-get-always',
+          '/loss-post',
+          '/loss-post-prefix',
+          '/retry-status-length',
+        ].includes(path))
+    ) {
+      if (runtimeRoute || standardJson) {
         let received = 0;
         let matches = true;
         req
@@ -402,6 +453,40 @@ export async function startFixture(
             event.requestComplete = req.complete;
             event.postBodyMatchesFixture =
               req.complete && matches && received === fixturePostBytes.length;
+            if (standardJson && path === '/retry-status-length') {
+              sendRetryStatus(res, true);
+              return;
+            }
+            if (standardJson && path !== '/request-body') {
+              const first = events.filter((row) => row.path === event.path).length === 1;
+              if (path === '/loss-get' && !first) {
+                res.setHeader('Content-Length', fixtureBytes.length);
+                res.end(fixtureBytes);
+                return;
+              }
+              event.processed =
+                req.complete &&
+                (req.method === 'GET' || (req.method === 'POST' && event.postBodyMatchesFixture));
+              if (path === '/loss-post-prefix' && first && event.processed) {
+                res.setHeader('Content-Length', '1000');
+                res.flushHeaders();
+                res.write('{}', (error) => {
+                  if (error) return;
+                  event.responseStarted = true;
+                  event.responseStartedAtMs = Date.now();
+                  const timer = setTimeout(() => {
+                    event.fixtureCut = true;
+                    res.destroy();
+                  }, 100);
+                  res.once('close', () => clearTimeout(timer));
+                });
+              } else {
+                event.fixtureCut = true;
+                if (req.method === 'GET') event.fixtureCutAtMs = Date.now();
+                res.destroy();
+              }
+              return;
+            }
             res.setHeader('Content-Length', fixtureBytes.length);
             res.end(fixtureBytes);
           });
@@ -429,6 +514,17 @@ export async function startFixture(
           ? `http://${hostname}:${basePort + 2}`
           : `https://${hostname}:${basePort + (match[2] === 'host' ? 1 : 0)}`;
       res.writeHead(Number(match[1]), { Location: `${target}/destination` }).end();
+    } else if (standardJson && path === '/slow/neighbour') {
+      res.setHeader('Content-Length', fixtureBytes.length);
+      res.flushHeaders();
+      res.write(fixtureBytes.subarray(0, 2), (error) => {
+        if (!error) {
+          event.responseStarted = true;
+          event.responseStartedAtMs = Date.now();
+        }
+      });
+      const timer = setTimeout(() => res.end(fixtureBytes.subarray(2)), 1200);
+      res.once('close', () => clearTimeout(timer));
     } else if (path === '/slow' || path.startsWith('/slow/')) {
       if (path === '/slow/cancel-length') res.setHeader('Content-Length', '1000');
       else res.setHeader('Transfer-Encoding', 'chunked');
@@ -504,14 +600,13 @@ export async function startFixture(
         res.on('close', () => clearTimeout(timer));
       }
     } else if (
-      runtimeRoute &&
-      (path === '/curl-length-conflict' || path === '/curl-length-and-chunked')
+      (runtimeRoute && ['/curl-length-conflict', '/curl-length-and-chunked'].includes(path)) ||
+      (standardJson && ['/length-conflict', '/length-and-chunked'].includes(path))
     ) {
       event.fixtureCut = true;
-      const framing =
-        path === '/curl-length-conflict'
-          ? 'Content-Length: 3\r\n\r\n{}'
-          : 'Transfer-Encoding: chunked\r\n\r\n2\r\n{}\r\n0\r\n\r\n';
+      const framing = path.endsWith('length-conflict')
+        ? 'Content-Length: 3\r\n\r\n{}'
+        : 'Transfer-Encoding: chunked\r\n\r\n2\r\n{}\r\n0\r\n\r\n';
       res.socket!.end('HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 2\r\n' + framing);
     } else if (runtimeRoute && path === '/standard-gzip-limit-plus-one') {
       const decoded = exactJson + ' ';
@@ -540,7 +635,9 @@ export async function startFixture(
       event.fixtureCut = false;
       const socket = res.socket!;
       socket.write(
-        'HTTP/1.1 200 OK\r\nConnection: close\r\nTransfer-Encoding: chunked\r\nContent-Encoding: identity\r\nContent-Type: application/json\r\n\r\n2\r\n{}\r\n',
+        'HTTP/1.1 200 OK\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n' +
+          (standardJson ? '' : 'Content-Encoding: identity\r\n') +
+          'Content-Type: application/json\r\n\r\n2\r\n{}\r\n',
       );
       const timer = setTimeout(() => {
         if (socket.destroyed) return;
@@ -581,7 +678,7 @@ export async function startFixture(
       res.write(exactJson);
       // Keep the message open after byte limit+1 so a native stop is observable.
       const extra = setTimeout(() => {
-        if (runtimeRoute) event.offeredLimitPlusOne = true;
+        if (runtimeRoute || standardJson) event.offeredLimitPlusOne = true;
         res.write(' ');
       }, 100);
       const end = setTimeout(() => res.end(), 1200);
@@ -613,18 +710,25 @@ export async function startFixture(
       if (runtimeRoute) res.setHeader('Content-Length', bytes.length);
       res.end(bytes);
     } else if (path === '/retry-status' || path === '/retry-status-length') {
-      if (path === '/retry-status-length') res.setHeader('Content-Length', '2');
-      else res.setHeader('Transfer-Encoding', 'chunked');
-      res
-        .writeHead(503, {
-          'Retry-After': '0',
-        })
-        .end('{}');
+      sendRetryStatus(res, path === '/retry-status-length');
     } else if (path === '/drop-before-headers') {
       res.destroy();
     } else if (path === '/cookie') {
       res.setHeader('Set-Cookie', 'fixture=only; Secure; HttpOnly; Path=/');
       res.end(fixtureJson);
+    } else if (standardJson && path === '/identity') {
+      if (event.authorizationMatchesFixture)
+        res.setHeader('Set-Cookie', 'fixture=only; Secure; HttpOnly; Path=/');
+      const identity = event.authorizationMatchesFixture
+        ? 'first'
+        : event.authorizationMatchesSecond
+          ? 'second'
+          : event.authorization
+            ? 'unexpected'
+            : 'anonymous';
+      const content = JSON.stringify({ message, identity });
+      res.setHeader('Content-Length', Buffer.byteLength(content));
+      res.end(content);
     } else if (runtimeCookieStep) {
       if (runtimeCookieStep === 'seed') res.setHeader('Set-Cookie', fixtureCookie('expo'));
       if (runtimeCookieStep === 'native-set') res.setHeader('Set-Cookie', fixtureCookie('native'));
@@ -657,7 +761,7 @@ export async function startFixture(
   });
   const httpsServer = async (name: string, destination: string) => {
     const keys = await credentials(name);
-    if (!runtimeRoutes) return createHttpsServer(keys, handler(destination));
+    if (!trackWire) return createHttpsServer(keys, handler(destination));
     const context = createSecureContext(keys);
     return createHttpsServer(
       {
@@ -682,7 +786,7 @@ export async function startFixture(
     await httpsServer('unknown', 'unknown'),
     await httpsServer('wrong', 'wrong'),
   ];
-  if (runtimeRoutes) {
+  if (trackWire) {
     for (const [index, server] of servers.entries()) {
       const destination = destinations[index]!;
       server.on('connection', (socket: Socket) => trackConnection(destination, socket));
@@ -721,7 +825,7 @@ export async function startFixture(
       finished: false,
       closedAfterMs: null,
     };
-    if (runtimeRoutes) {
+    if (trackWire) {
       trackConnection('stalled-tls', socket);
       const connection = socketsByEndpoint.get(endpoint('stalled-tls', socket));
       if (connection) event.connectionId = connection.id;
@@ -741,7 +845,7 @@ export async function startFixture(
       events.length = 0;
       res.end('{}');
     } else if (req.method === 'GET' && req.url === '/events') res.end(JSON.stringify(events));
-    else if (runtimeRoutes && req.method === 'GET' && req.url === '/runtime')
+    else if (trackWire && req.method === 'GET' && req.url === '/runtime')
       res.end(JSON.stringify({ fixtureId, overflow, events, connections }));
     else res.writeHead(404).end('{}');
   });
@@ -799,6 +903,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const directory = process.argv[2];
   if (!directory) throw new Error('Certificate directory required');
   const port = Number(process.env.FIXTURE_PORT ?? '9443');
+  const standardJson = process.env.BUNNY_HTTPS_STANDARD_JSON === '1';
+  if (standardJson && process.env.FIXTURE_IDENTITY === '1')
+    throw new Error('Choose one fixture profile');
   if (!Number.isInteger(port) || port < 1024 || port > 65529)
     throw new Error('Invalid fixture port');
   const fixture = await startFixture(
@@ -806,6 +913,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     port,
     process.env.FIXTURE_HOST ?? '127.0.0.1',
     process.env.FIXTURE_IDENTITY === '1',
+    false,
+    undefined,
+    undefined,
+    standardJson,
   );
   process.stdout.write(
     `Fixture ports ${port} to ${port + 6}. Control on loopback port ${port + 5}.\n`,

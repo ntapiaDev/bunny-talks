@@ -31,6 +31,9 @@ class ApplicationHttpsModule : Module() {
 
   override fun definition() = ModuleDefinition {
     Name("ApplicationHttps")
+    if (BuildConfig.STANDARD_JSON_QUALIFICATION) {
+      Function("qualificationProfile") { "standard-json-okhttp" }
+    }
     OnDestroy { close() }
     // Reserve synchronously so cancellation can find the slot before Expo dispatches execute.
     Function("reserve") { timeoutMs: Int -> reserve(timeoutMs) }

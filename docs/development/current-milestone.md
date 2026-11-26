@@ -1,8 +1,10 @@
-# État courant — 4.5B2C4-C2-B clôturé dans le périmètre candidat
+# État courant — préparation du profil JSON URLSession et OkHttp
+
+Le contrat HTTPS révisé et le banc commun sont préparés pour revue. La qualification native des nouveaux profils, le choix définitif du transport et l’ouverture iOS restent à décider. La candidature libcurl et ses preuves demeurent disponibles. [Préparation, procédure et limites](native-https-foundation.md#préparation-du-profil-json-urlsession-et-okhttp)
 
 **La revue humaine accepte la qualification fonctionnelle de la candidate iOS Release.** Le run `45735483847` a réussi les 35 scénarios et le nettoyage sur iPhone 17 Simulator arm64, iOS 26.5, avec Hermes et le profil `hosted-observed`. L’observation réseau reste `NOT_RUN` malgré 18 échantillons. L’équivalence native, le runtime HTTPS standard et le confinement intégral restent `NOT_RUN`. [Rapport original](evidence/ios-https-candidate-45735483847/report.json) · [Périmètre de clôture](native-https-foundation.md#clôture-humaine-de-45b2c4-c2-b)
 
-**Prochaine décision, travail non commencé.** Choisir le transport HTTPS définitif en donnant la priorité à la simplicité, à la batterie et à la sécurité. La composition HTTP iOS reste verrouillée. Le choix du transport et son ouverture applicative font l’objet de décisions distinctes. L’exécution sur iOS 16.4 et sur appareil physique, les performances et l’énergie ainsi que l’attribution mémoire par couche restent à qualifier. [Historique](milestone-history.md) · [Conservation du ZIP original](native-https-foundation.md#conservation-durable-des-xcframeworks)
+**Prochaine décision après revue.** Autoriser éventuellement un essai Release Hermes de la variante URLSession en simulateur privé. L’exécution sur iOS 16.4 et sur appareil physique, les performances, l’énergie et l’attribution mémoire par couche restent à qualifier. [Historique](milestone-history.md) · [Conservation du ZIP original](native-https-foundation.md#conservation-durable-des-xcframeworks)
 
 **4.5B2C4-C2-B1 est clôturé par décision humaine.** Le run `45480059263` confirme la disponibilité de la chaîne Apple, le simulateur privé, la fixture et le nettoyage. Le développeur approuve `hosted-observed` pour la campagne C2-B avec observation réseau limitée. Le confinement intégral reste `NOT_RUN`. [Rapport original](evidence/ios-hosted-feasibility-45480059263/report.json) · [Procédure C2-B](native-https-foundation.md#45b2c4-c2-b--campagne-https-ios-hébergée)
 

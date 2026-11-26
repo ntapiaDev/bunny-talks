@@ -41,6 +41,7 @@ jobs:
           sparse-checkout: |
             /experiments/libcurl-single-emission/
             /apps/mobile/qualification/server.ts
+            /apps/mobile/qualification/standard-json-scenarios.ts
             /apps/mobile/qualification/certificates.sh
             /apps/mobile/package.json
             /package.json

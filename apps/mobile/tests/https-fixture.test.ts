@@ -8,6 +8,15 @@ import { join } from 'node:path';
 import { brotliDecompressSync, gunzipSync } from 'node:zlib';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { fixtureJson, startFixture } from '../qualification/server.js';
+import {
+  firstBearer,
+  marker,
+  postBody,
+  prefix as standardPrefix,
+  probes,
+  requestTimeoutMs,
+} from '../qualification/standard-json-scenarios';
+import { verifyStandardJson } from '../qualification/verify-standard-json';
 
 const directory = join(tmpdir(), `bunny-https-test-${crypto.randomUUID()}`);
 const port = 19443;
@@ -27,7 +36,9 @@ const get = (path: string, offset = 0, abort = false, acceptEncoding?: string) =
         port: port + offset,
         path,
         ca,
-        headers: acceptEncoding ? { 'accept-encoding': acceptEncoding } : undefined,
+        headers: acceptEncoding
+          ? { 'accept-encoding': acceptEncoding, 'cache-control': 'no-store' }
+          : undefined,
       },
       (response) => {
         const chunks: Buffer[] = [];
@@ -53,7 +64,16 @@ const get = (path: string, offset = 0, abort = false, acceptEncoding?: string) =
 beforeAll(async () => {
   execFileSync('bash', ['qualification/certificates.sh', directory], { stdio: 'pipe' });
   ca = readFileSync(join(directory, 'ca.pem'));
-  fixture = await startFixture(directory, port, '127.0.0.1', true);
+  fixture = await startFixture(
+    directory,
+    port,
+    '127.0.0.1',
+    true,
+    true,
+    undefined,
+    undefined,
+    true,
+  );
 });
 afterAll(async () => {
   await fixture?.close();
@@ -423,4 +443,209 @@ it('observes all six framing and content coding combinations over independent HT
       finished: true,
     });
   }
+});
+
+it('serves the standard JSON profile and stops the report at its first discriminating failure', async () => {
+  const nominal = await get(standardPrefix + '/coding-absent', 0, false, 'identity');
+  expect(nominal.bytes.toString()).toBe(fixtureJson);
+  expect(nominal.headers['content-encoding']).toBeUndefined();
+  const gzip = await get(standardPrefix + '/coding-gzip', 0, false, 'identity');
+  expect(gzip.headers['content-encoding']).toBe('gzip');
+  expect(gunzipSync(gzip.bytes)).toEqual(nominal.bytes);
+  await expect(get(standardPrefix + '/json', 3, false, 'identity')).rejects.toThrow();
+  await expect(get(standardPrefix + '/json', 4, false, 'identity')).rejects.toThrow();
+  const snapshot = await (await fetch(`http://127.0.0.1:${port + 5}/runtime`)).json();
+  expect(snapshot.connections).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ destination: 'unknown', receivedBytes: true }),
+      expect.objectContaining({ destination: 'wrong', receivedBytes: true }),
+    ]),
+  );
+  expect(snapshot.events).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        path: standardPrefix + '/coding-absent',
+        connectionId: expect.any(Number),
+        httpVersion: '1.1',
+      }),
+    ]),
+  );
+  const report = verifyStandardJson(
+    'ios',
+    [
+      'READY standard-json-urlsession',
+      'START standard-json',
+      'PASS standard-json success',
+      'START gzip',
+      'FAIL gzip',
+    ]
+      .map((line) => marker + line)
+      .join('\n'),
+    snapshot,
+  );
+  expect(report.verdict).toBe('FAIL');
+  expect(report.scenarios.slice(0, 3)).toEqual([
+    { id: 'standard-json', verdict: 'PASS', observed: 'success' },
+    { id: 'gzip', verdict: 'FAIL', observed: 'fail' },
+    { id: 'gzip-missing-isize', verdict: 'NOT_RUN' },
+  ]);
+});
+
+it('distinguishes lost GET responses and complete POST bodies before a deliberate cut', async () => {
+  function send(path: string, body?: string) {
+    return new Promise<string>((resolve, reject) => {
+      const req = request(
+        {
+          hostname: '127.0.0.1',
+          port,
+          ca,
+          path: standardPrefix + path,
+          method: body ? 'POST' : 'GET',
+          headers: body
+            ? {
+                'content-type': 'application/json',
+                'content-length': Buffer.byteLength(body),
+                'cache-control': 'no-store',
+                'accept-encoding': 'identity',
+              }
+            : {
+                authorization: 'Bearer ' + firstBearer,
+                'cache-control': 'no-store',
+                'accept-encoding': 'identity',
+              },
+          signal: AbortSignal.timeout(2000),
+          agent: false,
+        },
+        (response) => {
+          let text = '';
+          response.setEncoding('utf8');
+          response.on('data', (chunk: string) => {
+            text += chunk;
+          });
+          response.on('end', () => resolve(text));
+          response.on('error', reject);
+        },
+      );
+      req.on('error', reject);
+      req.end(body);
+    });
+  }
+  await expect(send('/loss-get')).rejects.toThrow();
+  await expect(send('/loss-get')).resolves.toBe(fixtureJson);
+  for (let attempt = 0; attempt < 3; attempt++)
+    await expect(send('/loss-get-always')).rejects.toThrow();
+  const body = JSON.stringify(postBody);
+  await expect(send('/request-body', body)).resolves.toBe(fixtureJson);
+  await expect(send('/loss-post', body)).rejects.toThrow();
+  await expect(send('/loss-post-prefix', body)).rejects.toThrow();
+  await expect(send('/retry-status-length', body)).resolves.toBe('{}');
+  await expect(get(standardPrefix + '/length-conflict')).rejects.toThrow();
+  await expect(get(standardPrefix + '/length-and-chunked')).rejects.toThrow();
+  await vi.waitFor(async () => {
+    const events = (await (await fetch(`http://127.0.0.1:${port + 5}/events`)).json()) as {
+      path: string;
+    }[];
+    const rows = (route: string) => events.filter((event) => event.path === standardPrefix + route);
+    expect(rows('/loss-get')).toMatchObject([
+      { requestComplete: true, processed: true, fixtureCut: true, headersSent: false },
+      { requestComplete: true, finished: true, authorizationMatchesFixture: true },
+    ]);
+    expect(rows('/loss-post')).toMatchObject([
+      {
+        requestComplete: true,
+        processed: true,
+        fixtureCut: true,
+        postBodyMatchesFixture: true,
+        headersSent: false,
+        closed: true,
+      },
+    ]);
+    expect(rows('/loss-post-prefix')).toMatchObject([
+      {
+        requestComplete: true,
+        processed: true,
+        fixtureCut: true,
+        postBodyMatchesFixture: true,
+        responseStarted: true,
+        closed: true,
+      },
+    ]);
+    expect(rows('/length-conflict')).toMatchObject([{ fixtureCut: true, closed: true }]);
+    expect(rows('/length-and-chunked')).toMatchObject([{ fixtureCut: true, closed: true }]);
+  });
+
+  type Snapshot = Parameters<typeof verifyStandardJson>[2];
+  const snapshot: Snapshot = await (await fetch(`http://127.0.0.1:${port + 5}/runtime`)).json();
+  const status = snapshot.events.find(
+    (event) => event.path === standardPrefix + '/retry-status-length',
+  )!;
+  expect(status).toMatchObject({
+    requestComplete: true,
+    postBodyMatchesFixture: true,
+    finished: true,
+    retryAfterZero: true,
+  });
+
+  // Use fixture receipts for the scenarios under review and fixed evidence for the prefix.
+  const log = [marker + 'READY standard-json-urlsession'];
+  const prelude: Snapshot['events'] = [];
+  const firstGet = probes.findIndex(({ id }) => id === 'get-loss');
+  const cases = probes.slice(0, probes.findIndex(({ id }) => id === 'post-retry-status') + 1);
+  for (const [index, { id, path, result }] of cases.entries()) {
+    const target = standardPrefix + path;
+    const observed =
+      id === 'get-loss'
+        ? 'success'
+        : id === 'get-loss-repeated'
+          ? 'timeout'
+          : result === 'reject'
+            ? 'response'
+            : result === 'size' || result === 'status-503'
+              ? result
+              : 'success';
+    log.push(marker + 'START ' + id, marker + `PASS ${id} ${observed}`);
+    if (index >= firstGet) continue;
+    const coding = id.startsWith('gzip')
+      ? 'gzip'
+      : id === 'other-coding'
+        ? 'other'
+        : id === 'stacked-coding'
+          ? 'stacked'
+          : 'absent';
+    prelude.push({
+      ...status,
+      path: target,
+      method: 'GET',
+      responseCoding: coding,
+      configuredFraming:
+        id === 'chunked-valid' || id === 'limit-progressive'
+          ? 'chunked'
+          : id === 'close-delimited'
+            ? 'unobserved'
+            : 'length',
+      finished: result !== 'size' && (result !== 'reject' || id === 'close-delimited'),
+      fixtureCut: true,
+      offeredLimitPlusOne: true,
+    });
+  }
+  const actualPaths = new Set(cases.slice(firstGet).map(({ path }) => standardPrefix + path));
+  const evidence = [...prelude, ...snapshot.events.filter(({ path }) => actualPaths.has(path))];
+  function check(events: Snapshot['events'], id: string) {
+    return verifyStandardJson('ios', log.join('\n'), { ...snapshot, events }).scenarios.find(
+      (scenario) => scenario.id === id,
+    );
+  }
+  expect(check(evidence, 'get-loss-repeated')).toMatchObject({ verdict: 'PASS', receptions: 3 });
+  expect(check(evidence, 'post-retry-status')).toMatchObject({ verdict: 'PASS' });
+  expect(check([...evidence, status], 'post-retry-status')).toMatchObject({ verdict: 'FAIL' });
+  const cut = evidence.findLast(({ path }) => path === standardPrefix + '/loss-get-always')!;
+  const wrongBearer = evidence.map((row) =>
+    row === cut ? { ...row, authorizationMatchesFixture: false } : row,
+  );
+  expect(check(wrongBearer, 'get-loss-repeated')).toMatchObject({ verdict: 'FAIL', receptions: 3 });
+  const late = { ...cut, startedAtMs: cut.startedAtMs + requestTimeoutMs };
+  expect(check([...evidence, late], 'get-loss-repeated')).toMatchObject({
+    verdict: 'FAIL',
+    receptions: 4,
+  });
 });
