@@ -1,8 +1,11 @@
 """Local orchestration regression checks, without Apple commands."""
 
 import importlib.util
+from contextlib import redirect_stdout
+from io import StringIO
 import json
 from pathlib import Path
+import sys
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
@@ -14,6 +17,33 @@ spec.loader.exec_module(worker)
 
 
 class CampaignTests(unittest.TestCase):
+    def test_inventory_cli_matches_the_hosted_manifest_hash(self):
+        with tempfile.TemporaryDirectory(dir='/tmp') as temporary:
+            root = Path(temporary)
+            mobile = root / 'apps/mobile'
+            mobile.mkdir(parents=True)
+            (root / 'package.json').write_text('{}\n')
+            (mobile / 'index.ts').write_text('export {};\n')
+            expected = worker.tree_digest(worker.manifest(root))
+            output = StringIO()
+            with patch.object(sys, 'argv', ['ios-https-provenance.py', str(root)]), redirect_stdout(output):
+                worker.provenance.inventory_main()
+            self.assertEqual(json.loads(output.getvalue()), {'treeSha256': expected, 'files': 2})
+
+    def test_fixture_requires_the_exact_loopback_listener_set(self):
+        campaign = worker.Campaign(Path('/tmp/unused-report.json'), {})
+        campaign.fixture = Mock(pid=42, poll=Mock(return_value=None))
+        listeners = '\n'.join(f'n127.0.0.1:{port}' for port in range(29443, 29449))
+        campaign.command = Mock(return_value=listeners)
+        snapshot = '{"events":[],"connections":[],"overflow":false}'
+        with patch.object(worker.urllib.request, 'urlopen', return_value=StringIO(snapshot)):
+            self.assertEqual(campaign.wait_for_fixture(require_empty_connections=True), {'loopbackListeners': 6})
+        campaign.command.return_value = listeners + '\nn*:29449'
+        with patch.object(worker.urllib.request, 'urlopen', return_value=StringIO(snapshot)):
+            with self.assertRaises(worker.StageError) as refusal:
+                campaign.wait_for_fixture()
+        self.assertEqual(refusal.exception.record['code'], 'fixture-listeners-unconfirmed')
+
     def test_build_selects_project_pnpm_and_shares_corepack_environment(self):
         with tempfile.TemporaryDirectory(dir='/tmp') as temporary:
             scratch = Path(temporary)
@@ -58,7 +88,7 @@ class CampaignTests(unittest.TestCase):
             with self.subTest(observed=observed):
                 campaign.runner = Mock()
                 campaign.runner.call.return_value.output = output
-                with self.assertRaises(worker.c2.StageError) as caught:
+                with self.assertRaises(worker.StageError) as caught:
                     campaign.build()
                 self.assertEqual(caught.exception.record, {
                     'verdict': 'FAIL', 'code': 'pnpm-version-mismatch',
@@ -86,19 +116,19 @@ class CampaignTests(unittest.TestCase):
             campaign.command = Mock(return_value=str(root))
             result = campaign.staging()
             self.assertEqual(len(result['nativeSources']), 3)
-            self.assertEqual(campaign.command.call_args.args[0][-1], '--urlsession')
+            self.assertEqual(Path(campaign.command.call_args.args[0][-1]).name, 'stage-ios-urlsession-campaign.sh')
             (native / 'vendor').mkdir()
-            with self.assertRaises(worker.c2.StageError):
+            with self.assertRaises(worker.StageError):
                 campaign.staging()
 
     def test_cleanup_continues_after_stop_failure(self):
         with tempfile.TemporaryDirectory(dir='/tmp') as temporary:
             campaign = worker.Campaign(Path(temporary) / 'report.json', {})
             campaign.runner = Mock(pid=42)
-            campaign.runner.stop.side_effect = worker.c2.StageError('stop-failed')
-            campaign.runner.cleanup_device.side_effect = worker.c2.StageError('cleanup-failed')
+            campaign.runner.stop.side_effect = worker.StageError('stop-failed')
+            campaign.runner.cleanup_device.side_effect = worker.StageError('cleanup-failed')
             campaign.scratch = Path(temporary)
-            with self.assertRaises(worker.c2.StageError) as caught:
+            with self.assertRaises(worker.StageError) as caught:
                 campaign.cleanup()
             campaign.runner.cleanup_device.assert_called_once()
             self.assertEqual(caught.exception.record['simulatorRemoved'], 'FAIL')
@@ -140,7 +170,7 @@ class CampaignTests(unittest.TestCase):
                     patch.object(worker.time, 'sleep'), \
                     patch.object(worker.urllib.request, 'urlopen'), \
                     patch.object(worker.json, 'load', return_value={'events': []}):
-                with self.assertRaises(worker.c2.StageError) as caught:
+                with self.assertRaises(worker.StageError) as caught:
                     campaign.runtime()
             self.assertEqual(caught.exception.record, {'verdict': 'NOT_RUN', 'code': 'qualification-timeout'})
             self.assertEqual(campaign.report['qualification'], qualification)

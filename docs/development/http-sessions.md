@@ -1,50 +1,20 @@
 # Fondation HTTP et sessions — jalon 4.4C1
 
-**Actualisation 4.4C2A :** deux routes publiques d’[inscription HTTP](http-email-registration.md) complètent désormais la composition ; les contrats et particularités historiques de liveness/session sont conservés.
+Référence de la liveness et de la session courante introduites en 4.4C1. La connexion et l’inscription disposent de leurs contrats propres. [Connexion](http-login.md), [inscription](http-email-registration.md). La configuration et la composition applicative figurent dans la [vue d’architecture](../architecture/architecture-overview.md#5-architecture-backend).
 
-**Actualisation 4.4C1 bis :** les chemins et la composition présentés ci-dessous décrivent le jalon historique 4.4C1. L’[harmonisation architecturale](backend-architecture-harmonization.md) déplace le transport de session dans `src/auth/sessions`, le fournisseur dans `src/shared/database`, les protections transversales dans `src/shared/http` et le démarrage à la racine de `src`. Les tests sont répartis entre `tests/unit`, `tests/persistence` et `tests/http`. La politique sans entrée s’applique désormais aux routes concernées, avec les mêmes contrats et limites ; le filtre et le guard d’authentification conservent leur rôle. Les résultats ci-dessous sont historiques, les nouveaux passages figurent dans le rapport d’harmonisation.
+## Sessions persistantes
 
-Statut : implémentation locale non commitée pour revue critique. Seuls la liveness, la consultation de la session courante et sa révocation sont exposés. Aucun utilisateur réel ne doit être accueilli avec cette seule fondation. **SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. 4.4C2 n’est pas commencé.**
+La migration `20261115010000_persistent_sessions` conserve les anciennes lignes comme immédiatement expirées, avec empreinte nulle. Une nouvelle session reçoit un UUID v4 et un secret indépendant de 32 octets. Le jeton est `s1.<uuid v4 minuscule>.<secret base64url canonique>`. Le serveur ne conserve que SHA-256 du secret et effectue une comparaison à temps constant. Un UUID seul ne suffit pas pour l’authentification. Si la création engage une issue inconnue, aucune nouvelle session n’est créée implicitement.
 
-## Audit initial et versions
+Le repository déduit le compte du jeton vérifié et relit session et appareil après acquisition du verrou de compte. Les comptes différents ont des verrous distincts. L’expiration est exclusive. La politique initiale est 30 jours absolus et 7 jours d’inactivité, avec bornes de configuration de 90 jours pour la durée absolue et de la capacité SQL INTEGER pour l’inactivité. L’expiration absolue et la durée propre à la session sont conservées. Une horloge en recul par rapport à la création ou à l’activité invalide la vérification. `validate` actualise l’activité et `read` la laisse inchangée.
 
-L’arbre de travail était propre sur `feature/crypto`. Les commits locaux `46d6681` (4.4A) et `767ed84` (4.4B) confirment leur intégration. Les anciennes mentions « non commité » de 4.4B sont actualisées. Leur clôture reste une clôture expérimentale, sans qualification de production.
+La réutilisation d’un appareil historique exige une preuve indépendante de liaison au contexte. Le résultat `pending` ou `authorized` reflète la décision serveur représentée par `authorizedAt`. Les appareils en attente ne consomment pas les cinq places de confiance. La vérification sérialisée après révocation échoue, tandis qu’une requête déjà authentifiée peut être en cours. Une opération sensible revalide selon son propre contrat. La sérialisation peut faire attendre les requêtes d’un même compte et déclencher le délai de verrou. Tout changement de verrou doit préserver la relecture de l’état et de l’horloge sous verrou.
 
-L’API possédait un build TypeScript strict NodeNext, un client Prisma généré dans `apps/api/generated/prisma`, six migrations, des services internes d’inscription/réauthentification/amorçage et des suites PostgreSQL séparées. Elle n’avait ni serveur HTTP ni dépendance NestJS. Les fixtures construisent `PrismaClient` avec `PrismaPg`; aucun singleton applicatif préexistant n’était à réutiliser. `local-env.mjs` charge le fichier local sans remplacer les variables injectées.
-
-Les primitives réutilisées sont `parseSessionToken`, `SessionError`, `requireSessionInTransaction` et `PostgresSessionRepository.validate`. La seule extension du repository est `revokeCurrent(token)`, qui revalide la session dans `authenticated`, sous le verrou `Account FOR UPDATE`, puis révoque exclusivement la ligne authentifiée. Le contrôleur ne transmet jamais de cible de révocation.
-
-Versions exactes vérifiées dans le registre npm officiel le 16 novembre 2026 :
-
-| Dépendance                                                   | Version | Usage                                                                         |
-| ------------------------------------------------------------ | ------- | ----------------------------------------------------------------------------- |
-| `@nestjs/common`, `@nestjs/core`, `@nestjs/platform-express` | 12.5.0  | Modules, injection, contrôleurs, pipeline HTTP et adaptateur Express standard |
-| `reflect-metadata`                                           | 0.2.2   | Métadonnées des décorateurs NestJS                                            |
-| `rxjs`                                                       | 7.8.2   | Dépendance pair obligatoire du framework                                      |
-| `@types/express`                                             | 5.0.6   | Types du transport, développement uniquement                                  |
-
-Express 5.3.0 est une dépendance transitive de l’adaptateur. Nest 12 est ESM et demande Node >=20 ; les essais utilisent Node 24.22.2, TypeScript 6.0.3, Prisma 7.10.1 et Vitest 5.1.0. Voir le [guide officiel Nest 12](https://docs.nestjs.com/migration-guide), les [versions du package officiel](https://www.npmjs.com/package/@nestjs/core?activeTab=versions) et les manifestes installés. Aucune CLI Nest, bibliothèque de validation supplémentaire, dépendance Passport/JWT ou seconde ORM n’est ajoutée. L’avertissement pnpm sur le pair React/React DOM provient des dépendances préexistantes Prisma/Expo ; leurs versions n’ont pas été changées.
-
-## Organisation et responsabilités
-
-- `apps/api/server.mjs` : charge l’environnement, importe le point d’entrée ESM compilé et assainit tout échec de démarrage.
-- `src/http/main.ts` : lit la configuration, démarre l’écoute et active l’arrêt propre SIGINT/SIGTERM.
-- `src/http/application.ts` : assemble Nest, le pipeline HTTP, les limites et le contrôle de connexion initial.
-- `src/http/app.module.ts` : module principal et contrôleur de liveness.
-- `src/http/config.ts`, `database.ts` : validation de configuration, création du client Prisma/adaptateur existant, propriété du pool et fermeture.
-- `src/http/session.module.ts` : composition du module et enregistrement du guard global avec `APP_GUARD`.
-- `src/http/session.guard.ts` : exemption publique explicite, parsing Bearer et contexte issu de la validation PostgreSQL.
-- `src/http/session-http.service.ts` : capacité étroite de validation/révocation et projection explicite du DTO.
-- `src/http/session.controller.ts` : deux opérations de transport, sans Prisma ni SQL.
-- `src/http/http-policy.ts`, `http-error-filter.ts` : entrées, méthodes, en-têtes et erreurs assainies.
-
-La couche HTTP dépend d’un adaptateur serveur étroit ; le domaine et les packages crypto restent indépendants de NestJS. Le module ne compose aucun service d’inscription, de réauthentification ou de coffre. Le client Prisma reste une capacité privilégiée de composition, jamais une dépendance des contrôleurs. Le contexte authentifié est conservé dans une `WeakMap` par requête, sans ajout de propriétés énumérables. L’en-tête Authorization original reste présent dans l’objet HTTP natif : aucune sérialisation brute de requête n’est sûre.
-
-`experimentalDecorators: true` est activé uniquement pour l’API. L’injection utilise des tokens explicites avec `@Inject` ou des factories : `emitDecoratorMetadata` n’est pas requis, ce qui évite une divergence entre la compilation TypeScript et les transformations Vitest. Les imports relatifs `.js`, le build ESM, le typage strict et l’exclusion des tests du build sont conservés.
+Une modification ordinaire du mot de passe conserve les autres appareils connectés et autorisés. La révocation explicite et ses effets E2EE relèvent de SEC-CRYPTO-003. Les tests PostgreSQL de 4.3B ont observé 43 succès après correction des cas de collision et rollback. Leur base et leur serveur étaient dédiés à la qualification historique.
 
 ## Contrat HTTP
 
-Toutes les routes acceptent **zéro paramètre de requête et zéro corps**, y compris `{}`. Aucun identifiant fourni par le client ne sélectionne de compte, appareil ou session. Les réponses avec contenu sont JSON. Les routes sont sensibles à la casse et aux barres finales.
+Toutes les routes acceptent **zéro paramètre de requête et zéro corps**, y compris `{}`. Aucun identifiant fourni par le client ne sélectionne de compte, appareil ou session. Les réponses avec contenu sont JSON. Les chemins du tableau sont canoniques. Les variantes historiques de casse, slash final et HEAD sont caractérisées dans les tests HTTP.
 
 | Méthode et chemin    | Authentification                             | Réponse               |
 | -------------------- | -------------------------------------------- | --------------------- |
@@ -142,7 +112,7 @@ Le serveur local est en **HTTP clair**, sans TLS automatique. Le déploiement pu
 
 ## Validation et limites
 
-`tests/http.test.ts` couvre les composants isolés et ne prétend pas authentifier des sessions. `tests/http-postgres.test.ts` passe par un serveur NestJS réel sur port loopback éphémère, des jetons créés par le repository et PostgreSQL 18.7 réel ; aucun mock n’accorde une identité. Une interception de méthode synchronise uniquement la course entre guard et révocation, avec deux révocations réellement persistées. Les autorisations de fixtures sont écrites par l’infrastructure de test privilégiée, pas par une route publique.
+`tests/unit/shared/http.test.ts` couvre les composants isolés et ne prétend pas authentifier des sessions. Les suites sous `tests/http/` passent par un serveur NestJS réel sur port loopback éphémère, des jetons créés par le repository et PostgreSQL 18.7 réel ; aucun mock n’accorde une identité. Une interception de méthode synchronise uniquement la course entre guard et révocation, avec deux révocations réellement persistées. Les autorisations de fixtures sont écrites par l’infrastructure de test privilégiée, pas par une route publique.
 
 Les cas couvrent parsing, erreurs, configuration, session en attente/autorisée, secret incorrect, expirations absolue/inactivité, révocations, isolation, maintien des autres sessions, attente du verrou et timeout, méthodes, contenu, taille, doublons, cache, absence de routes sensibles et fuite de jetons, liveness indépendante d’une panne SQL, démarrage ESM compilé, SIGTERM et absence de connexions après fermeture. La suite repository ajoute un test direct de `revokeCurrent` avec secret incorrect et rejeu.
 
@@ -170,11 +140,3 @@ Le premier passage HTTP a identifié trois assertions/fixtures incorrectes : abs
 PostgreSQL 18.7 a été compilé depuis les sources officielles sous `/tmp`, avec les outils de compilation manquants extraits sous `/tmp`, sans installation système. L’instance temporaire écoutait uniquement sur `127.0.0.1:55439`, base dédiée `bunny_talks_test`. Les migrations existantes sont appliquées dans chaque schéma aléatoire de test. Après les suites, un contrôle SQL indépendant constate **zéro schéma de test et zéro connexion restante** ; l’instance a été arrêtée. Aucun secret local, `.env` privé ni donnée applicative de l’utilisateur n’a été modifié.
 
 Ne sont pas vérifiés : charge distribuée, TLS public, certificats PostgreSQL distants, reverse proxy déployé, protection anti-bruteforce, production mobile/E2EE. Le développement local ne recharge pas automatiquement les sources.
-
-## Inventaire pour revue
-
-Fichiers créés : `apps/api/server.mjs`, les onze modules `apps/api/src/http/*.ts` décrits plus haut, `apps/api/tests/http.test.ts`, `apps/api/tests/http-postgres.test.ts` et ce document.
-
-Fichiers modifiés : `apps/api/package.json`, `apps/api/tsconfig.json`, `apps/api/.env.example`, `pnpm-lock.yaml`, `apps/api/src/postgres-session-repository.ts`, `apps/api/tests/postgres-session-repository.test.ts`, `apps/api/tests/postgres-test-database.ts`, `docs/architecture/architecture-overview.md`, `docs/development/current-milestone.md` et `docs/development/initial-device-bootstrap.md`. Aucun schéma ni migration Prisma modifié.
-
-Les changements restent non commités pour revue. Commit suggéré : `feat(api): add NestJS HTTP foundation and current-session authentication`.

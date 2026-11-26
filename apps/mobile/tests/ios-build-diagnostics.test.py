@@ -6,7 +6,6 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
-from textwrap import dedent
 import unittest
 from unittest.mock import patch
 
@@ -16,16 +15,8 @@ spec = importlib.util.spec_from_file_location("collector", script)
 collector = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(collector)
 repository = script.parents[3]
-workflow = (repository / ".github/workflows/ios-standard-release.yml").read_text()
 fixtures = Path(__file__).parent / "fixtures/ios-build-diagnostics"
 
-
-def run_workflow_shell(name, env):
-    step = workflow.split(f"      - name: {name}\n", 1)[1].split("\n      - name: ", 1)[0]
-    shell = dedent(step.split("\n        run: |\n", 1)[1])
-    return subprocess.run(
-        ["bash", "-eo", "pipefail", "-c", shell], cwd=repository, env=env, capture_output=True, text=True,
-    )
 
 
 class BuildDiagnosticsTest(unittest.TestCase):
@@ -42,7 +33,7 @@ class BuildDiagnosticsTest(unittest.TestCase):
 
     def test_success_does_not_publish_errors_or_read_result(self):
         self.exit_code.write_text("0\n")
-        self.log.write_text("error: no such module 'BunnyHttpsNative'\n")
+        self.log.write_text("error: no such module 'ApplicationHttpsModule'\n")
         with patch.object(collector, "read_structured") as structured:
             report = self.collect("success")
         structured.assert_not_called()
@@ -56,8 +47,8 @@ class BuildDiagnosticsTest(unittest.TestCase):
         bundle.mkdir()
         result = {"errors": [{
             "issueType": "Swift Compiler Error", "targetName": "ApplicationHttps",
-            "sourceURL": "file:///private/work/CurlHttpsTransport.swift#StartingLineNumber=12",
-            "message": "No such module 'BunnyHttpsNative'",
+            "sourceURL": "file:///private/work/ApplicationHttpsModule.swift#StartingLineNumber=12",
+            "message": "No such module 'ApplicationHttpsModule'",
         }]}
 
         with patch.object(collector, "read_structured", return_value=result):
@@ -69,8 +60,8 @@ class BuildDiagnosticsTest(unittest.TestCase):
         self.assertEqual(report["xcodeExitCode"], 65)
         self.assertEqual(report["diagnostics"], [{
             "code": "module-not-found", "category": "compilation", "message": "Swift module not found",
-            "target": "ApplicationHttps", "file": "CurlHttpsTransport.swift", "line": 12,
-            "component": "BunnyHttpsNative",
+            "target": "ApplicationHttps", "file": "ApplicationHttpsModule.swift", "line": 12,
+            "component": "ApplicationHttpsModule",
         }])
 
     def test_strict_xcresulttool_accepts_documented_command_and_sanitizes_json(self):
@@ -84,9 +75,9 @@ class BuildDiagnosticsTest(unittest.TestCase):
             "['xcresulttool', 'get', 'build-results', '--path']:\n"
             "    sys.exit(2)\n"
             "print(json.dumps({'errors': ["
-            "{'message': \"No such module 'BunnyHttpsNative'\", "
-            "'sourceURL': 'file:///private/fixture-secret/CurlHttpsTransport.swift#StartingLineNumber=12'},"
-            "{'message': \"No such module 'BunnyHttpsNative'\", "
+            "{'message': \"No such module 'ApplicationHttpsModule'\", "
+            "'sourceURL': 'file:///private/fixture-secret/ApplicationHttpsModule.swift#StartingLineNumber=12'},"
+            "{'message': \"No such module 'ApplicationHttpsModule'\", "
             "'sourceURL': 'file:///private/fixture-secret/Private.swift#StartingLineNumber=99'}"
             "], 'warnings': [], 'private': 'fixture-secret'}))\n"
         )
@@ -100,7 +91,7 @@ class BuildDiagnosticsTest(unittest.TestCase):
         self.assertEqual(report["sources"], ["xcresult"])
         self.assertEqual(report["verdict"], "PASS")
         first, second = report["diagnostics"]
-        self.assertEqual((first["file"], first["line"]), ("CurlHttpsTransport.swift", 12))
+        self.assertEqual((first["file"], first["line"]), ("ApplicationHttpsModule.swift", 12))
         self.assertNotIn("file", second)
         self.assertNotIn("line", second)
         self.assertNotIn("fixture-secret", json.dumps(report))
@@ -108,21 +99,21 @@ class BuildDiagnosticsTest(unittest.TestCase):
 
     def test_c_error_uses_log_when_no_bundle_exists(self):
         self.log.write_text(
-            "/private/work/BunnyHttpsNative.c:8:9: fatal error: 'curl/curl.h' file not found "
+            "/private/work/sqlite3.c:8:9: fatal error: 'sqlite3.h' file not found "
             "(in target 'ApplicationHttps' from project 'Pods')\n"
         )
         report = self.collect()
         self.assertEqual(report["sources"], ["log"])
         diagnostic = report["diagnostics"][0]
-        self.assertEqual(diagnostic["file"], "BunnyHttpsNative.c")
-        self.assertEqual(diagnostic["component"], "curl/curl.h")
+        self.assertEqual(diagnostic["file"], "sqlite3.c")
+        self.assertEqual(diagnostic["component"], "sqlite3.h")
         self.assertEqual(diagnostic["target"], "ApplicationHttps")
         self.assertEqual(diagnostic["code"], "header-not-found")
 
     def test_linker_symbol_and_failed_command_target(self):
         self.log.write_text(
             'Undefined symbols for architecture arm64:\n'
-            '  "_curl_multi_perform", referenced from:\n'
+            '  "_sqlite3_open", referenced from:\n'
             '      _example in fixture.o\n'
             'ld: symbol(s) not found for architecture arm64\n'
             'The following build commands failed:\n'
@@ -131,7 +122,7 @@ class BuildDiagnosticsTest(unittest.TestCase):
         )
         diagnostics = self.collect()["diagnostics"]
         self.assertTrue(all(row["category"] == "linkage" for row in diagnostics))
-        self.assertIn("_curl_multi_perform", [row.get("component") for row in diagnostics])
+        self.assertIn("_sqlite3_open", [row.get("component") for row in diagnostics])
         self.assertIn("BunnyTalks", [row.get("target") for row in diagnostics])
 
     def test_incomplete_and_unreadable_structured_results_fall_back(self):
@@ -163,7 +154,7 @@ class BuildDiagnosticsTest(unittest.TestCase):
         with self.log.open("wb") as stream:
             stream.write(b"error: " + b"x" * collector.MAX_LINE + b" no space left on device\n")
             for line in range(1, 30):
-                stream.write(f"/private/BunnyHttpsNative.c:{line}:1: error: expected expression\n".encode())
+                stream.write(f"/private/sqlite3.c:{line}:1: error: expected expression\n".encode())
         report = self.collect()
         self.assertTrue(report["limitReached"])
         self.assertEqual(len(report["diagnostics"]), collector.MAX_DIAGNOSTICS)
@@ -172,13 +163,13 @@ class BuildDiagnosticsTest(unittest.TestCase):
 
     def test_oversized_structured_output_falls_back_to_the_log(self):
         (self.root / "build.xcresult").mkdir()
-        self.log.write_text("BunnyHttpsNative.c:3: error: expected expression\n")
+        self.log.write_text("sqlite3.c:3: error: expected expression\n")
         with self.fake_xcrun("head -c 2097153 /dev/zero"):
             report = self.collect()
         self.assertEqual(report["xcresultStatus"], "byte-limit")
         self.assertTrue(report["limitReached"])
         self.assertEqual(report["sources"], ["log"])
-        self.assertEqual(report["diagnostics"][0]["file"], "BunnyHttpsNative.c")
+        self.assertEqual(report["diagnostics"][0]["file"], "sqlite3.c")
 
     def test_secrets_and_unexpected_operands_are_not_forwarded(self):
         fake_secret = "fixture-secret-0000"
@@ -281,41 +272,6 @@ class BuildDiagnosticsTest(unittest.TestCase):
         with patch.object(collector, "LOG_SECONDS", 0):
             self.assertEqual(self.collect()["logStatus"], "time-limit")
 
-    def test_workflow_preserves_exit_and_fail_even_if_diagnostics_pass(self):
-        scratch = self.root / "bunny-ios-standard"
-        scratch.mkdir()
-        proof = self.root / "bunny-ios-proof"
-        proof.mkdir()
-        tools = self.root / "tools"
-        tools.mkdir()
-        fake_xcode = tools / "xcodebuild"
-        fake_xcode.write_text("#!/bin/sh\nprintf '%s\\n' \"error: no such module 'BunnyHttpsNative'\"\nexit 65\n")
-        fake_xcode.chmod(0o700)
-        env = dict(os.environ, RUNNER_TEMP=str(self.root), PATH=f"{tools}{os.pathsep}{os.environ['PATH']}",
-                   BUILD_OUTCOME="failure", GITHUB_SHA="a" * 40, ARTIFACT="success", PREFLIGHT="success",
-                   PODS="success", BUILD="failure", INSPECTION="skipped")
-        build = run_workflow_shell("Compile the standard arm64 simulator Release", env)
-        self.assertEqual(build.returncode, 65)
-        self.assertEqual(build.stdout + build.stderr, "")
-        diagnostics = run_workflow_shell("Collect sanitized Xcode diagnostics", env)
-        self.assertEqual(diagnostics.returncode, 0, diagnostics.stderr)
-        (proof / "release.json").write_text('{"verdict":"PASS"}')
-        summary = run_workflow_shell("Record compilation and inspection results", env)
-        self.assertEqual(summary.returncode, 0, summary.stderr)
-        result = json.loads((proof / "report.json").read_bytes())
-        self.assertEqual(
-            [result[key] for key in ("verdict", "compilation", "diagnostics", "inspection", "runtime")],
-            ["FAIL", "FAIL", "PASS", "NOT_RUN", "NOT_RUN"],
-        )
-        self.assertEqual(result["xcodeExitCode"], 65)
-        self.assertEqual(result["diagnosticQuality"], "technical-error")
-        (scratch / "xcodebuild.log").write_bytes((fixtures / "generic-summary.txt").read_bytes())
-        for step in ("Collect sanitized Xcode diagnostics", "Record compilation and inspection results"):
-            self.assertEqual(run_workflow_shell(step, env).returncode, 0)
-        result = json.loads((proof / "report.json").read_bytes())
-        self.assertEqual([result[key] for key in ("xcodeExitCode", "compilation", "diagnostics", "diagnosticQuality",
-                                                  "inspection", "runtime")],
-                         [65, "FAIL", "PASS", "generic", "NOT_RUN", "NOT_RUN"])
 
 
 if __name__ == "__main__":

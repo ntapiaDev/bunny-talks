@@ -2,6 +2,12 @@ export const prefix = '/v1/https-qualification/standard-json';
 export const port = 29_443;
 export const limit = 1_048_576;
 export const requestTimeoutMs = 4500;
+export const cancelNeighbour = {
+  abortAfterMs: 1000,
+  firstHoldMs: 3000,
+  neighbourHoldMs: 1800,
+  maxCancellationLatencyMs: 700,
+} as const;
 export const marker = '[BunnyHttpsStandardJson] ';
 export const message = 'Bonjour 🐰 — 日本語 — العربية';
 export const postBody = { message: 'fixture 🐰' };
@@ -79,3 +85,14 @@ export const supplementalCases = [
 ] as const;
 export const plan = [...probes.map(({ id }) => id), ...supplementalCases];
 export const androidPlan = plan.filter((id) => id !== 'cancel-retried-get');
+
+export const fixturePost = '{"message":"fixture 🐰"}';
+export const fixtureText = '{"message":"Bonjour 🐰 — 日本語 — العربية"}';
+// A quoted value that would parse as JSON if a decoder silently inserted a replacement character.
+export const invalidUtf8ByteValues = [0x22, 0xc0, 0x22] as const;
+// UTF-8 oracle independent of the Hermes text decoder used by the application client.
+export const fixtureByteValues = [
+  123, 34, 109, 101, 115, 115, 97, 103, 101, 34, 58, 34, 66, 111, 110, 106, 111, 117, 114, 32, 240,
+  159, 144, 176, 32, 226, 128, 148, 32, 230, 151, 165, 230, 156, 172, 232, 170, 158, 32, 226, 128,
+  148, 32, 216, 167, 217, 132, 216, 185, 216, 177, 216, 168, 217, 138, 216, 169, 34, 125,
+] as const;

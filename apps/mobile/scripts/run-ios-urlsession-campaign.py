@@ -13,21 +13,51 @@ import sys
 import time
 import urllib.request
 
-spec = importlib.util.spec_from_file_location("lab", Path(__file__).with_name("run-ios-hosted-feasibility.py"))
-lab = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(lab)
-c1, c2 = lab.c1, lab.c2
-require = c2.require
+MOBILE = Path(__file__).resolve().parents[1]
+
+
+def load_support(name, path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+c1 = load_support("standard_runtime", MOBILE / "scripts/run-ios-standard-runtime.py")
+provenance = load_support("https_provenance", MOBILE / "scripts/ios-https-provenance.py")
+inspection = load_support("standard_inspection", MOBILE / "scripts/inspect-ios-standard.py")
+require, StageError = c1.require, c1.StageError
+MOBILE_RELATIVE = Path("apps/mobile")
+NATIVE = Path("modules/application-https/ios")
+SOURCE_EXCLUSIONS = {MOBILE_RELATIVE / "ios", MOBILE_RELATIVE / NATIVE / "vendor"}
+
+
+def manifest(root):
+    return provenance.manifest(root, digest=c1.digest, require=require, excluded=SOURCE_EXCLUSIONS)
+
+
+def tree_digest(entries):
+    return provenance.tree_digest(entries)
+
+
+def evidence_digest(value):
+    return provenance.evidence_digest(value)
+
+
+def check_environment(env):
+    provenance.check_active_environment(env, require)
 BUNDLE = "fr.bunnytalks.mobile.httpsqualification.urlsession"
 MARKER = "[BunnyHttpsStandardJson] "
 PNPM_VERSION = "10.34.9"
 
 
-class Campaign(lab.Feasibility):
+class Campaign(provenance.HostedQualification):
     bundle_id = BUNDLE
 
     def __init__(self, report_path, env):
-        super().__init__(report_path, env)
+        super().__init__(report_path, env, runtime=c1, require=require, manifest_fn=manifest,
+                         tree_digest_fn=tree_digest, environment_check=check_environment)
         self.process_env.update(CI="true", EXPO_NO_DOTENV="1", EXPO_OFFLINE="1",
                                 EXPO_NO_GIT_STATUS="1", COCOAPODS_DISABLE_STATS="true",
                                 COREPACK_ENABLE_DOWNLOAD_PROMPT="0")
@@ -52,8 +82,8 @@ class Campaign(lab.Feasibility):
         return super().revision()
 
     def staging(self):
-        script = self.scratch / "source/apps/mobile/qualification/prepare-ios-eas.sh"
-        self.staged = Path(self.command(("bash", str(script), "--urlsession"), capture=True))
+        script = self.scratch / "source/apps/mobile/qualification/stage-ios-urlsession-campaign.sh"
+        self.staged = Path(self.command(("bash", str(script)), capture=True))
         require(self.staged.is_dir() and self.staged.resolve().parent == Path("/tmp").resolve(), "staging-invalid")
         native = self.staged / "apps/mobile/modules/application-https/ios"
         require({p.name for p in native.iterdir()} == {
@@ -82,7 +112,7 @@ class Campaign(lab.Feasibility):
         version = self.runner.call("pnpm", "--version", cwd=root, capture=True, timeout=120,
                                    code="pnpm-unavailable").output
         if version != PNPM_VERSION:
-            error = c2.StageError("pnpm-version-mismatch")
+            error = StageError("pnpm-version-mismatch")
             observed = re.fullmatch(r"\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?",
                                     version, flags=re.ASCII) if len(version) <= 64 else None
             error.record.update(expectedPnpmVersion=PNPM_VERSION,
@@ -184,10 +214,12 @@ class Campaign(lab.Feasibility):
             except OSError:
                 time.sleep(0.1)
         else:
-            raise c2.StageError("fixture-unavailable")
-        listeners = self.command(("lsof", "-nP", "-a", "-p", str(self.fixture.pid), "-iTCP", "-sTCP:LISTEN"), capture=True)
-        require(all("127.0.0.1:" + str(port) in listeners for port in range(29443, 29450)), "fixture-listeners-unconfirmed")
-        return {"loopbackListeners": 7}
+            raise StageError("fixture-unavailable")
+        listeners = self.command(("lsof", "-nP", "-a", "-p", str(self.fixture.pid), "-iTCP", "-sTCP:LISTEN", "-Fn"), capture=True)
+        addresses = [line[1:] for line in listeners.splitlines() if line.startswith("n")]
+        expected = ["127.0.0.1:" + str(port) for port in range(29443, 29449)]
+        require(sorted(addresses) == expected, "fixture-listeners-unconfirmed")
+        return {"loopbackListeners": len(expected)}
 
     def install(self):
         runner = self.runner
@@ -215,13 +247,13 @@ class Campaign(lab.Feasibility):
             try:
                 runner.check_alive(explicit_identity=True)
                 require(self.reader.poll() is None, "log-reader-exited")
-            except c2.StageError as error:
+            except StageError as error:
                 collection_error = error
                 break
             if any(marker + "DONE" in line or marker + "UNAVAILABLE" in line for line in own):
                 break
             if time.monotonic() >= deadline:
-                collection_error = c2.StageError("qualification-timeout", verdict="NOT_RUN")
+                collection_error = StageError("qualification-timeout", verdict="NOT_RUN")
                 break
             time.sleep(0.2)
         filtered = log.with_name(log.stem + "-filtered.log")
@@ -292,7 +324,7 @@ class Campaign(lab.Feasibility):
                     shutil.rmtree(path)
             evidence["workspaceRemoved"] = "PASS"
         if failed:
-            error = c2.StageError("cleanup-unconfirmed")
+            error = StageError("cleanup-unconfirmed")
             error.record.update(evidence)
             raise error
         return evidence

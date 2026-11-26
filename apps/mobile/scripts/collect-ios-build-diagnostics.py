@@ -26,15 +26,13 @@ TARGETS = frozenset({
 })
 FILES = frozenset({
     "AppDelegate.swift", "ExpoModulesProvider.swift", "ApplicationHttpsModule.swift",
-    "UrlSessionHttpsTransport.swift", "CurlHttpsTransport.swift", "BunnyHttpsNative.c", "BunnyHttpsNative.h",
+    "UrlSessionHttpsTransport.swift",
     "module.modulemap", "sqlite3.c", "sqlite3.h", "Podfile", "index.ts",
 })
 COMPONENTS = TARGETS | FILES | frozenset({
     "@bunny-talks/crypto-core", "@bunny-talks/crypto-backup", "@bunny-talks/crypto-engine", "@expo/cli",
-    "BunnyHttpsNative", "ExpoModulesCore", "Foundation", "React", "Security", "UIKit",
-    "curl/curl.h", "openssl/ssl.h", "zlib.h", "libcurl", "libssl", "libcrypto", "libopenssl",
-    "_curl_multi_perform", "_curl_version_info", "_OPENSSL_init_ssl",
-    "_bunny_https_perform", "_sqlite3_open", "_sqlite3_key", "arm64", "x86_64",
+    "ApplicationHttpsModule", "ExpoModulesCore", "Foundation", "React", "Security", "UIKit",
+    "zlib.h", "_sqlite3_open", "_sqlite3_key", "arm64", "x86_64",
 })
 
 # Publish fixed messages. Only operands explicitly listed above can be interpolated.

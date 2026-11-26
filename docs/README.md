@@ -1,31 +1,25 @@
 # Index documentaire
 
-Les documents marqués « référence » décrivent les décisions ou contrats applicables dans leur périmètre, mais ne certifient pas une mise en production. Les rapports historiques relatent les preuves et limites observées à leur date. En cas de différence, lire les actualisations et l'[état courant](development/current-milestone.md), puis les documents de référence ; ne pas interpréter une expérience comme une décision de production.
+Le [jalon courant](development/current-milestone.md) retrace l’état du pilotage. Les références ci-dessous fixent les décisions ou contrats applicables. Les résultats de code et de qualification se vérifient dans les tests et rapports associés.
 
-## Références actuelles
+## Décisions et contrats
 
-- Produit : [présentation et décisions](product/project-overview.md).
-- Architecture : [vue d'ensemble](architecture/architecture-overview.md), [audit transversal 4.5B0 bis](development/monorepo-audit.md), [mobile](development/mobile-architecture.md) et [harmonisation backend](development/backend-architecture-harmonization.md).
-- Sécurité : [modèle de menaces](security/threat-model.md) et [exigences d'archive et de récupération](security/encrypted-archive-and-recovery.md).
-- Coffre implémenté à deux enveloppes : [enveloppes V1](security/key-envelopes-v1.md), [composition authentifiée V1](security/account-vault-v1.md) et [contrats de publication](development/vault-publication-contracts.md). Ces formats expérimentaux ne constituent pas un parcours complet de récupération.
-- Compte et appareils : [sessions persistantes](development/persistent-sessions.md), [preuves de réauthentification](development/reauthentication-grants.md), [inscription](development/email-registration.md) et [premier amorçage](development/initial-device-bootstrap.md). L'autorisation serveur ne prouve pas la possession de l'identité E2EE.
-- API : [sessions HTTP](development/http-sessions.md), [inscription HTTP](development/http-email-registration.md), [connexion HTTP](development/http-login.md), [amorçage HTTP](development/http-initial-device-bootstrap.md), [repository transactionnel](development/transactional-vault-repository.md) et [vérificateurs de mot de passe](security/server-password-verifiers.md).
-- Mobile : [fondation HTTP applicative](development/mobile-application-http.md).
-- Environnement : [PostgreSQL, migrations et suites dédiées](development/postgresql-prisma-foundation.md), [prérequis de qualification mobile](development/mobile-qualification-prerequisites.md).
+- Produit, identité durable et relation de confiance. [Présentation du produit](product/project-overview.md), [ADR-002](architecture/decisions/002-shared-identity.md).
+- Architecture du monorepo et des applications. [Vue d’ensemble](architecture/architecture-overview.md), [architecture mobile](development/mobile-architecture.md), [ADR-001](architecture/decisions/001-crypto-packages.md).
+- Menaces, archive et récupération. [Modèle de menaces](security/threat-model.md), [exigences de récupération](security/encrypted-archive-and-recovery.md). SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts.
+- Comptes et sessions. [Inscription et identité e-mail](development/http-email-registration.md), [connexion](development/http-login.md), [sessions](development/http-sessions.md), [réauthentification](development/reauthentication-grants.md), [vérificateurs de mot de passe](security/server-password-verifiers.md).
+- Amorçage et coffre V1 expérimental. [Amorçage initial](development/http-initial-device-bootstrap.md), [publication](development/vault-publication-contracts.md), [persistance transactionnelle](development/transactional-vault-repository.md), [enveloppes](security/key-envelopes-v1.md), [composition authentifiée](security/account-vault-v1.md).
+- HTTP mobile. [Contrat applicatif et reprises métier](development/mobile-application-http.md), [ADR-004](architecture/decisions/004-bounded-mobile-api-responses.md).
 
-## Évaluations expérimentales et qualifications
+## Mise en œuvre et qualifications
 
-- [OpenE2EE 14.5.0 sur Android](development/mobile-open-e2ee-qualification.md), [coffre Android](development/android-vault-qualification.md), [Argon2id natif](development/native-argon2-qualification.md), [migration OpenE2EE 14.5.0](development/open-e2ee-14-5-migration.md) et [audit CRYPTO-001](development/crypto-fix-001-audit.md). Leurs résultats sont limités aux versions, appareils et scénarios observés ; la structure mobile 4.5B0 doit être requalifiée après arrêt forcé.
-- [Coffre direct V1](security/recovery-vault-direct-v1.md), [charge candidate V1](security/recovery-payload-v1.md), [évaluation des composants](security/recovery-vault-component-evaluation.md) et [interopérabilité](security/recovery-vault-interop-evaluation.md) : travaux d'évaluation, distincts de la cible à deux enveloppes.
+- Environnement serveur et suites isolées. [PostgreSQL et Prisma](development/postgresql-prisma-foundation.md).
+- Préparation, campagnes et limites mobiles. [Prérequis](development/mobile-qualification-prerequisites.md), [qualifications HTTPS et oracles](development/native-https-foundation.md).
+- Observations cryptographiques historiques. [Migration OpenE2EE](development/open-e2ee-14-5-migration.md), [OpenE2EE Android](development/mobile-open-e2ee-qualification.md), [coffre Android](development/android-vault-qualification.md), [Argon2id natif](development/native-argon2-qualification.md).
+- Jalons, sources historiques et restauration. [Chronologie](development/milestone-history.md), [conservation HTTPS et documents consolidés](development/https-archive-index.md).
 
-## Historique et documents remplacés
+## Conceptions et évaluations ouvertes
 
-- [Historique intégral des jalons](development/milestone-history.md) : conclusions et contexte conservés, y compris les états révolus.
-- [Audit de transition E2EE](architecture/e2ee-transition-audit.md) et [ADR-003](architecture/decisions/003-open-e2ee-evaluation.md) : contexte historique et actualisations de l'évaluation SDK. OpenE2EE demeure un candidat, pas un choix définitif.
-- [Spécification de récupération initiale](security/recovery-vault-specification.md) et [prérequis techniques](security/recovery-vault-technical-prerequisites.md) : propositions et étapes historiques à lire avec leurs actualisations et la cible ci-dessous.
-
-## Décisions et garanties encore ouvertes
-
-- [Architecture cible de récupération](security/recovery-vault-architecture.md) et [hiérarchie d'archive candidate](security/archive-key-hierarchy.md) : les formats d'archive, la fraîcheur, la rotation et les parcours complets restent à définir ou valider.
-- [ADR-001 : packages crypto](architecture/decisions/001-crypto-packages.md), [ADR-002 : identité partagée](architecture/decisions/002-shared-identity.md) et [ADR-003 : évaluation OpenE2EE](architecture/decisions/003-open-e2ee-evaluation.md) exposent les décisions et leurs réserves. SEC-CRYPTO-002 (import atomique et reprise sûre) et SEC-CRYPTO-003 (autorisation individuelle, authentification et anti-rejeu des appareils) restent bloquants avant production.
-- La qualification iOS, les appareils physiques, les builds release, le relay réel et la sécurité d'ensemble restent ouverts. Les suites Node, PostgreSQL ou Metro ne les démontrent pas.
+- Évaluation OpenE2EE 14.4.0 et poursuite expérimentale en 14.5.0. [ADR-003](architecture/decisions/003-open-e2ee-evaluation.md), [audit de transition](architecture/e2ee-transition-audit.md).
+- Récupération et archive. [Architecture cible et limites expérimentales](security/recovery-vault-architecture.md), [enveloppes actuelles](security/key-envelopes-v1.md), [composition V1](security/account-vault-v1.md), [hiérarchie candidate](security/archive-key-hierarchy.md), [charge candidate](security/recovery-payload-v1.md).
+- Format direct historique conservé avec son code et ses vecteurs : [coffre direct V1](security/recovery-vault-direct-v1.md). Ses critères expérimentaux utiles sont résumés dans l'architecture du coffre ; ce format n'est pas la cible actuelle.

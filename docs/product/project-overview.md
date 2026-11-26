@@ -610,7 +610,7 @@ Décisions :
 
 - Maximum cinq appareils de confiance par compte.
 - Chaque appareil conserve ses propres éléments cryptographiques locaux lorsque le protocole l'exige.
-- Premier appareil : amorçage unique du compte jamais initialisé, avec e-mail déjà vérifié à l’inscription, session valide et mot de passe revérifié ; aucune seconde vérification e-mail automatique. Publication cliente du coffre et autorisation serveur sont atomiques, sans démontrer à elles seules la persistance de l’identité locale. Voir [4.4B](../development/initial-device-bootstrap.md).
+- Premier appareil : amorçage unique du compte jamais initialisé, avec e-mail déjà vérifié à l’inscription, session valide et mot de passe revérifié ; aucune seconde vérification e-mail automatique. Publication cliente du coffre et autorisation serveur sont atomiques, sans démontrer à elles seules la persistance de l’identité locale. Voir [4.4B](../development/http-initial-device-bootstrap.md).
 - Ajout d’un appareil supplémentaire sans ancien appareil : connexion par e-mail et mot de passe, puis autorisation individuelle par lien e-mail à usage unique, lié à une demande identifiable et expirante. L'absence d'autorisation valide, et non la seule empreinte matérielle, caractérise un nouvel appareil.
 - Aucun accès aux données protégées avant l'autorisation requise. Le coffre est ensuite déverrouillé localement avec le mot de passe ; l'association par QR code est facultative et reportée.
 - Notifications de sécurité lors de l'ajout ou de la révocation.

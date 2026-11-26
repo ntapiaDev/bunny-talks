@@ -10,6 +10,7 @@ import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { fixtureJson, startFixture } from '../qualification/server.js';
 import { describeNativeResult } from '../qualification/standard-json-diagnostics';
 import {
+  androidPlan,
   firstBearer,
   marker,
   plan,
@@ -30,7 +31,6 @@ const get = (path: string, offset = 0, abort = false, acceptEncoding?: string) =
     status: number;
     bytes: Buffer;
     location: string | undefined;
-    contentType: string | undefined;
     headers: IncomingHttpHeaders;
   }>((resolve, reject) => {
     const req = request(
@@ -55,7 +55,6 @@ const get = (path: string, offset = 0, abort = false, acceptEncoding?: string) =
             status: response.statusCode ?? 0,
             bytes: Buffer.concat(chunks),
             location: response.headers.location,
-            contentType: response.headers['content-type'],
             headers: response.headers,
           }),
         );
@@ -67,58 +66,25 @@ const get = (path: string, offset = 0, abort = false, acceptEncoding?: string) =
 beforeAll(async () => {
   execFileSync('bash', ['qualification/certificates.sh', directory], { stdio: 'pipe' });
   ca = readFileSync(join(directory, 'ca.pem'));
-  fixture = await startFixture(
-    directory,
-    port,
-    '127.0.0.1',
-    true,
-    true,
-    undefined,
-    undefined,
-    true,
-  );
+  fixture = await startFixture(directory, port);
 });
 afterAll(async () => {
   await fixture?.close();
   rmSync(directory, { recursive: true, force: true });
 });
-it('serves exact UTF-8, invalid JSON and decoded gzip larger than one MiB', async () => {
-  expect((await get('/json')).bytes.toString()).toBe(fixtureJson);
-  const invalid = (await get('/invalid')).bytes.toString();
-  expect(() => JSON.parse(invalid)).toThrow();
-  expect(gunzipSync((await get('/gzip')).bytes).toString()).toBe(fixtureJson);
-  expect(gunzipSync((await get('/gzip-exact')).bytes).length).toBe(1_048_576);
-  expect(gunzipSync((await get('/oversize')).bytes).length).toBeGreaterThan(1_048_576);
+it('offers complete gzip framing for the missing-trailer probe and exact invalid UTF-8 bytes', async () => {
+  const gzip = await get(standardPrefix + '/gzip-truncated');
+  expect(gzip.headers['content-encoding']).toBe('gzip');
+  expect(gzip.headers['content-length']).toBe(String(gzip.bytes.length));
+  expect(gzip.headers['transfer-encoding']).toBeUndefined();
+  expect(() => gunzipSync(gzip.bytes)).toThrow();
+
+  const invalidUtf8 = await get(standardPrefix + '/invalid-utf8');
+  expect(invalidUtf8.bytes).toEqual(Buffer.from([0x22, 0xc0, 0x22]));
+  expect(invalidUtf8.headers['content-length']).toBe('3');
 });
-it('separates malformed gzip payloads from incomplete HTTP responses', async () => {
-  const gzip = (await get('/gzip-exact')).bytes;
-  const invalid = ['truncated', 'bad-crc', 'truncated-stream'];
-  const [noSize, badCrc, truncatedStream] = await Promise.all(
-    invalid.map((variant) => get('/gzip-' + variant)),
-  );
-  for (const response of [noSize!, badCrc!, truncatedStream!]) {
-    expect(response.headers['content-encoding']).toBe('gzip');
-    expect(response.headers['content-length']).toBe(String(response.bytes.length));
-    expect(() => gunzipSync(response.bytes)).toThrow();
-  }
-  expect(badCrc!.bytes.subarray(0, -8)).toEqual(noSize!.bytes.subarray(0, -4));
-  expect(badCrc!.bytes.length - noSize!.bytes.length).toBe(4);
-  expect(truncatedStream!.bytes).toEqual(gzip.subarray(0, Math.floor(gzip.length / 2)));
-});
-it('varies only the framing of the HTTP 503 controls', async () => {
-  const chunked = await get('/retry-status');
-  const length = await get('/retry-status-length');
-  expect(chunked.status).toBe(503);
-  expect(length.status).toBe(503);
-  expect(length.bytes).toEqual(chunked.bytes);
-  expect(chunked.headers['retry-after']).toBe(length.headers['retry-after']);
-  expect(chunked.headers['transfer-encoding']).toBe('chunked');
-  expect(chunked.headers['content-length']).toBeUndefined();
-  expect(length.headers['content-length']).toBe('2');
-  expect(length.headers['transfer-encoding']).toBeUndefined();
-});
+
 it('records redirect sources independently of destinations', async () => {
-  await fetch(`http://127.0.0.1:${port + 5}/reset`, { method: 'POST' });
   expect((await get('/destination', 0)).status).toBe(200);
   expect((await get('/destination', 1)).status).toBe(200);
   await new Promise<void>((resolve, reject) => {
@@ -128,250 +94,33 @@ it('records redirect sources independently of destinations', async () => {
       res.on('end', resolve);
     }).on('error', reject);
   });
-  const positive = (await (await fetch(`http://127.0.0.1:${port + 5}/events`)).json()) as {
-    destination: string;
-    path: string;
-  }[];
-  expect(positive.map((event) => event.destination)).toEqual(['A', 'B', 'C']);
-  await fetch(`http://127.0.0.1:${port + 5}/reset`, { method: 'POST' });
-  for (const status of [301, 302, 303, 307, 308])
-    for (const target of ['same', 'host', 'http']) {
-      const response = await get(`/redirect/${status}/${target}`);
-      expect(response.status).toBe(status);
-      expect(response.location).toBe(
-        `${target === 'http' ? 'http' : 'https'}://10.0.2.2:${port + (target === 'same' ? 0 : target === 'host' ? 1 : 2)}/destination`,
-      );
-    }
-  const events = (await (await fetch(`http://127.0.0.1:${port + 5}/events`)).json()) as {
-    path: string;
-  }[];
-  expect(events).toHaveLength(15);
-  expect(events.some((event) => event.path === '/destination')).toBe(false);
-});
-it('supplies untrusted CA and wrong SAN independently', async () => {
-  await expect(get('/json', 3)).rejects.toThrow();
-  await expect(get('/json', 4)).rejects.toThrow();
-});
-it('serves two distinct JSON parts as a mixed-replace response for iOS qualification', async () => {
-  const response = await get('/v1/https-qualification/multipart');
-  expect(response.status).toBe(200);
-  const boundary = /^multipart\/x-mixed-replace; boundary=([\w-]+)$/.exec(
-    response.contentType ?? '',
-  )?.[1];
-  expect(boundary).toBeDefined();
-  expect(response.bytes.toString('utf8').split(`--${boundary}`)).toEqual([
-    '',
-    '\r\nContent-Type: application/json\r\n\r\n{"part":1}\r\n',
-    '\r\nContent-Type: application/json\r\n\r\n{"part":2}\r\n',
-    '--\r\n',
-  ]);
-});
-it('truncates bodies detectably and records cancellation of slow connection', async () => {
-  for (const path of ['/truncated', '/length']) {
-    let headers: IncomingHttpHeaders | undefined;
-    await expect(
-      new Promise<void>((resolve, reject) => {
-        const req = request({ hostname: '127.0.0.1', port, path, ca }, (response) => {
-          headers = response.headers;
-          response.resume();
-          response.on('error', reject);
-          response.on('end', resolve);
-        });
-        req.on('error', reject);
-        req.end();
-      }),
-    ).rejects.toThrow();
-    expect(headers).toBeDefined();
-    if (path === '/length') expect(headers?.['content-length']).toBe('1000');
-    else {
-      expect(headers?.['content-length']).toBeUndefined();
-      expect(headers?.['transfer-encoding']).toBe('chunked');
-    }
-  }
-  await expect(get('/slow', 0, true)).rejects.toThrow();
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  const events = (await (await fetch(`http://127.0.0.1:${port + 5}/events`)).json()) as {
-    path: string;
-    closed: boolean;
-    finished: boolean;
-  }[];
-  expect(events.findLast((event) => event.path === '/slow')).toMatchObject({
-    closed: true,
-    finished: false,
-  });
+  const events = async () =>
+    (await (await fetch(`http://127.0.0.1:${port + 5}/events`)).json()) as {
+      destination: string;
+      path: string;
+    }[];
+  const positive = await events();
+  expect(
+    positive.filter(({ path }) => path === '/destination').map(({ destination }) => destination),
+  ).toEqual(['A', 'B', 'C']);
+  const path = standardPrefix + '/redirect/307/host';
+  const response = await get(path);
+  expect(response.status).toBe(307);
+  expect(response.location).toBe(`https://10.0.2.2:${port + 1}/destination`);
+  expect((await events()).slice(positive.length)).toMatchObject([{ path, destination: 'A' }]);
 });
 
-it.each(['/slow/cancel', '/slow/cancel-length'])(
-  'records a flushed body before the client closes %s',
-  async (path) => {
-    const control = async () =>
-      (await (await fetch(`http://127.0.0.1:${port + 5}/events`)).json()) as {
-        path: string;
-        responseStarted: boolean;
-        closed: boolean;
-        finished: boolean;
-      }[];
-    const slow = request({ hostname: '127.0.0.1', port, path, ca });
-    let headers: IncomingHttpHeaders | undefined;
-    slow.on('error', () => {});
-    slow.on('response', (response) => {
-      headers = response.headers;
-      response.on('error', () => {});
-      response.resume();
-    });
-    slow.end();
-    const event = async () => (await control()).findLast((entry) => entry.path === path);
-    try {
-      await expect
-        .poll(event)
-        .toMatchObject({ responseStarted: true, closed: false, finished: false });
-      await expect.poll(() => headers).toBeDefined();
-      if (path.endsWith('-length')) {
-        expect(headers?.['content-length']).toBe('1000');
-        expect(headers?.['transfer-encoding']).toBeUndefined();
-      } else {
-        expect(headers?.['transfer-encoding']).toBe('chunked');
-        expect(headers?.['content-length']).toBeUndefined();
-      }
-    } finally {
-      slow.destroy();
-    }
-    await expect
-      .poll(event)
-      .toMatchObject({ responseStarted: true, closed: true, finished: false });
-  },
-);
-
-it('scopes both artificial cookies to the current run and records only their presence', async () => {
-  const prefix = `/cookies/${crypto.randomUUID()}/`;
-  const cookieRequest = (step: string, cookie?: string) =>
-    new Promise<string[]>((resolve, reject) => {
-      const req = request(
-        { hostname: '127.0.0.1', port, path: prefix + step, ca, headers: cookie ? { cookie } : {} },
-        (response) => {
-          response.on('error', reject);
-          response.on('end', () => resolve(response.headers['set-cookie'] ?? []));
-          response.resume();
-        },
-      );
-      req.on('error', reject);
-      req.end();
-    });
-  expect(await cookieRequest('baseline')).toEqual([]);
-  expect(await cookieRequest('seed')).toEqual([
-    `bunny_fixture_expo=synthetic; Secure; HttpOnly; Max-Age=120; Path=${prefix}`,
-  ]);
-  expect(await cookieRequest('native-set')).toEqual([
-    `bunny_fixture_native=synthetic; Secure; HttpOnly; Max-Age=120; Path=${prefix}`,
-  ]);
-  await cookieRequest('expo-probe', 'bunny_fixture_expo=example-value');
-  await cookieRequest(
-    'expo-after',
-    'bunny_fixture_expo=example-value; bunny_fixture_native=example-value',
-  );
-  const events = (await (await fetch(`http://127.0.0.1:${port + 5}/events`)).json()) as {
-    path: string;
-  }[];
-  const scoped = events.filter((event) => event.path.startsWith('/cookies/fixture/'));
-  expect(scoped[0]).toMatchObject({ expoFixtureCookie: false, nativeFixtureCookie: false });
-  expect(scoped[3]).toMatchObject({ expoFixtureCookie: true, nativeFixtureCookie: false });
-  expect(scoped[4]).toMatchObject({ expoFixtureCookie: true, nativeFixtureCookie: true });
-  expect(JSON.stringify(scoped)).not.toContain('example-value');
-});
-
-it('records unknown routes without storing their path or query', async () => {
+it('records unknown routes without storing paths, queries or credential values', async () => {
   const marker = 'synthetic-secret-placeholder';
-  expect((await get(`/${marker}?auth=${marker}`)).status).toBe(404);
+  expect((await get(`${standardPrefix}/${marker}?auth=${marker}`)).status).toBe(404);
+  expect((await get(`${standardPrefix}/json?auth=${marker}`)).status).toBe(200);
   const evidence = await (await fetch(`http://127.0.0.1:${port + 5}/events`)).text();
   expect(evidence).toContain('"/unexpected"');
   expect(evidence).not.toContain(marker);
 });
 
-it('sends identity controls and deliberately sends coding despite an identity request', async () => {
-  const [plain, absent, forcedGzip, exact, oversized, br, stacked, gzip503] = await Promise.all(
-    [
-      '/json',
-      '/coding-absent',
-      '/coding-gzip',
-      '/identity-exact',
-      '/identity-oversize',
-      '/coding-other',
-      '/coding-stacked',
-      '/retry-status-gzip',
-    ].map((path) => get(path, 0, false, 'identity')),
-  );
-  expect(plain?.headers['content-encoding']).toBe('identity');
-  expect(absent?.headers['content-encoding']).toBeUndefined();
-  expect(absent?.headers['content-length']).toBe(plain?.headers['content-length']);
-  expect(absent?.bytes).toEqual(plain?.bytes);
-  expect(forcedGzip?.headers['content-encoding']).toBe('gzip');
-  expect(gunzipSync(forcedGzip!.bytes)).toEqual(absent?.bytes);
-  expect(exact?.headers['content-length']).toBe('1048576');
-  expect(exact?.bytes.length).toBe(1_048_576);
-  expect(oversized?.headers['transfer-encoding']).toBe('chunked');
-  expect(oversized?.bytes.length).toBe(1_048_577);
-  expect(br?.headers['content-encoding']).toBe('br');
-  expect(brotliDecompressSync(br!.bytes).toString()).toBe('{}');
-  expect(stacked?.headers['content-encoding']).toBe('gzip, gzip');
-  expect(gunzipSync(gunzipSync(stacked!.bytes)).toString()).toBe('{}');
-  expect(gzip503?.status).toBe(503);
-  expect(gunzipSync(gzip503!.bytes).toString()).toBe('{}');
-  const rows = (await (await fetch(`http://127.0.0.1:${port + 5}/events`)).json()) as {
-    path: string;
-    requestedCoding: string;
-    responseCoding: string;
-    headersSent: boolean;
-  }[];
-  expect(rows.findLast((row) => row.path === '/retry-status-gzip')).toMatchObject({
-    requestedCoding: 'identity',
-    responseCoding: 'gzip',
-    headersSent: true,
-  });
-});
-
-it('checks both size boundaries and complete and interrupted chunk framing over HTTPS', async () => {
-  const prefix = '/v1/https-qualification';
-  for (const [path, status] of [
-    ['/identity-oversize', 200],
-    ['/identity-oversize-error', 503],
-  ] as const) {
-    const response = await get(prefix + path);
-    expect(response.status).toBe(status);
-    expect(response.bytes.length).toBe(1_048_577);
-    expect(response.headers['content-length']).toBeUndefined();
-    expect(response.headers['transfer-encoding']).toBe('chunked');
-  }
-  const complete = await get(prefix + '/chunked-complete');
-  expect(complete.headers['transfer-encoding']).toBe('chunked');
-  expect(complete.bytes.toString()).toBe(fixtureJson);
-  const interrupted = await new Promise<boolean>((resolve, reject) => {
-    const req = request(
-      { hostname: '127.0.0.1', port, ca, path: prefix + '/chunked-incomplete-end' },
-      (response) => {
-        response.on('error', () =>
-          resolve(response.headers['transfer-encoding'] === 'chunked' && !response.complete),
-        );
-        response.on('end', () => resolve(false));
-        response.resume();
-      },
-    );
-    req.on('error', reject);
-    req.end();
-  });
-  expect(interrupted).toBe(true);
-  const rows = (await (await fetch(`http://127.0.0.1:${port + 5}/events`)).json()) as {
-    path: string;
-    controlFraming?: string;
-    fixtureCut?: boolean;
-  }[];
-  expect(rows.findLast((row) => row.path === prefix + '/chunked-incomplete-end')).toMatchObject({
-    controlFraming: 'chunked',
-    fixtureCut: true,
-  });
-});
-
 it('holds the oversized length body after a one-byte prefix and observes the peer close', async () => {
-  const path = '/v1/https-qualification/identity-oversize-length';
+  const path = standardPrefix + '/identity-oversize-length';
   const observed = await new Promise<{
     headers: IncomingHttpHeaders;
     prefix: Buffer;
@@ -405,50 +154,65 @@ it('holds the oversized length body after a one-byte prefix and observes the pee
         closed: true,
         finished: false,
         heldLengthEnd: 'peer-close',
-        controlFraming: 'length',
-        controlOversizeLength: true,
+        configuredFraming: 'length',
         configuredOversizeLength: true,
       },
     ]);
   });
 });
 
-it('observes all six framing and content coding combinations over independent HTTPS', async () => {
+it('observes current framing and coding combinations over independent HTTPS', async () => {
   const rows = [
     ['/chunked-coding-absent', 'chunked', 'absent'],
-    ['/chunked-complete', 'chunked', 'identity'],
     ['/chunked-coding-gzip', 'chunked', 'gzip'],
     ['/coding-absent', 'length', 'absent'],
-    ['/json', 'length', 'identity'],
     ['/coding-gzip', 'length', 'gzip'],
+    ['/identity-exact', 'length', 'absent'],
+    ['/coding-other', 'length', 'br'],
+    ['/coding-stacked', 'length', 'gzip, gzip'],
   ] as const;
   for (const [route, framing, coding] of rows) {
-    const path = '/v1/https-qualification' + route;
-    const { status, headers, bytes } = await get(path, 0, false, 'identity');
+    const { status, headers, bytes } = await get(standardPrefix + route, 0, false, 'identity');
     expect(status).toBe(200);
     expect(headers['content-encoding']).toBe(coding === 'absent' ? undefined : coding);
-    expect(headers['transfer-encoding']).toBe(framing === 'chunked' ? 'chunked' : undefined);
+    expect(headers['transfer-encoding']).toBe(framing === 'length' ? undefined : 'chunked');
     expect(headers['content-length']).toBe(framing === 'length' ? String(bytes.length) : undefined);
-    expect((coding === 'gzip' ? gunzipSync(bytes) : bytes).toString()).toBe(fixtureJson);
-  }
-  const events = (await (await fetch(`http://127.0.0.1:${port + 5}/events`)).json()) as {
-    path: string;
-  }[];
-  for (const [route, framing, coding] of rows) {
-    expect(
-      events.findLast((event) => event.path === '/v1/https-qualification' + route),
-    ).toMatchObject({
-      controlFraming: framing,
-      controlCoding: coding,
-      controlBody: 'complete-match',
-      configuredFraming: framing,
-      responseCoding: coding,
-      finished: true,
-    });
+    const decoded =
+      coding === 'gzip'
+        ? gunzipSync(bytes)
+        : coding === 'br'
+          ? brotliDecompressSync(bytes)
+          : coding === 'gzip, gzip'
+            ? gunzipSync(gunzipSync(bytes))
+            : bytes;
+    if (route === '/identity-exact') expect(decoded.length).toBe(1_048_576);
+    else
+      expect(decoded.toString()).toBe(
+        route.startsWith('/coding-') && (coding === 'br' || coding === 'gzip, gzip')
+          ? '{}'
+          : fixtureJson,
+      );
   }
 });
 
+it('records an active cancellation after the response starts and before it finishes', async () => {
+  const path = standardPrefix + '/slow/concurrency-one';
+  await expect(get(path, 0, true, 'identity')).rejects.toThrow('fixture abort');
+  await vi.waitFor(async () => {
+    const { events } = await (await fetch(`http://127.0.0.1:${port + 5}/runtime`)).json();
+    expect(events.findLast((event: { path: string }) => event.path === path)).toMatchObject({
+      responseStarted: true,
+      closed: true,
+      finished: false,
+      configuredFraming: 'length',
+    });
+  });
+});
+
 it('serves the standard JSON profile and stops the report at its first discriminating failure', async () => {
+  const readSnapshot = async () =>
+    await (await fetch(`http://127.0.0.1:${port + 5}/runtime`)).json();
+  const before = await readSnapshot();
   const nominal = await get(standardPrefix + '/coding-absent', 0, false, 'identity');
   expect(nominal.bytes.toString()).toBe(fixtureJson);
   expect(nominal.headers['content-encoding']).toBeUndefined();
@@ -457,13 +221,16 @@ it('serves the standard JSON profile and stops the report at its first discrimin
   expect(gunzipSync(gzip.bytes)).toEqual(nominal.bytes);
   await expect(get(standardPrefix + '/json', 3, false, 'identity')).rejects.toThrow();
   await expect(get(standardPrefix + '/json', 4, false, 'identity')).rejects.toThrow();
-  const snapshot = await (await fetch(`http://127.0.0.1:${port + 5}/runtime`)).json();
-  expect(snapshot.connections).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({ destination: 'unknown', receivedBytes: true }),
-      expect.objectContaining({ destination: 'wrong', receivedBytes: true }),
-    ]),
-  );
+  await vi.waitFor(async () => {
+    const { connections } = await readSnapshot();
+    expect(connections).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ destination: 'unknown', receivedBytes: true }),
+        expect.objectContaining({ destination: 'wrong', receivedBytes: true }),
+      ]),
+    );
+  });
+  const snapshot = await readSnapshot();
   expect(snapshot.events).toEqual(
     expect.arrayContaining([
       expect.objectContaining({
@@ -484,7 +251,7 @@ it('serves the standard JSON profile and stops the report at its first discrimin
     ]
       .map((line) => marker + line)
       .join('\n'),
-    snapshot,
+    { ...snapshot, events: snapshot.events.slice(before.events.length) },
   );
   expect(report.verdict).toBe('FAIL');
   expect(report.scenarios.slice(0, 3)).toEqual([
@@ -669,6 +436,7 @@ it('describes native envelopes without retaining response content or native erro
 });
 
 it('distinguishes lost GET responses and complete POST bodies before a deliberate cut', async () => {
+  const before = await (await fetch(`http://127.0.0.1:${port + 5}/runtime`)).json();
   function send(path: string, body?: string) {
     return new Promise<string>((resolve, reject) => {
       const req = request(
@@ -772,6 +540,7 @@ it('distinguishes lost GET responses and complete POST bodies before a deliberat
 
   type Snapshot = Parameters<typeof verifyStandardJson>[2];
   const snapshot: Snapshot = await (await fetch(`http://127.0.0.1:${port + 5}/runtime`)).json();
+  const receipts = snapshot.events.slice(before.events.length);
   const status = snapshot.events.find(
     (event) => event.path === standardPrefix + '/retry-status-length',
   )!;
@@ -829,7 +598,7 @@ it('distinguishes lost GET responses and complete POST bodies before a deliberat
     const framingFault = retryFramingFaults.get(path);
     const matching =
       index >= probes.findIndex(({ id }) => id === 'conflicting-lengths')
-        ? snapshot.events.filter((event) => event.path === target)
+        ? receipts.filter((event) => event.path === target)
         : [];
     const entries = matching.length
       ? matching
@@ -944,7 +713,8 @@ it('distinguishes lost GET responses and complete POST bodies before a deliberat
     server: { receptions: 3 },
   });
   expect(check(evidence, 'length-and-transfer')).toMatchObject({ verdict: 'PASS' });
-  expect(check(evidence, 'get-loss')).toMatchObject({ verdict: 'PASS', receptions: 2 });
+  const recovery = check(evidence, 'get-loss');
+  expect(recovery, JSON.stringify(recovery)).toMatchObject({ verdict: 'PASS', receptions: 2 });
   expect(check(evidence, 'get-loss-repeated')).toMatchObject({ verdict: 'PASS', receptions: 3 });
   expect(check(evidence, 'post-retry-status')).toMatchObject({ verdict: 'PASS' });
   expect(check([...evidence, status], 'post-retry-status')).toMatchObject({ verdict: 'FAIL' });
@@ -1318,5 +1088,117 @@ it('retains later scenario diagnostics after an application failure', () => {
     verdict: 'NOT_RUN',
     diagnostic: { verdict: 'NOT_RUN', reason: 'no-http-reception' },
     client: { calls: [{ reservation: 'accepted', native: 'rejected', nativeKind: 'response' }] },
+  });
+});
+
+it('requires overlapping responses, prompt cancellation and no third emission', () => {
+  type Snapshot = Parameters<typeof verifyStandardJson>[2];
+  const first: Snapshot['events'][number] = {
+    path: standardPrefix + '/slow/concurrency-one',
+    destination: 'A',
+    method: 'GET',
+    connectionId: 1,
+    requestedCoding: 'identity',
+    responseCoding: 'absent',
+    configuredFraming: 'length',
+    requestNoStore: true,
+    authorization: false,
+    authorizationMatchesFixture: false,
+    cookie: false,
+    contentTypeIsJson: false,
+    postBodyMatchesFixture: false,
+    headersSent: true,
+    responseStatus: 200,
+    responseStarted: true,
+    responseStartedAtMs: 5_001,
+    startedAtMs: 5_000,
+    closed: true,
+    closedAfterMs: 1_025,
+    finished: false,
+  };
+  const neighbour = {
+    ...first,
+    path: standardPrefix + '/slow/neighbour',
+    connectionId: 2,
+    startedAtMs: 5_520,
+    responseStartedAtMs: 5_521,
+    finished: true,
+    finishedAtMs: 7_320,
+    closedAfterMs: 1_801,
+  };
+  const connections = [
+    { id: 1, acceptedAtMs: 4_780, tlsEstablishedAtMs: 4_980 },
+    { id: 2, acceptedAtMs: 5_005, tlsEstablishedAtMs: 5_518 },
+  ].map((row) => ({ ...row, destination: 'A', receivedBytes: true, tls: 'TLSv1.3' }));
+  function assess(events: Snapshot['events'], requested = 1_000, rejected = 1_030) {
+    const evidence = JSON.stringify({
+      cancellationRequestedAfterStartMs: requested,
+      calls: [
+        {
+          reservation: 'accepted',
+          native: 'rejected',
+          nativeKind: 'network',
+          application: 'cancelled',
+          nativeSettledAfterStartMs: rejected,
+        },
+        {
+          reservation: 'accepted',
+          native: 'success',
+          adapter: 'success',
+          status: 200,
+          bytes: 59,
+          nativeSettledAfterStartMs: 2_360,
+        },
+        { reservation: 'refused', native: 'not-called' },
+      ],
+    });
+    const previousScenarios = androidPlan.slice(0, androidPlan.indexOf('cancel-neighbour'));
+    const log = [
+      'READY standard-json-known-length-okhttp',
+      ...previousScenarios.flatMap((id) => [`START ${id}`, `PASS ${id} success`]),
+      'START cancel-neighbour',
+      `PASS cancel-neighbour success ${evidence}`,
+    ]
+      .map((line) => marker + line)
+      .join('\n');
+    return verifyStandardJson('android', log, {
+      events,
+      connections,
+      overflow: false,
+    }).scenarios.find(({ id }) => id === 'cancel-neighbour');
+  }
+
+  expect(assess([first, neighbour])).toMatchObject({
+    diagnostic: { verdict: 'PASS' },
+    client: { cancellationToNativeResultMs: 30 },
+    server: {
+      neighbourOverlapped: true,
+      samples: [
+        { closedAfterMs: 1_025 },
+        { tlsAfterTcpMs: 513, httpAfterTlsMs: 2, finishedAfterReceiptMs: 1_800 },
+      ],
+    },
+  });
+  const invalidCases = [
+    ['neighbour starts after closure', [first, { ...neighbour, responseStartedAtMs: 6_026 }]],
+    ['neighbour starts at closure', [first, { ...neighbour, responseStartedAtMs: 6_025 }]],
+    ['neighbour finishes before closure', [first, { ...neighbour, finishedAtMs: 6_024 }]],
+    ['no closure', [{ ...first, closed: false, closedAfterMs: null }, neighbour]],
+    ['late closure', [{ ...first, closedAfterMs: 1_701 }, neighbour]],
+    ['premature closure', [{ ...first, closedAfterMs: 199 }, neighbour]],
+    ['first body finishes naturally', [{ ...first, finished: true }, neighbour]],
+    ['first body never begins', [{ ...first, responseStarted: false }, neighbour]],
+    [
+      'third emission',
+      [first, neighbour, { ...first, path: standardPrefix + '/third-reservation' }],
+    ],
+  ] as const;
+  for (const [label, events] of invalidCases) {
+    expect(assess([...events]), label).toMatchObject({ diagnostic: { verdict: 'FAIL' } });
+  }
+  expect(assess([first, neighbour], 450, 490)).toMatchObject({ diagnostic: { verdict: 'FAIL' } });
+  expect(assess([first, neighbour], 1_000, 999)).toMatchObject({ diagnostic: { verdict: 'FAIL' } });
+  expect(assess([first, neighbour], 1_000, 1_701)).toMatchObject({
+    diagnostic: { verdict: 'FAIL' },
   });
 });

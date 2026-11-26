@@ -1,7 +1,11 @@
 // This init script is loaded explicitly for the fixture Development Build.
+if (System.getenv('EXPO_PUBLIC_BUNNY_HTTPS_QUALIFICATION') != '1' ||
+    System.getenv('BUNNY_HTTPS_STANDARD_JSON') != '1') {
+  throw new GradleException('The fixture requires EXPO_PUBLIC_BUNNY_HTTPS_QUALIFICATION=1 and BUNNY_HTTPS_STANDARD_JSON=1')
+}
+
 gradle.beforeProject { project ->
-  def standardJson = System.getenv('BUNNY_HTTPS_STANDARD_JSON') == '1'
-  if (standardJson && project.projectDir.name == 'android' &&
+  if (project.projectDir.name == 'android' &&
       project.projectDir.parentFile.name == 'application-https') {
     project.plugins.withId('com.android.library') {
       project.extensions.getByName('androidComponents').finalizeDsl { android ->
@@ -12,9 +16,6 @@ gradle.beforeProject { project ->
   if (project.path != ':app') return
   project.plugins.withId('com.android.application') {
     project.extensions.getByName('androidComponents').finalizeDsl { android ->
-      if (System.getenv('EXPO_PUBLIC_BUNNY_HTTPS_QUALIFICATION') != '1') {
-        throw new GradleException('Enable the fixture entry explicitly')
-      }
       def qualification = new File(project.rootDir.parentFile, 'qualification')
       def generatedPath = project.findProperty('bunnyHttpsQualificationResources')
       if (!generatedPath) throw new GradleException('Provide bunnyHttpsQualificationResources')
@@ -28,8 +29,7 @@ gradle.beforeProject { project ->
       android.sourceSets.getByName('debug').res.srcDirs(new File(qualification, 'android/res'), generated)
 
       def react = project.extensions.getByName('react')
-      react.entryFile.set(new File(qualification,
-        standardJson ? 'standard-json-entry.tsx' : 'native-https-entry.tsx'))
+      react.entryFile.set(new File(qualification, 'standard-json-entry.tsx'))
       react.debuggableVariants.set([])
       // The alternate JS entry is for the fixture APK only.
       project.tasks.matching { it.name != 'createBundleDebugJsAndAssets' && it.name ==~ /createBundle.*JsAndAssets/ }.configureEach {

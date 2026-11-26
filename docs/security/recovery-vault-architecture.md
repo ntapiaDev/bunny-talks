@@ -2,11 +2,19 @@
 
 **Statut au 14 novembre 2026 : décisions fonctionnelles confirmées ; enveloppes et composition opaque du jalon 2 implémentées pour revue, restauration métier non implémentée.** Ce document décrit la cible actuelle et conserve les analyses de CRYPTO-004 et CRYPTO-005. Le coffre direct expérimental n'implémente pas cette cible.
 
-La [spécification historique CRYPTO-006](recovery-vault-specification.md) et le [coffre direct V1](recovery-vault-direct-v1.md) restent des références expérimentales ; leurs formats à un seul accès ne définissent pas la nouvelle cible à deux enveloppes.
+Le [coffre direct V1](recovery-vault-direct-v1.md) reste le format expérimental conservé avec son code et ses vecteurs ; il ne définit pas la cible à deux enveloppes. Les anciennes analyses de spécification, composants et interopérabilité ont été retirées après transfert de leurs exigences et résultats utiles dans cette référence et les rapports de qualification ciblés. Leur restauration est documentée dans l'[index de conservation](../development/https-archive-index.md#documents-crypto-retirés-de-larbre-actif).
 
 ## Implémentation des jalons 1 et 2
 
 Les [enveloppes de clé maîtresse V1](key-envelopes-v1.md) sont maintenant implémentées dans `crypto-backup` : accès par mot de passe avec Argon2id et accès par clé aléatoire avec HKDF, puis XChaCha20-Poly1305. Elles protègent une clé de 32 octets et vérifient le contexte attendu. Le profil Argon2id à 64 Mio reste expérimental ; sa qualification Hermes est ouverte. La [composition V1 du jalon 2](account-vault-v1.md) authentifie maintenant le contenu opaque et les deux enveloppes et permet le réenveloppement local du mot de passe. La charge métier et les parcours de récupération ne sont pas implémentés. Les formats historiques restent isolés dans `/experimental`. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts.
+
+### Résultats expérimentaux applicables et limites
+
+Les observations de compatibilité et de résistance aux entrées proviennent de tests Node : primitives HKDF-SHA-256 et AEAD, un vecteur direct vérifié avec Noble et indépendamment avec Python `cryptography` et libsodium système, et des essais de parseurs/JCS. Ces résultats servent de caractérisation, pas de validation générale d'un format, d'un fournisseur ou d'une implémentation mobile. En particulier, les candidats JCS testés diffèrent sur les substituts Unicode isolés ; un parseur doit traiter les doublons après décodage, refuser les erreurs, borner la taille avant décodage et contrôler profondeur, champs et chaînes avant usage. JSON.parse seul ne détecte pas les doublons.
+
+Le fournisseur natif Argon2id a réussi sur un émulateur Android 17/Hermes quatre vecteurs courts puis un calcul 64 Mio / 3 passes / parallélisme 4 : la sortie Argon2id et la dérivation HKDF V1 correspondaient aux références. Un seul calcul complet a pris 166 ms dans cette campagne ; les mesures mémoire étaient des instantanés, pas des pics. Cette observation expérimentale ne qualifie ni appareils physiques, ni iOS, ni mémoire maximale, annulation, sécurité du fournisseur ou production. Voir [rapport Argon2id natif](../development/native-argon2-qualification.md) pour provenance et limites.
+
+Les exigences transférées demeurent : valider contexte de compte et d'usage depuis une source fiable distincte de l'enveloppe ; rejeter les représentations non canoniques et entrées hors bornes avant dérivation ; ne jamais traiter un vecteur comme preuve de sécurité de composition ; distinguer intégrité d'authenticité, autorisation et fraîcheur ; prévoir rotation, concurrence, interruptions et reprise sans perte ; valider CSPRNG, mémoire et échanges croisés sur chaque environnement ciblé. La hiérarchie actuelle et le format cible sont définis dans les références actives ci-dessus, pas par les propositions historiques à accès unique.
 
 ## Périmètre et parcours
 

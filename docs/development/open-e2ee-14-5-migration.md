@@ -60,5 +60,3 @@ La revue doit porter particulièrement sur la substitution effective du bundle, 
 ## Vérifications du jalon
 
 Les quatre scénarios ciblés (substitution/épingle pour chacune des deux versions, reprise 14.5.0 et migration 14.4.0 → 14.5.0) réussissent. La suite globale `pnpm test` rejoue les tests d'identité, d'import, de fanout, de révocation expérimentale, de refus terminal, d'idempotence, de persistance, de registration ID et de transfert ainsi que ceux de `crypto-core` et `crypto-backup`. `pnpm typecheck`, `pnpm lint`, `pnpm format:check` et la compilation des trois packages cryptographiques réussissent. Un ordre d'import signalé par le lint a été corrigé ; aucune assertion de sécurité existante n'a été assouplie. Les versions réellement résolues ont été contrôlées : moteur 14.5.0, alias de test 14.4.0.
-
-Message de commit proposé : `fix(crypto-engine): upgrade OpenE2EE to 14.5.0 with security regression coverage`. Les modifications restent non commitées pour revue.

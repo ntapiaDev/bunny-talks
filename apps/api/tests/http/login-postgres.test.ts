@@ -514,9 +514,11 @@ describe('HTTP login with real Nest, PostgreSQL 18.7 and compiled ESM', () => {
     ).finally(() => isolated.close());
     const pids = [...new Set(rows.flatMap((r) => r.map((v) => v.pid)))];
     expect(disconnect).toHaveBeenCalledOnce();
-    const remaining = await client.$queryRaw<
-      { pid: number }[]
-    >`SELECT pid FROM pg_stat_activity WHERE pid = ANY(${pids}::int[])`;
-    expect(remaining).toHaveLength(0);
+    await expect
+      .poll(
+        () => client.$queryRaw`SELECT pid FROM pg_stat_activity WHERE pid = ANY(${pids}::int[])`,
+        { timeout: 2000 },
+      )
+      .toHaveLength(0);
   });
 });

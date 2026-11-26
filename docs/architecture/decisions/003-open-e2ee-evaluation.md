@@ -1,6 +1,8 @@
 # ADR-003 — Évaluation d'OpenE2EE 14.4.0
 
-**Actualisation du 14 novembre 2026 :** migration expérimentale Node vers OpenE2EE 14.5.0 autorisée et réalisée. Le [rapport de migration](../../development/open-e2ee-14-5-migration.md) distingue les tests adversariaux, la compatibilité SQLCipher et les limites restantes. Les constats 14.4.0 ci-dessous restent historiques. La qualification mobile est la prochaine étape envisagée ; SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts.
+**Actualisation du 14 novembre 2026 :** migration expérimentale Node vers OpenE2EE 14.5.0 autorisée et réalisée. Le [rapport de migration](../../development/open-e2ee-14-5-migration.md) distingue les tests adversariaux, la compatibilité SQLCipher et les limites restantes. Les constats 14.4.0 ci-dessous restent historiques. Les diagnostics Android/Hermes postérieurs sont référencés ci-dessous ; la réouverture après arrêt forcé sur le même état reste à faire. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts.
+
+**Résultats postérieurs à l'évaluation Node :** les diagnostics Android/Hermes 14.5.0 et leurs limites sont consignés dans [qualification mobile OpenE2EE](../../development/mobile-open-e2ee-qualification.md) et [prérequis mobiles](../../development/mobile-qualification-prerequisites.md). Ils complètent cette évaluation sans modifier rétroactivement les constats ni les décisions historiques ci-dessous ; ils ne qualifient pas iOS, appareils physiques ou production.
 
 **Statut au 14 novembre 2026 : recommandation B retenue pour l'évaluation** — poursuivre provisoirement les expériences avec OpenE2EE, désormais en 14.5.0 ; aucun choix de production définitif. Le POC multi-appareils est terminé et validé au niveau expérimental sous Node ; aucune validation de production n'en découle.
 

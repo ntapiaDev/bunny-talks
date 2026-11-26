@@ -1,12 +1,12 @@
 # Repository transactionnel du coffre — jalon 4.2B
 
-Statut historique : jalon terminé et commité (`90d8507`). Cette page décrit 4.2B ; les sessions et la réauthentification sont depuis livrées. L’[amorçage 4.4B](initial-device-bootstrap.md) compose désormais cette primitive interne, sans endpoint HTTP. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts et bloquants avant production.
+Statut historique : jalon terminé et commité (`90d8507`). Cette page décrit 4.2B ; les sessions et la réauthentification sont depuis livrées. L’[amorçage 4.4B](http-initial-device-bootstrap.md) compose désormais cette primitive interne, sans endpoint HTTP. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts et bloquants avant production.
 
 ## Audit et structure
 
 La [fondation 4.2A](postgresql-prisma-foundation.md) est réutilisée sans migration. `Account` existe avant le coffre et fournit le verrou stable ; `PasswordCredential` porte le vérificateur et sa révision ; `VaultState` référence une publication du même compte et coffre par clé étrangère composite ; `VaultPublication` conserve les octets et compteurs ; `VaultOperation` possède une clé primaire `(accountId, operationId)` et les deux seuls états terminaux `COMMITTED` et `REJECTED`. Les contraintes SQL complètent Prisma : formats, bornes, tailles, cohérence des états et suppressions restreintes.
 
-`apps/api/src/postgres-vault-repository.ts` est un adaptateur d'infrastructure TypeScript sans NestJS. Il utilise les contrats et schémas de 4.1 ainsi que les API publiques `validateAccountVault`, `evaluateInitialVaultPublication` et `evaluatePasswordVaultTransition` de `crypto-backup`. Le parseur V1 n'est pas dupliqué. `crypto-core` et les formats cryptographiques restent inchangés.
+`apps/api/src/vault/postgres-vault-repository.ts` est un adaptateur d'infrastructure TypeScript sans NestJS. Il utilise les contrats et schémas de 4.1 ainsi que les API publiques `validateAccountVault`, `evaluateInitialVaultPublication` et `evaluatePasswordVaultTransition` de `crypto-backup`. Le parseur V1 n'est pas dupliqué. `crypto-core` et les formats cryptographiques restent inchangés.
 
 Les fichiers `vault-request-fingerprint.ts` et `vault-repository-error.ts` isolent l'identité protégée et les erreurs expurgées. Les dépendances ajoutées sont uniquement trois liens de workspace. `rootDir` de l'API devient `.` pour compiler ensemble `src` et le client Prisma généré sous `generated/prisma` : les sorties sont désormais `dist/src` et `dist/generated/prisma`. Aucun point d'entrée public de package n'existait dans cette application privée. Le tsconfig des tests autorise l'import du chargeur `.mjs` existant sans désactiver le typage strict TypeScript.
 
@@ -127,7 +127,7 @@ Le premier passage d'intégration avait échoué sur la fixture de sessions, qui
 
 La correction de compatibilité avec une réinitialisation simulée a ensuite été qualifiée sur une nouvelle instance temporaire PostgreSQL 18.7 : 30 tests de persistance réussis. La simulation modifie le vérificateur sous verrou de compte uniquement dans le test ; elle ne constitue pas un service de réinitialisation. Les tests vérifient les révisions distinctes à la lecture, le rejet ordinaire durable et son rejeu, la préservation des données et sessions, ainsi que le refus des révisions futures, structures corrompues et digests incorrects.
 
-Fichiers créés : les trois fichiers `apps/api/src/postgres-vault-repository.ts`, `vault-request-fingerprint.ts`, `vault-repository-error.ts` ; les quatre fichiers `apps/api/tests/postgres-vault-repository.test.ts`, `postgres-test-database.ts`, `postgres-test-database.test.ts`, `vault-request-fingerprint.test.ts` ; cette documentation.
+Emplacements actuels des principaux fichiers du jalon : `apps/api/src/vault/postgres-vault-repository.ts`, `vault-request-fingerprint.ts`, `vault-repository-error.ts` ; les quatre fichiers `apps/api/tests/persistence/vault/postgres-vault-repository.test.ts`, `postgres-test-database.ts`, `postgres-test-database.test.ts`, `vault-request-fingerprint.test.ts` ; cette documentation.
 
 Fichiers modifiés : `apps/api/package.json`, `apps/api/tsconfig.json`, `apps/api/tests/tsconfig.json`, `pnpm-lock.yaml`, `docs/architecture/architecture-overview.md`, `docs/development/current-milestone.md`, `docs/development/postgresql-prisma-foundation.md` et `docs/development/vault-publication-contracts.md`. Le schéma et la migration restent ceux de 4.2A.
 

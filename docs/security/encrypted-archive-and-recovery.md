@@ -80,7 +80,7 @@ Aucun accès aux données protégées ne doit précéder l'autorisation requise.
 
 L'association par QR code est facultative et reportée. Si elle est mise en œuvre, le QR code ne doit jamais contenir directement de clé privée durable et son parcours devra être évalué séparément.
 
-L’amorçage unique du premier appareil est distinct : [4.4B](../development/initial-device-bootstrap.md) exige le compte déjà vérifié par 4.4A, une session valide et le mot de passe revérifié, sans seconde vérification e-mail automatique. Il publie uniquement un coffre créé côté client ; la validation serveur ne prouve ni possession de l’identité ni déchiffrement. Une perte totale d’appareils ne permet jamais un nouvel amorçage.
+L’amorçage unique du premier appareil est distinct : [4.4B](../development/http-initial-device-bootstrap.md) exige le compte déjà vérifié par 4.4A, une session valide et le mot de passe revérifié, sans seconde vérification e-mail automatique. Il publie uniquement un coffre créé côté client ; la validation serveur ne prouve ni possession de l’identité ni déchiffrement. Une perte totale d’appareils ne permet jamais un nouvel amorçage.
 
 ## 6. Récupération après perte de tous les appareils
 

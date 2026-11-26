@@ -1,4 +1,4 @@
-import { limit } from './standard-json-scenarios.ts';
+import { limit, requestTimeoutMs } from './standard-json-scenarios.ts';
 
 const transportFailures = ['network', 'timeout', 'redirect', 'response', 'size'] as const;
 const httpFailures = [
@@ -52,6 +52,7 @@ export type CallDiagnostic = {
   status?: number | undefined;
   bytes?: number | undefined;
   nativeBytes?: number | undefined;
+  nativeSettledAfterStartMs?: number | undefined;
 };
 
 export function describeNativeResult(raw: unknown): Omit<CallDiagnostic, 'reservation'> {
@@ -92,6 +93,11 @@ export function readDiagnostic(encoded: string | undefined) {
     const settledAtMs = integer(window.settledAtMs, 1, Number.MAX_SAFE_INTEGER);
     return {
       failure: choice(value.failure, [...httpFailures, 'assertion', 'unexpected']),
+      cancellationRequestedAfterStartMs: integer(
+        value.cancellationRequestedAfterStartMs,
+        0,
+        requestTimeoutMs,
+      ),
       retryWindow:
         openedAtMs !== undefined && settledAtMs !== undefined
           ? { openedAtMs, settledAtMs }
@@ -108,6 +114,7 @@ export function readDiagnostic(encoded: string | undefined) {
           status: httpStatus(call.status),
           bytes: integer(call.bytes, 0, limit + 1),
           nativeBytes: integer(call.nativeBytes, 0, limit + 1),
+          nativeSettledAfterStartMs: integer(call.nativeSettledAfterStartMs, 0, requestTimeoutMs),
         };
       }),
     };

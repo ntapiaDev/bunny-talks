@@ -124,7 +124,7 @@ it('serves the real session path and a same-origin redirect, then presents the w
     execFileSync('bash', ['qualification/certificates.sh', directory], { stdio: 'pipe' });
     const ca = readFileSync(join(directory, 'ca.pem'));
     const start = (primaryCertificate: 'server' | 'wrong') =>
-      startFixture(directory, port, '127.0.0.1', false, false, undefined, undefined, true, {
+      startFixture(directory, port, '127.0.0.1', {
         primaryCertificate,
         routes: routes('nominal'),
       });

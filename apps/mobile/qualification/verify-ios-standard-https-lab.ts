@@ -215,20 +215,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const [, , mode, phase, input, snapshot] = process.argv;
   if (!isPhase(phase) || !input) throw new Error('Invalid laboratory phase');
   if (mode === 'fixture') {
-    const fixture = await startFixture(
-      input,
-      port,
-      '127.0.0.1',
-      false,
-      false,
-      undefined,
-      undefined,
-      true,
-      {
-        routes: routes(phase),
-        primaryCertificate: phase === 'wrong-name' ? 'wrong' : 'server',
-      },
-    );
+    const fixture = await startFixture(input, port, '127.0.0.1', {
+      routes: routes(phase),
+      primaryCertificate: phase === 'wrong-name' ? 'wrong' : 'server',
+    });
     for (const signal of ['SIGINT', 'SIGTERM'] as const)
       process.once(signal, () => void fixture.close());
   } else if (mode === 'verify' && snapshot) {

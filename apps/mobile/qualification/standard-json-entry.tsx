@@ -10,6 +10,7 @@ import { createNativeHttpsTransport } from '../src/infrastructure/http/native-ht
 import type { CallDiagnostic } from './standard-json-diagnostics';
 import { describeNativeResult, httpFailure, httpStatus } from './standard-json-diagnostics';
 import {
+  cancelNeighbour,
   firstBearer,
   limit,
   marker,
@@ -37,7 +38,7 @@ function expectJson(value: unknown) {
   assert(value && typeof value === 'object' && 'message' in value && value.message === message);
 }
 
-async function qualify() {
+export async function qualify() {
   const profile =
     Platform.OS === 'ios'
       ? 'standard-json-known-length-urlsession'
@@ -53,6 +54,7 @@ async function qualify() {
   report('READY ' + profile);
   const calls: CallDiagnostic[] = [];
   let retryWindow: { openedAtMs: number; settledAtMs?: number } | undefined;
+  let cancellationRequestedAfterStartMs: number | undefined;
 
   function call(
     path: string,
@@ -64,6 +66,7 @@ async function qualify() {
       signal,
       status = 200,
       observeRetry = false,
+      elapsedSinceScenarioStart,
     }: {
       destination?: keyof typeof offsets;
       method?: 'GET' | 'POST' | 'DELETE';
@@ -72,6 +75,7 @@ async function qualify() {
       signal?: AbortSignal;
       status?: number;
       observeRetry?: boolean;
+      elapsedSinceScenarioStart?: () => number;
     } = {},
   ) {
     let raw: unknown;
@@ -95,6 +99,8 @@ async function qualify() {
         } catch (error) {
           diagnostic.native = 'threw';
           throw error;
+        } finally {
+          diagnostic.nativeSettledAfterStartMs = elapsedSinceScenarioStart?.();
         }
         return raw;
       },
@@ -249,11 +255,19 @@ async function qualify() {
     {
       id: 'cancel-neighbour',
       async run() {
+        const startedAt = performance.now();
+        const elapsedSinceScenarioStart = () => Math.round(performance.now() - startedAt);
         const controller = new AbortController();
-        const cancelled = call('/slow/concurrency-one', { signal: controller.signal }).pending;
-        const neighbour = call('/slow/neighbour').pending;
+        const cancelled = call('/slow/concurrency-one', {
+          signal: controller.signal,
+          elapsedSinceScenarioStart,
+        }).pending;
+        const neighbour = call('/slow/neighbour', { elapsedSinceScenarioStart }).pending;
         const third = call('/third-reservation').pending;
-        const timer = setTimeout(() => controller.abort(), 450);
+        const timer = setTimeout(() => {
+          cancellationRequestedAfterStartMs = elapsedSinceScenarioStart();
+          controller.abort();
+        }, cancelNeighbour.abortAfterMs);
         try {
           const [first, second, refused] = await Promise.allSettled([cancelled, neighbour, third]);
           assert(
@@ -332,10 +346,13 @@ async function qualify() {
   for (const { id, run } of scenarios) {
     calls.length = 0;
     retryWindow = undefined;
+    cancellationRequestedAfterStartMs = undefined;
     report('START ' + id);
     try {
       const result = await run();
-      report(`PASS ${id} ${result} ${JSON.stringify({ calls, retryWindow })}`);
+      report(
+        `PASS ${id} ${result} ${JSON.stringify({ calls, retryWindow, cancellationRequestedAfterStartMs })}`,
+      );
     } catch (error) {
       const failure =
         error instanceof QualificationAssertion
@@ -343,7 +360,9 @@ async function qualify() {
           : error instanceof ApplicationHttpError
             ? httpFailure(error.kind)
             : 'unexpected';
-      report(`FAIL ${id} ${JSON.stringify({ failure, calls, retryWindow })}`);
+      report(
+        `FAIL ${id} ${JSON.stringify({ failure, calls, retryWindow, cancellationRequestedAfterStartMs })}`,
+      );
     }
   }
   report('DONE');

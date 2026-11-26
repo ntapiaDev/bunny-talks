@@ -25,7 +25,7 @@ pnpm --filter @bunny-talks/api prisma:migrate
 pnpm --filter @bunny-talks/api dev
 ```
 
-Pour le mobile, utiliser le Development Build existant et `pnpm --filter @bunny-talks/mobile start`. Les dépendances ou plugins natifs modifiés peuvent nécessiter une reconstruction ; voir les [prérequis et limites de qualification](docs/development/mobile-qualification-prerequisites.md).
+Pour le mobile, utiliser le Development Build existant et `pnpm --filter @bunny-talks/mobile start`. Les dépendances ou plugins natifs modifiés peuvent nécessiter une reconstruction ; voir les [prérequis de qualification](docs/development/mobile-qualification-prerequisites.md) et les [procédures HTTPS](docs/development/native-https-foundation.md#procédures-maintenues).
 
 ## Vérifications
 

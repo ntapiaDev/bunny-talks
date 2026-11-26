@@ -10,6 +10,16 @@ La base 4.4C1 bis possède un propriétaire Prisma/pool unique (`DatabaseModule`
 
 Les migrations historiques, les primitives de session/réauthentification/amorçage et les formats cryptographiques restent inchangés. Les modèles de budget et de bail sont ajoutés par `20261116000000_registration_http_limits` ; une migration appliquée ne doit pas être réécrite.
 
+## Identité de connexion et vérificateur
+
+`EmailRegistration` conserve une intention temporaire puis le reçu de consommation. `EmailIdentity` lie l’adresse vérifiée au compte. Les nouveaux `Account.id` sont des UUID serveur indépendants de l’adresse. La forme d’affichage d’origine est conservée. Elle reste la destination de toute notification sensible future destinée à une identité déjà vérifiée. La preuve d’inscription est liée à l’intention et à l’adresse. L’autorisation d’un appareil relève d’un parcours indépendant.
+
+La politique V1 accepte le sous-ensemble ASCII du schéma `loginEmailSchema`, jusqu’à 254 caractères au total, 64 pour la partie locale et 63 par label DNS. Le domaine contient plusieurs labels. La clé entière est en minuscules ASCII sous collation PostgreSQL `C`, avec unicité. Points et suffixes `+` restent significatifs. Les espaces, commentaires, caractères de contrôle, littéraux IP et Unicode sont refusés. Toute prise en charge d’IDNA ou SMTPUTF8 au-delà du code actuel demande une décision séparée.
+
+La preuve opaque `e1` contient un UUID et 32 octets aléatoires. Seul SHA-256 du secret est conservé. La durée est de 30 minutes avec expiration exclusive. Les triggers imposent l’immuabilité de la liaison et la cohérence de la consommation et des dates. La preuve consommée donne accès à son résultat historique. La comparaison du secret de preuve est à temps constant. Le port de contrôle des mots de passe échoue fermé lorsque le contrôle obligatoire est indisponible.
+
+`20261115030000_email_registration` introduit les tables et `verifierUpdatedAt`. La migration `20261115040000_email_casefold` vérifie les collisions avant le changement de clé, sous transaction, sans changer les adresses d’origine. Les comptes antérieurs conservent une date de vérificateur inconnue (`NULL`). Le trigger date les insertions ultérieures et les changements effectifs de PHC, y compris un renouvellement de profil. La date du vérificateur ne suffit donc pas à établir celle d’un changement de mot de passe. L’encodage du mot de passe partagé avec le coffre conserve la distinction entre NFC et NFD. La politique de création et l’exploitation du contrôle de compromission restent à qualifier pour le produit public.
+
 ## Contrats HTTP
 
 | Route                                 | Corps JSON strict                                                                    | Succès                                |

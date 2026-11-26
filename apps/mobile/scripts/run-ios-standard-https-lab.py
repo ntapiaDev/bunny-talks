@@ -16,8 +16,9 @@ import time
 spec = importlib.util.spec_from_file_location("candidate", Path(__file__).with_name("run-ios-urlsession-campaign.py"))
 candidate = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(candidate)
-c1, c2, require = candidate.c1, candidate.c2, candidate.require
-inspection = c2.inspection
+c1, require = candidate.c1, candidate.require
+provenance = candidate.provenance
+inspection = candidate.inspection
 
 BUNDLE = "fr.bunnytalks.mobile.httpslab"
 ORIGIN_KEY = "BunnyApplicationHttpsOrigin"
@@ -127,7 +128,7 @@ class Campaign(candidate.Campaign):
         source = self.scratch / "source"
         self.staged = shutil.copytree(source, self.scratch / "staged", copy_function=shutil.copy2)
         self.mobile = self.staged / "apps/mobile"
-        require(c2.manifest(self.staged) == c2.manifest(source), "staging-source-mismatch")
+        require(candidate.manifest(self.staged) == candidate.manifest(source), "staging-source-mismatch")
         inspection.check_urlsession_sources(self.mobile)
         self.native_hashes = self.native_sources()
         return {"nativeSources": self.native_hashes, "standardSourceMatchesReviewedTree": True}
@@ -217,17 +218,17 @@ class Campaign(candidate.Campaign):
         require(all(release[key] == value for key, value in self.hashes.items()), "inspected-app-mismatch")
         self.actual_command = swift_driver(self.output / "xcodebuild.log", self.staged, self.output)
         return {**release, "infoPlistSha256": self.info_hash, "laboratoryOrigin": ORIGIN,
-                "actualSwiftDriverSha256": c2.evidence_digest(self.actual_command)}
+                "actualSwiftDriverSha256": provenance.evidence_digest(self.actual_command)}
 
     def compare_compilation(self):
-        evidence = {"laboratoryExecutedSha256": c2.evidence_digest(self.actual_command)}
+        evidence = {"laboratoryExecutedSha256": provenance.evidence_digest(self.actual_command)}
         if self.plan_error:
             return {**evidence, "verdict": "NOT_RUN", "code": self.plan_error}
         try:
             planned = swift_driver(self.baseline / "xcodebuild.log", self.staged, self.baseline, planned=True)
         except c1.StageError as error:
             return {**evidence, **error.record}
-        evidence["standardPlannedSha256"] = c2.evidence_digest(planned)
+        evidence["standardPlannedSha256"] = provenance.evidence_digest(planned)
         if planned != self.actual_command:
             return {**evidence, "verdict": "FAIL", "code": "standard-swift-driver-command-mismatch"}
         return evidence

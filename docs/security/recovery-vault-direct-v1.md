@@ -4,7 +4,7 @@
 
 **Actualisation du 13 novembre 2026 — format expérimental historique :** la recommandation de poursuivre ce format comme cible est remplacée par la décision d'une clé maître indépendante et de deux enveloppes d'accès. Le code direct V1 existe toujours pour caractérisation ; ses tests et vecteurs restent utiles, mais il ne met pas en œuvre cette nouvelle cible. Voir [l'architecture actuelle](recovery-vault-architecture.md).
 
-L'[investigation CRYPTO-009](recovery-vault-technical-prerequisites.md) précise les candidats de parsing et d'aléa ainsi que les chemins de débogage à repli prévisible à exclure.
+Les critères expérimentaux de parsing et d'aléa sont résumés dans l'[architecture actuelle du coffre](recovery-vault-architecture.md) ; les essais Android/Hermes d'Argon2id et leurs limites figurent dans le [rapport natif](../development/native-argon2-qualification.md).
 
 **Actualisation CRYPTO-012 :** `@bunny-talks/crypto-backup/experimental` expose la création et l'ouverture expérimentales ainsi que la validation structurelle ; elles ne sont plus exportées à la racine du package. Ces API ne sont pas approuvées pour la production. Voir l’[historique des jalons](../development/milestone-history.md) pour les limites et vérifications.
 

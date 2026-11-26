@@ -3,6 +3,7 @@ import { pathToFileURL } from 'node:url';
 import { httpStatus, readDiagnostic } from './standard-json-diagnostics.ts';
 import {
   androidPlan,
+  cancelNeighbour,
   firstBearer,
   marker,
   plan,
@@ -42,6 +43,7 @@ type Event = {
   responseStatus?: number;
   responseStarted: boolean;
   responseStartedAtMs: number | null;
+  finishedAtMs?: number;
   startedAtMs: number;
   closed: boolean;
   closedAfterMs: number | null;
@@ -59,6 +61,8 @@ export type Snapshot = {
     destination: string;
     receivedBytes: boolean;
     fixtureName?: boolean;
+    acceptedAtMs?: number;
+    tlsEstablishedAtMs?: number;
     closedAtMs?: number | null;
     tls?: string | null;
   }[];
@@ -98,12 +102,22 @@ export const interrupted = (event: Event) =>
   event.closedAfterMs < 3500;
 export const completePost = (event: Event) =>
   event.requestComplete && event.contentTypeIsJson && event.postBodyMatchesFixture;
-const neighbourOverlapped = (cancelled: Event, neighbour: Event) =>
-  cancelled.closedAfterMs !== null &&
-  neighbour.responseStartedAtMs !== null &&
-  neighbour.responseStartedAtMs <= cancelled.startedAtMs + cancelled.closedAfterMs &&
-  neighbour.closedAfterMs !== null &&
-  neighbour.startedAtMs + neighbour.closedAfterMs > cancelled.startedAtMs + cancelled.closedAfterMs;
+function neighbourOverlapped(cancelled: Event, neighbour: Event) {
+  if (cancelled.closedAfterMs === null || neighbour.closedAfterMs === null) return false;
+  const cancelledAt = cancelled.startedAtMs + cancelled.closedAfterMs;
+  return (
+    cancelled.responseStartedAtMs !== null &&
+    cancelled.startedAtMs <= cancelled.responseStartedAtMs &&
+    cancelled.responseStartedAtMs < cancelledAt &&
+    neighbour.responseStarted &&
+    neighbour.responseStartedAtMs !== null &&
+    neighbour.startedAtMs <= neighbour.responseStartedAtMs &&
+    neighbour.responseStartedAtMs < cancelledAt &&
+    neighbour.finishedAtMs !== undefined &&
+    neighbour.finishedAtMs > cancelledAt &&
+    neighbour.finishedAtMs <= neighbour.startedAtMs + neighbour.closedAfterMs
+  );
+}
 
 const codings = new Map([
   ['/coding-gzip', 'gzip'],
@@ -421,7 +435,8 @@ export function verifyStandardJson(platform: 'ios' | 'android', log: string, sna
           ? 'PASS'
           : 'FAIL';
       }
-      const refused = app.diagnostics.get(id)?.calls[2];
+      const diagnostic = app.diagnostics.get(id);
+      const [cancelledCall, neighbourCall, refused] = diagnostic?.calls ?? [];
       if (events.some((event) => event.path === prefix + '/third-reservation')) return 'FAIL';
       if (refused?.reservation !== 'refused' || refused.native !== 'not-called')
         return missing('third-reservation-unconfirmed');
@@ -431,15 +446,48 @@ export function verifyStandardJson(platform: 'ios' | 'android', log: string, sna
         return missing(first.length ? 'no-second-reception' : 'no-first-reception');
       const [cancelled] = first;
       const [neighbour] = second;
-      return first.length === 1 &&
-        second.length === 1 &&
-        anonymous(cancelled!) &&
-        anonymous(neighbour!) &&
-        interrupted(cancelled!) &&
-        cancelled!.closedAfterMs! >= 200 &&
-        knownLength(neighbour!) &&
-        neighbour!.finished &&
-        neighbourOverlapped(cancelled!, neighbour!)
+      const closureBoundMs =
+        cancelNeighbour.abortAfterMs + cancelNeighbour.maxCancellationLatencyMs;
+      // The fixture bounds time since receipt. The app measures latency from its own abort.
+      if (
+        first.length !== 1 ||
+        second.length !== 1 ||
+        !anonymous(cancelled!) ||
+        !anonymous(neighbour!) ||
+        !interrupted(cancelled!) ||
+        cancelled!.closedAfterMs! < 200 ||
+        cancelled!.closedAfterMs! > closureBoundMs ||
+        !knownLength(neighbour!) ||
+        !neighbour!.finished ||
+        !neighbourOverlapped(cancelled!, neighbour!)
+      )
+        return 'FAIL';
+      const requested = diagnostic?.cancellationRequestedAfterStartMs;
+      const rejected = cancelledCall?.nativeSettledAfterStartMs;
+      const completed = neighbourCall?.nativeSettledAfterStartMs;
+      if (
+        !cancelledCall ||
+        !neighbourCall ||
+        requested === undefined ||
+        rejected === undefined ||
+        completed === undefined
+      )
+        return missing('native-cancel-timing-unconfirmed');
+      return diagnostic?.calls.length === 3 &&
+        cancelledCall.reservation === 'accepted' &&
+        cancelledCall.native === 'rejected' &&
+        cancelledCall.nativeKind === 'network' &&
+        cancelledCall.application === 'cancelled' &&
+        cancelledCall.bytes === undefined &&
+        neighbourCall.reservation === 'accepted' &&
+        neighbourCall.native === 'success' &&
+        neighbourCall.adapter === 'success' &&
+        neighbourCall.status === 200 &&
+        (neighbourCall.bytes ?? 0) > 0 &&
+        requested >= cancelNeighbour.abortAfterMs &&
+        rejected >= requested &&
+        rejected - requested <= cancelNeighbour.maxCancellationLatencyMs &&
+        completed > requested
         ? 'PASS'
         : 'FAIL';
     }
@@ -593,6 +641,10 @@ export function verifyStandardJson(platform: 'ios' | 'android', log: string, sna
     const targetConnections = connections.filter((row) => row.destination === destination);
     const cancelled = id === 'cancel-neighbour' ? rows('/slow/concurrency-one') : [];
     const neighbour = id === 'cancel-neighbour' ? rows('/slow/neighbour') : [];
+    const firstReceipt =
+      id === 'cancel-neighbour' && entries.length > 0
+        ? Math.min(...entries.map((event) => event.startedAtMs))
+        : undefined;
     return {
       destination,
       retryWindowMs: elapsed(timing?.settledAtMs, timing?.openedAtMs),
@@ -618,6 +670,7 @@ export function verifyStandardJson(platform: 'ios' | 'android', log: string, sna
         : {}),
       samples: entries.slice(0, 8).map((event, index) => ({
         connectionIdentified: event.connectionId !== undefined,
+        ...(firstReceipt !== undefined ? cancelNeighbourServerTiming(event, firstReceipt) : {}),
         expectedMethod:
           event.method ===
           (id === 'session-delete'
@@ -699,10 +752,36 @@ export function verifyStandardJson(platform: 'ios' | 'android', log: string, sna
     };
   }
 
+  function cancelNeighbourServerTiming(event: Event, firstReceipt: number) {
+    const connection =
+      event.connectionId === undefined
+        ? undefined
+        : connections.find((row) => row.id === event.connectionId);
+    return {
+      receivedAfterFirstReceiptMs: elapsed(event.startedAtMs, firstReceipt),
+      tcpAcceptedBeforeReceiptMs: elapsed(event.startedAtMs, connection?.acceptedAtMs),
+      tlsAfterTcpMs: elapsed(connection?.tlsEstablishedAtMs, connection?.acceptedAtMs),
+      httpAfterTlsMs: elapsed(event.startedAtMs, connection?.tlsEstablishedAtMs),
+      responseStartedAfterReceiptMs: elapsed(
+        event.responseStartedAtMs ?? undefined,
+        event.startedAtMs,
+      ),
+      finishedAfterReceiptMs: elapsed(event.finishedAtMs, event.startedAtMs),
+    };
+  }
+
   function scenarioDiagnostics(id: string) {
     const diagnostic = app.diagnostics.get(id);
     return {
-      client: diagnostic && { failure: diagnostic.failure, calls: diagnostic.calls },
+      client: diagnostic && {
+        failure: diagnostic.failure,
+        calls: diagnostic.calls,
+        cancellationRequestedAfterStartMs: diagnostic.cancellationRequestedAfterStartMs,
+        cancellationToNativeResultMs: elapsed(
+          diagnostic.calls[0]?.nativeSettledAfterStartMs,
+          diagnostic.cancellationRequestedAfterStartMs,
+        ),
+      },
       server: serverDiagnostic(id),
     };
   }

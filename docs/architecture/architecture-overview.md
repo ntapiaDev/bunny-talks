@@ -2,7 +2,7 @@
 
 **Version : 1.1 — Novembre 2026**
 
-**Statut : architecture de référence, harmonisée en 4.4C1 bis**
+**Statut : architecture de référence.** Le jalon 4.4C1 bis est une harmonisation historique, pas l'état courant complet du backend.
 
 ## 1. Objectifs architecturaux
 
@@ -24,14 +24,14 @@ L'architecture retenue est un **monolithe modulaire organisé en monorepo**, ave
 
 ### 2.1. Applications
 
-Les applications suivantes ont des responsabilités distinctes. `apps/mobile` contient une fondation Expo de diagnostic partiellement qualifiée sur un émulateur Android ; `apps/api` contient la persistance Prisma/PostgreSQL et la fondation HTTP NestJS avec sessions, liveness et inscription désactivée par défaut ; `apps/crypto-lab` reste vide. La qualification iOS et celle des appareils physiques restent ouvertes.
+Les applications suivantes ont des responsabilités distinctes. `apps/mobile` contient des diagnostics Expo, dont une fixture HTTPS qualifiée sur AVD Android 17 et des diagnostics cryptographiques encore expérimentaux ; cela ne qualifie pas les parcours métier, iOS ou production. `apps/api` contient une API NestJS et la persistance Prisma/PostgreSQL pour sessions, inscription, connexion et amorçage initial ; les capacités activables et leurs limites sont précisées à la section 5.1. `apps/crypto-lab` n'est pas implémentée.
 
-| Application       | Responsabilité                                            | Technologie                | Statut                                                                              |
-| ----------------- | --------------------------------------------------------- | -------------------------- | ----------------------------------------------------------------------------------- |
-| `apps/api`        | API, comptes, relations, communications, espaces partagés | NestJS ; Prisma/PostgreSQL | HTTP expérimental : liveness, session courante et inscription protégée configurable |
-| `apps/mobile`     | Application principale iOS et Android                     | React Native, Expo         | Fondation expérimentale ; qualification Android partielle                           |
-| `apps/crypto-lab` | Banc d'essai et démonstration cryptographique             | À déterminer               | Prévu, non implémenté                                                               |
-| `apps/web`        | Application web future                                    | À déterminer               | Différée                                                                            |
+| Application       | Responsabilité                                      | Technologie                | Statut                                                                         |
+| ----------------- | --------------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------ |
+| `apps/api`        | API et persistance métier actuellement implémentées | NestJS ; Prisma/PostgreSQL | Routes expérimentales ; certaines sont désactivées ou interdites en production |
+| `apps/mobile`     | Client mobile et diagnostics                        | React Native, Expo         | Diagnostics expérimentaux ; preuve HTTPS Android limitée à une fixture         |
+| `apps/crypto-lab` | Banc d'essai et démonstration cryptographique       | À déterminer               | Prévu, non implémenté                                                          |
+| `apps/web`        | Application web future                              | À déterminer               | Différée                                                                       |
 
 L'application mobile est prévue comme premier client du produit.
 
@@ -41,15 +41,15 @@ L'application web sera développée ultérieurement, sans imposer de dépendance
 
 Les packages ont vocation à contenir du code réutilisable par plusieurs applications. Les packages indiqués comme présents existent déjà, mais leurs responsabilités ci-dessous décrivent aussi des capacités futures.
 
-| Package          | Responsabilité                                    | Statut                                                 |
-| ---------------- | ------------------------------------------------- | ------------------------------------------------------ |
-| `contracts`      | Contrats et types partagés                        | Présent ; contrats de publication du coffre            |
-| `validation`     | Schémas de validation partagés                    | Présent ; e-mail, inscription et publication du coffre |
-| `crypto/core`    | Modèle cryptographique indépendant                | Présent ; fondations                                   |
-| `crypto/engine`  | Intégration du protocole cryptographique          | Présent ; évaluation expérimentale                     |
-| `crypto/storage` | Stockage local sécurisé                           | Prévu ; répertoire local vide                          |
-| `crypto/backup`  | Sauvegarde et restauration cryptographiques       | Présent ; composants expérimentaux                     |
-| `crypto/devices` | Gestion des identités et associations d'appareils | Prévu ; répertoire local vide                          |
+| Package          | Responsabilité                                    | Statut                                                            |
+| ---------------- | ------------------------------------------------- | ----------------------------------------------------------------- |
+| `contracts`      | Contrats et types partagés                        | Présent ; contrats de publication du coffre                       |
+| `validation`     | Schémas de validation partagés                    | Présent ; e-mail, inscription, connexion et publication du coffre |
+| `crypto/core`    | Modèle cryptographique indépendant                | Présent ; fondations                                              |
+| `crypto/engine`  | Intégration du protocole cryptographique          | Présent ; évaluation expérimentale                                |
+| `crypto/storage` | Stockage local sécurisé                           | Frontière envisagée                                               |
+| `crypto/backup`  | Sauvegarde et restauration cryptographiques       | Présent ; composants expérimentaux                                |
+| `crypto/devices` | Gestion des identités et associations d'appareils | Frontière envisagée                                               |
 
 Le package `config` est reporté tant qu'un besoin réel de partage ne le justifie pas.
 
@@ -70,7 +70,7 @@ PostgreSQL constitue la source de vérité des données persistantes du serveur.
 
 Redis pourra être introduit pour la présence, le cache, la limitation de débit, les files de traitement et d'autres besoins de performance.
 
-Le [jalon 4.4A](../development/email-registration.md) ajoute une identité e-mail vérifiée distincte de l’identifiant stable du compte et une intention temporaire de vérification, finalisée atomiquement avec le vérificateur serveur. Cette primitive interne ne crée ni session, ni coffre, ni autorisation d’appareil ; le parcours public d’inscription est ajouté par [4.4C2A](../development/http-email-registration.md), sans connexion HTTP. Le [jalon 4.4B](../development/initial-device-bootstrap.md) ajoute une composition interne pour publier le premier coffre et autoriser son appareil dans un commit PostgreSQL unique, avec mot de passe vérifié et association durable aux reçus.
+Le [jalon 4.4A](../development/http-email-registration.md) ajoute une identité e-mail vérifiée distincte de l’identifiant stable du compte et une intention temporaire de vérification, finalisée atomiquement avec le vérificateur serveur. Cette primitive interne ne crée ni session, ni coffre, ni autorisation d’appareil ; le parcours public d’inscription est ajouté par [4.4C2A](../development/http-email-registration.md), sans connexion HTTP. Le [jalon 4.4B](../development/http-initial-device-bootstrap.md) ajoute une composition interne pour publier le premier coffre et autoriser son appareil dans un commit PostgreSQL unique, avec mot de passe vérifié et association durable aux reçus.
 
 ### Mobile
 
@@ -92,7 +92,7 @@ Expo Go ne constitue pas l'environnement de référence pour les fonctionnalité
 - TypeScript strict.
 - ESLint.
 - Prettier.
-- Vitest pour les packages et le backend.
+- Vitest pour les packages, le backend et le mobile.
 - Jest avec `jest-expo` envisagé pour les tests spécifiques à Expo.
 - Playwright envisagé pour les tests de parcours web.
 - Tests sur appareils réels pour les fonctionnalités natives sensibles.
@@ -141,7 +141,7 @@ Les répertoires sont initialisés progressivement, au moment où leurs responsa
 
 ### 5.1. Monolithe modulaire
 
-Le backend est une application NestJS unique, organisée par domaines fonctionnels. La [fondation HTTP 4.4C1](../development/http-sessions.md) compose un module principal, un module de sessions, un guard global avec exemption publique explicite et un filtre d’erreurs assaini. `GET /health/live`, `GET /v1/session` et `DELETE /v1/session` conservent leurs contrats. [4.4C2A](../development/http-email-registration.md) ajoute les POST publics `/v1/auth/registration/request` et `/v1/auth/registration/complete`, activables seulement avec une configuration complète ; aucune connexion HTTP n’est ajoutée. Les contrôleurs dépendent d’une capacité applicative étroite de session ou d’inscription, sans accès à Prisma ni aux mutations privilégiées du coffre. Les exigences TLS public, d’anti-abus et d’autorisation E2EE restent à qualifier avant production.
+Le backend NestJS partage un pipeline HTTP, un guard de politique d’entrée, un guard de session avec exemption publique explicite et un filtre assaini. Les routes servent la liveness, la lecture et la révocation de la session courante, l’inscription, la connexion et l’amorçage initial. L’inscription exige une configuration complète. La connexion et l’amorçage HTTP sont désactivables et leur activation est interdite en mode production. Les contrôleurs délèguent à des capacités applicatives étroites. Le TLS public, l’exploitation des mesures anti-abus et l’autorisation E2EE restent à qualifier. [Sessions](../development/http-sessions.md), [inscription](../development/http-email-registration.md), [connexion](../development/http-login.md), [amorçage](../development/http-initial-device-bootstrap.md).
 
 Les domaines envisagés comprennent notamment :
 
@@ -188,10 +188,11 @@ apps/api/
 │   ├── auth/
 │   │   ├── password-verifier.ts
 │   │   ├── registration/        # identité, inscription HTTP, adaptateurs et budgets
+│   │   ├── login/               # connexion et limites de validation
 │   │   ├── sessions/            # jetons, règles, repository et transport de session
 │   │   ├── reauthentication/    # intention et composition transactionnelle
 │   │   └── bootstrap/           # amorçage unique du premier appareil
-│   ├── vault/                   # persistance, empreinte, digest et préparation
+│   ├── vault/                   # amorçage HTTP et persistance du coffre
 │   └── shared/
 │       ├── database/            # propriétaire Prisma/pool et module de composition
 │       └── http/                # transport, erreurs et contrôle de politique d’entrée
@@ -204,9 +205,9 @@ apps/api/
 └── prisma/                      # schéma et migrations existantes
 ```
 
-Le [rapport 4.4C1 bis](../development/backend-architecture-harmonization.md) détaille l’inventaire, les déplacements et les vérifications. Les sous-dossiers d’authentification regroupent des responsabilités déjà implémentées ; `password-verifier.ts` reste directement dans `auth` car un dossier pour ce seul fichier serait superflu. Un dossier `vault` ne suppose pas l’existence d’un module NestJS de coffre.
+Les sous-dossiers d’authentification regroupent des responsabilités déjà implémentées ; `password-verifier.ts` reste directement dans `auth` car un dossier pour ce seul fichier serait superflu. `VaultModule` compose l’amorçage HTTP et sa configuration.
 
-`AppModule` compose une unique instance dynamique de `DatabaseModule`, la transmet explicitement à `SessionModule` et `RegistrationModule`, puis enregistre les guards globaux d’entrée et d’authentification. `DatabaseModule` possède le seul fournisseur `Database`, lequel ferme le client Prisma et son pool via le cycle de vie Nest. Aucun module global, singleton de base caché ou client créé par contrôleur. `SessionModule` exporte uniquement `SessionHttpService`, jamais `Database` ; sa factory limite le repository aux opérations nécessaires au transport. `RegistrationModule` compose une capacité HTTP étroite avec les ports SMTP et de compromission, ainsi que des budgets/baux PostgreSQL partagés ; il n’exporte aucun repository. La finalisation reste dans `PostgresEmailRegistration`. Les modules Nest organisent l’injection et les politiques HTTP, sans imposer Nest aux fonctions internes ni aux packages.
+`AppModule` compose une unique instance dynamique de `DatabaseModule`, la transmet explicitement à `SessionModule`, `LoginModule`, `RegistrationModule` et `VaultModule`, puis enregistre les guards globaux d’entrée et d’authentification. `DatabaseModule` possède le seul fournisseur `Database`, lequel ferme le client Prisma et son pool via le cycle de vie Nest. Aucun module global, singleton de base caché ou client créé par contrôleur. `SessionModule` exporte uniquement `SessionHttpService`, jamais `Database` ; sa factory limite le repository aux opérations nécessaires au transport. `RegistrationModule` compose une capacité HTTP étroite avec les ports SMTP et de compromission, ainsi que des budgets/baux PostgreSQL partagés ; il n’exporte aucun repository. La finalisation reste dans `PostgresEmailRegistration`. Les modules Nest organisent l’injection et les politiques HTTP, sans imposer Nest aux fonctions internes ni aux packages.
 
 Les noms de fichiers restent en kebab-case, les classes en PascalCase, les fonctions et variables en camelCase. Les suffixes `.controller.ts`, `.module.ts` et `.guard.ts` identifient les composants Nest ; `postgres-` distingue le code lié à PostgreSQL. Les imports relatifs NodeNext utilisent `.js` et `import type` distingue les dépendances de types. Aucun barrel `index.ts` n’est ajouté au backend ; les entrées publiques existantes des packages partagés sont conservées.
 
@@ -238,13 +239,19 @@ Au sein de l’API, les compositions d’amorçage et de réauthentification dé
 
 Les schémas aléatoires sont créés uniquement dans la base locale dédiée `bunny_talks_test`, puis supprimés. Les garde-fous existants restent en place. Le build nettoie seulement `apps/api/dist` avant compilation afin de retirer les anciens chemins ; il émet `dist/src` et `dist/generated/prisma`, sans tests.
 
-Pour une nouvelle route, composer explicitement dans le module fonctionnel les méthodes, le parseur borné et la politique corps/query, puis valider les données avec les schémas Zod et les pipes natifs Nest. Les protections globales restent indépendantes : en-têtes sûrs, refus des en-têtes ambigus, timeouts, erreurs et politique proxy. Les routes actuelles utilisent `jsonBodyPolicy()` puis `noInputPolicy(...)`, avant authentification, avec 8 Kio et les mêmes statuts qu’en 4.4C1. Le guard global `HttpInputGuard` refuse un handler dont aucun middleware d’entrée n’a accepté la requête, même public. `acceptHttpInput` constate ce passage ; il ne valide aucun schéma et n’accorde aucune identité. Pour une route avec corps, il ne remplace jamais un schéma et un pipe de validation. Le contrôle de schéma reste à examiner dans chaque nouvelle route.
+Pour une nouvelle route, composer explicitement dans le module fonctionnel les méthodes, le parseur borné et la politique corps/query, puis valider les données avec les schémas Zod et les pipes natifs Nest. Les protections globales restent indépendantes : en-têtes sûrs, refus des en-têtes ambigus, timeouts, erreurs et politique proxy. Les routes sans entrée utilisent `jsonBodyPolicy()` puis `noInputPolicy(...)`. Les routes JSON sensibles appliquent la politique exacte de méthode et chemin. Le corps est limité à 8 Kio, avec 192 Kio pour les deux routes d’amorçage. Le parsing et la politique d’entrée précèdent l’authentification. Le guard global `HttpInputGuard` refuse un handler dont aucun middleware d’entrée n’a accepté la requête, même public. `acceptHttpInput` constate ce passage ; il ne valide aucun schéma et n’accorde aucune identité. Pour une route avec corps, il ne remplace jamais un schéma et un pipe de validation. Le contrôle de schéma reste à examiner dans chaque nouvelle route.
 
-La comparaison du build 4.4C1 révèle des variantes de casse et de slash final déjà acceptées par le routeur, malgré les réglages Express explicites. Leurs statuts et méthodes restent caractérisés sans changement dans ce jalon ; les contrôles de méthodes ci-dessus concernent les chemins canoniques. Voir l’[écart préexistant et sa qualification](../development/backend-architecture-harmonization.md#écart-de-routage-préexistant-découvert). Un durcissement sera une décision distincte.
+La comparaison du build 4.4C1 révèle des variantes de casse et de slash final déjà acceptées par le routeur, malgré les réglages Express explicites. Les tests caractérisent ces variantes et les requêtes HEAD historiques pour la liveness et la session. Les routes JSON sensibles exigent leurs chemins exacts. Toute modification du routage historique reste une décision distincte.
 
 Une fixture non émise dans le build démontre `@Body({ schema, pipes: [new StandardSchemaValidationPipe()] })` avec un schéma Zod partagé, une limite de 16 Kio et un refus de query. Il n’existe ni registre de routes maison ni moteur de validation supplémentaire. Une limite de publication E2EE sera décidée avec son endpoint et ses contraintes, sans modifier silencieusement celles des sessions. Aucune route d’inscription ni de connexion n’est ajoutée ici.
 
 Restent différés : nouveaux modules Nest d’inscription/coffre/messagerie, organisation plus fine justifiée par leur volume futur, événements internes, infrastructure générique de ports, limites des publications, quotas et budgets Argon2id/anti-abus de 4.4C2. Les exigences TLS, qualification mobile et sécurité E2EE existantes demeurent ouvertes.
+
+Le contrôle de dépendances des tests API suit les imports et les entrées de packages, y compris les types. Les packages partagés n’importent aucune application. `contracts` décrit la forme des données échangées et `validation` exécute les contrôles Zod. L’API importe ces deux packages et `crypto-backup`. Le mobile utilise `crypto-engine`, `crypto-backup` et les entrées publiques du SDK. `crypto-engine` dépend de `crypto-core`, dont les sources restent indépendantes du SDK. Les manifests exposent les entrées construites sous `dist`. Les configurations de production excluent les tests. Les références croisées de fixtures du coffre et du moteur appartiennent aux qualifications.
+
+La résolution Metro de `jsonc-parser` vers `lib/esm/main.js` dépend du format de publication de la version 3.3.1, utilisée par `crypto-backup`. Les contrôles d’architecture couvrent les dépendances connues statiquement. Les imports dynamiques, les résolutions Metro et l’autolinking se vérifient dans leurs environnements d’exécution.
+
+L’audit de consolidation a retrouvé un usage pour chaque dépendance directe déclarée et a parcouru les 827 résolutions verrouillées. Les manifests et le lockfile sont conservés. L’alias OpenE2EE 14.4.0 sert aux tests de migration et au POC de comparaison. Les vecteurs Argon2id standalone justifient la dépendance directe à `@noble/hashes` dans le mobile. L’évaluation de leur retrait éventuel suit la séparation des diagnostics au prochain jalon. Les modules natifs se vérifient aussi via Gradle, CocoaPods et l’autolinking. [Plan d’isolation](../development/mobile-architecture.md#isolation-des-diagnostics-cryptographiques)
 
 ## 6. Architecture des communications
 

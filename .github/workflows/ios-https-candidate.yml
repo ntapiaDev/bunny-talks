@@ -3,14 +3,6 @@ name: Bunny Talks iOS HTTPS candidate-only qualification C2-B
 on:
   workflow_dispatch:
     inputs:
-      transport:
-        description: Candidate transport to qualify
-        required: true
-        type: choice
-        default: urlsession
-        options:
-          - urlsession
-          - libcurl
       reviewed_sha:
         description: Full SHA separately approved for this qualification campaign
         required: true
@@ -85,20 +77,9 @@ jobs:
           REVIEWED_SHA: ${{ inputs.reviewed_sha }}
           REVIEWED_TREE_SHA256: ${{ inputs.reviewed_tree_sha256 }}
           CHECKED_OUT_SHA: ${{ steps.checkout.outputs.commit }}
-          CANDIDATE_TRANSPORT: ${{ inputs.transport }}
         run: |
-          case "$CANDIDATE_TRANSPORT" in
-            urlsession) driver=apps/mobile/scripts/run-ios-urlsession-campaign.py ;;
-            libcurl)
-              if [[ -f apps/mobile/modules/application-https/ios/UrlSessionHttpsTransport.swift ]]; then
-                printf '%s\n' 'Use the reviewed historical libcurl revision for this campaign.'
-                exit 1
-              fi
-              driver=apps/mobile/scripts/run-ios-https-campaign.py
-              ;;
-            *) exit 1 ;;
-          esac
-          exec python3 -IB "$driver" "$RUNNER_TEMP/bunny-ios-c2-b-proof/report.json"
+          exec python3 -IB apps/mobile/scripts/run-ios-urlsession-campaign.py \
+            "$RUNNER_TEMP/bunny-ios-c2-b-proof/report.json"
 
       - name: Remove checkout and preserve a sanitized report
         if: always()
@@ -108,7 +89,6 @@ jobs:
           CHECKOUT_MATCH: ${{ steps.checkout.outputs.commit == github.sha }}
           NODE: ${{ steps.node.outcome }}
           CAMPAIGN: ${{ steps.campaign.outcome }}
-          CANDIDATE_TRANSPORT: ${{ inputs.transport }}
         run: |
           umask 077
           python3 -I - <<'PY'
@@ -156,9 +136,7 @@ jobs:
               except (OSError, ValueError):
                   checkout_cleanup = 'FAIL'
           report['checkoutCleanup'] = checkout_cleanup
-          report['transport'] = os.environ.get('CANDIDATE_TRANSPORT')
-          if report['transport'] == 'urlsession':
-              report['scope'] = 'ios-urlsession-standard-json-known-length'
+          report['scope'] = 'ios-urlsession-standard-json-known-length'
           if checkout_cleanup == 'FAIL' or (os.environ.get('CAMPAIGN') == 'success' and checkout_cleanup != 'PASS'):
               report['verdict'] = 'FAIL'
           report_path.write_text(json.dumps(report, sort_keys=True, separators=(',', ':')) + '\n')
@@ -170,7 +148,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ios-https-${{ inputs.transport }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: ios-https-urlsession-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/bunny-ios-c2-b-proof/report.json
           if-no-files-found: error
           retention-days: 7

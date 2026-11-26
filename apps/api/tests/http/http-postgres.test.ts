@@ -782,9 +782,13 @@ describe('real Nest HTTP and PostgreSQL 18.7', () => {
     disconnect.mockRestore();
     expect(app.getHttpServer().listening).toBe(false);
     await expect(fetch(`${base}/health/live`)).rejects.toThrow();
-    const rows = await client.$queryRaw<
-      { count: bigint }[]
-    >`SELECT count(*) FROM pg_stat_activity WHERE pid = ANY(${backends}::int[])`;
-    expect(rows[0]!.count).toBe(0n);
+    // Socket shutdown and removal from pg_stat_activity are observed asynchronously by the server.
+    await expect
+      .poll(
+        () =>
+          client.$queryRaw`SELECT pid FROM pg_stat_activity WHERE pid = ANY(${backends}::int[])`,
+        { timeout: 2000 },
+      )
+      .toHaveLength(0);
   });
 });

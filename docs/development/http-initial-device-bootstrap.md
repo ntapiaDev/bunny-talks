@@ -1,18 +1,24 @@
 # Amorçage initial E2EE par HTTP — jalon 4.4C3
 
-Statut : implémentation locale pour revue, non commitée. Activation indépendante, désactivée par défaut et interdite en production. Les appareils supplémentaires, la reconnexion à un appareil historique, le transfert d’identité et la récupération de compte restent hors périmètre. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts et bloquants pour la production.
+Statut de l’implémentation 4.4C3. Activation indépendante, désactivée par défaut et interdite en production. Les appareils supplémentaires, la reconnexion à un appareil historique, le transfert d’identité et la récupération de compte restent hors périmètre. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts et bloquants pour la production.
 
 ## Audit et organisation
 
-Le dépôt était propre au démarrage, avec 4.4C2B commité dans `509a80e`. `current-milestone.md` mentionnait encore une revue corrective non commitée ; ce statut est actualisé conformément à la mission.
-
 Le service réel est `auth/bootstrap/postgres-initial-device-bootstrap.ts`, et non dans `vault/`. Les signatures sont exactement `activate(sessionToken: unknown, password: string, request: unknown, candidateDigest: unknown)` et `recoverReceipt(sessionToken: unknown, request: unknown, candidateDigest: unknown)`. Elles restent inchangées. Le premier retourne un résultat terminal dans ses chemins actuels ; le second peut retourner `unknown`.
 
-L’audit inclut `PostgresVaultRepository`, ses validations V1, digest et HMAC, les erreurs d’amorçage, le guard et son contexte privé, `SessionModule`, `LoginModule`, les politiques HTTP, `DatabaseModule`, `AppModule`, la configuration, les contrats/schémas partagés et les tests historiques PostgreSQL/HTTP. Les documents produit, architecture, archive/récupération, menaces et [amorçage interne](initial-device-bootstrap.md) restent les références des décisions existantes.
+L’audit inclut `PostgresVaultRepository`, ses validations V1, digest et HMAC, les erreurs d’amorçage, le guard et son contexte privé, `SessionModule`, `LoginModule`, les politiques HTTP, `DatabaseModule`, `AppModule`, la configuration, les contrats/schémas partagés et les tests historiques PostgreSQL/HTTP. Les documents produit, architecture, archive/récupération, menaces restent les références des décisions existantes.
 
 `VaultModule` compose les objets existants avec le même `DatabaseModule` que les autres domaines et n’exporte aucun fournisseur. Le contrôleur valide les enveloppes Zod puis appelle `BootstrapHttpService`, qui compare le compte à celui du guard, applique l’admission et choisit exclusivement la primitive correspondant à la route. Aucun pool, package ou repository métier supplémentaire. Aucune dépendance vers l’implémentation de connexion ou `SessionModule` ; graphe de dépendances testé.
 
 Alternatives écartées : déplacer le service 4.4B, le convertir en fournisseur NestJS, réécrire sa transaction, exposer le repository privilégié ou créer un moteur générique de quotas. La migration additive `20261117010000_bootstrap_http_limits` crée uniquement `BootstrapBudget` et `BootstrapLease`. Aucune ancienne migration ni aucun trigger d’irréversibilité ne change. Aucune dépendance installée.
+
+## Éligibilité et association persistée
+
+L’amorçage exige un compte à e-mail vérifié, une session active et un appareil non révoqué. Le mot de passe est vérifié hors transaction. Sous verrou de compte, le service revalide session, appareil, adresse, vérificateur exact et sa révision, avec une fenêtre maximale exclusive de cinq minutes incluant l’attente et sans recul d’horloge. Un compte initialisé reste inéligible après perte ou révocation de tous ses appareils. Une preuve de succès, un coffre, une publication ou une autorisation d’origine ambiguë entraîne `HISTORICAL_STATE` sans réparation automatique.
+
+La migration additive `20261115050000_initial_device_bootstrap` relie chaque tentative examinée, y compris les rejets, à son appareil et à son reçu de publication initiale. Les clés étrangères composites et les triggers garantissent même compte, immuabilité et unicité du premier succès. Le statut appartient à `VaultOperation` et l’autorisation à `Device.authorizedAt`. Le service publie le coffre, crée le reçu et autorise le premier appareil dans le même commit. La migration laisse les comptes historiques sans association telle qu’elle les trouve.
+
+L’adresse a déjà été vérifiée à l’inscription. Un attaquant disposant des identifiants avant la première activation peut publier en premier un coffre structurellement valide. L’autorisation serveur ne démontre ni la possession de l’identité E2EE ni la réouverture du coffre. Les règles de récupération des appareils ultérieurs restent distinctes. Le jalon interne 4.4B a observé 135 tests de persistance réussis sur PostgreSQL 18.7.
 
 ## Contrat HTTP
 
@@ -174,8 +180,6 @@ Fichiers modifiés :
 - `apps/api/src/shared/database/postgres-budget.ts` et `apps/api/src/shared/http/http-error-filter.ts`.
 - `packages/validation/src/index.ts` et `apps/api/tests/unit/shared/architecture.test.ts`.
 - `docs/development/current-milestone.md`.
-
-Les modifications restent non commitées. Aucun jalon suivant n’est commencé.
 
 Attention pendant la revue : dispatch de `/receipt`, absence d’export privilégié, limites propres aux routes, erreurs sans fuite, conservation des clés, séparation des budgets, portée exacte des baux et invariants transactionnels 4.4B inchangés.
 

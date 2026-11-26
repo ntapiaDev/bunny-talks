@@ -78,7 +78,7 @@ docker compose --env-file /tmp/bunny45a-final.env -p bunny45a-qualification -f c
 
 Pour ce flux isolé à port dynamique, fournir explicitement `DATABASE_URL` et `TEST_DATABASE_URL` avec les identifiants jetables. Appliquer d'abord `pnpm --filter @bunny-talks/api exec prisma migrate deploy` à la base dev vide ; ensuite lancer le qualificateur SQL, qui y crée une table témoin, puis les suites de persistance et HTTP. Le script `prisma:migrate` permanent doit refuser ce port dynamique. Un témoin créé avant la toute première migration provoque le refus Prisma P3005 ; ne pas contourner ce refus en baselinant une base inconnue.
 
-### Résultats finaux du 17 novembre 2026 — en attente de revue
+### Résultats historiques du 17 novembre 2026
 
 Le projet Compose jetable `bunny45a-qualification` utilise le volume neuf `bunny45a-qualification-data`. L'initialisation a exécuté `01-provision.sh` en processus indépendant ; le mode 755 a été confirmé dans WSL et dans le conteneur. Le healthcheck du Compose racine a atteint `healthy`, avec des contrôles effectivement exécutés et réussis.
 

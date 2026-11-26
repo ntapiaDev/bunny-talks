@@ -6,13 +6,18 @@ import json
 import plistlib
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 
 MOBILE = Path(__file__).resolve().parents[1]
+_runtime_spec = importlib.util.spec_from_file_location(
+    "standard_runtime_inspection_support", MOBILE / "scripts/run-ios-standard-runtime.py",
+)
+_runtime = importlib.util.module_from_spec(_runtime_spec)
+sys.modules[_runtime_spec.name] = _runtime
+_runtime_spec.loader.exec_module(_runtime)
 BUNDLE_ID = "fr.bunnytalks.mobile"
-CANDIDATE_BUNDLE_ID = "fr.bunnytalks.mobile.c2https"
-CANDIDATE_ENTRY = "qualification/ios-standard-https-entry.tsx"
 TARGET = "BunnyTalks"
 CERTIFICATE_SUFFIXES = {".cer", ".crt", ".der", ".key", ".p7b", ".p12", ".pem", ".pfx", ".mobileprovision"}
 QUALIFICATION_MARKERS = (
@@ -23,19 +28,6 @@ CERTIFICATE_PAYLOAD = re.compile(
     rb"-----BEGIN (?:(?:(?:TRUSTED|X509) )?CERTIFICATE|(?:[A-Z0-9]+ )*PRIVATE KEY)-----"
     rb"(?:\r?\n|(?:\\r)?\\n)[A-Za-z0-9+/]{32}"
 )
-NORMAL_CURL_OPTIONS = {
-    "CURLOPT_PROTOCOLS_STR": '"https"',
-    "CURLOPT_HTTP_VERSION": "(long)CURL_HTTP_VERSION_1_1",
-    "CURLOPT_FOLLOWLOCATION": "0L",
-    "CURLOPT_PROXY": '""',
-    "CURLOPT_NETRC": "(long)CURL_NETRC_IGNORED",
-    "CURLOPT_HTTPAUTH": "(long)CURLAUTH_NONE",
-    "CURLOPT_SSL_VERIFYPEER": "1L",
-    "CURLOPT_SSL_VERIFYHOST": "2L",
-    "CURLOPT_SSL_OPTIONS": "(long)CURLSSLOPT_NATIVE_CA",
-    "CURLOPT_SSLVERSION": "(long)(CURL_SSLVERSION_TLSv1_2|CURL_SSLVERSION_MAX_TLSv1_3)",
-    "CURLOPT_SSL_SESSIONID_CACHE": "0L",
-}
 
 
 class CheckFailed(ValueError):
@@ -79,49 +71,17 @@ def check_resources(root, *, allow_qualification_markers=False):
         check_resource(path, allow_qualification_markers=allow_qualification_markers)
 
 
-def check_curl_options(source):
-    # This checks the reviewed SET calls in the source. Effective build settings and TLS need separate evidence.
-    source = re.sub(r"/\*.*?\*/|//[^\n]*", "", source, flags=re.S)
-    for option, expected in NORMAL_CURL_OPTIONS.items():
-        calls = re.findall(rf"\bSET\s*\(\s*{option}\s*,\s*([^;]+)\);", source)
-        check(len(calls) == 1 and re.sub(r"\s+", "", calls[0]) == expected
-              and len(re.findall(rf"\b{option}\b", source)) == 1, "native-curl-options")
-    check(not re.search(r"\b(?:CURLOPT_(?:PROXY_)?(?:CAINFO|CAPATH)(?:_BLOB)?|"
-                        r"CURLOPT_SSL_CTX_(?:FUNCTION|DATA)|"
-                        r"SecTrustSetAnchorCertificates|SSL_CTX_(?:load_verify_locations|set_default_verify_paths))\b",
-                        source),
-          "native-alternative-trust")
-
-
-def check_https_sources(mobile):
-    native = mobile / "modules/application-https/ios"
-    check(native.resolve().is_relative_to(mobile.resolve()), "external-resource-link")
-    for path in (mobile / "src", mobile / "assets", native, native / "Native"):
-        check(not path.is_symlink(), "external-resource-link")
-    check((mobile / "src").is_dir() and (native / "Native").is_dir(), "https-source-tree")
-    check_resources(mobile / "src")
-    if (mobile / "assets").is_dir():
-        check_resources(mobile / "assets")
-    for name in ("index.ts", "app.json", "package.json", "metro.config.js"):
-        path = mobile / name
-        check(path.is_file() and not path.is_symlink(), "https-source-tree")
-        check_resource(path)
-    # The pod contains the historical branches. Its approved vendor ZIP is checked by its own verifier.
-    for path in native.iterdir():
-        if path.name != "vendor":
-            check(not path.is_symlink(), "external-resource-link")
-            check_resource(path, allow_qualification_markers=True)
-            if path.is_dir():
-                check_resources(path, allow_qualification_markers=True)
-    check_curl_options((native / "Native/BunnyHttpsNative.c").read_text())
-
-
 def check_urlsession_sources(mobile):
     native = mobile / "modules/application-https/ios"
     for root in (mobile / "src", mobile / "assets"):
         if root.exists():
             check_resources(root)
-    for path in (mobile / "index.ts", mobile / "app.json", mobile / "package.json", mobile / "metro.config.js"):
+    for path in (
+        mobile / "index.ts",
+        mobile / "app.json",
+        mobile / "package.json",
+        mobile / "metro.config.js",
+    ):
         check(path.is_file() and not path.is_symlink(), "https-source-tree")
         check_resource(path)
     check(not native.is_symlink() and native.resolve().is_relative_to(mobile.resolve()), "external-resource-link")
@@ -130,9 +90,12 @@ def check_urlsession_sources(mobile):
         check(path.is_file() and not path.is_symlink(), "https-source-tree")
         check_resource(path, allow_qualification_markers=True)
     pod = (native / "ApplicationHttps.podspec").read_text()
-    check(re.findall(r"^\s*s\.source_files\s*=\s*(.*)$", pod, re.M) ==
-          ["'ApplicationHttpsModule.swift', 'UrlSessionHttpsTransport.swift'"]
-          and not re.search(r"libcurl|openssl|vendor|CURL_STATICLIB", pod, re.I), "standard-transport-sources")
+    check(
+        re.findall(r"^\s*s\.source_files\s*=\s*(.*)$", pod, re.M)
+        == ["'ApplicationHttpsModule.swift', 'UrlSessionHttpsTransport.swift'"]
+        and not re.search(r"libcurl|openssl|vendor|CURL_STATICLIB", pod, re.I),
+        "standard-transport-sources",
+    )
 
 
 def check_generated(ios, *, bundle_id=BUNDLE_ID, resources=True):
@@ -148,41 +111,50 @@ def check_generated(ios, *, bundle_id=BUNDLE_ID, resources=True):
         check_resources(ios)
 
 
-def check_pod_settings(settings, *, urlsession=False):
+def check_pod_settings(settings):
     targets = {entry["target"]: entry["buildSettings"] for entry in settings}
     for name in ("ApplicationHttps", "ExpoSQLite"):
         check(targets[name].get("CONFIGURATION") == "Release", "pod-configuration")
     https = targets["ApplicationHttps"]
-    flags = " ".join(str(https.get(name, "")) for name in (
-        "GCC_PREPROCESSOR_DEFINITIONS", "SWIFT_ACTIVE_COMPILATION_CONDITIONS",
-        "OTHER_CFLAGS", "OTHER_CPLUSPLUSFLAGS", "OTHER_SWIFT_FLAGS", "OTHER_LDFLAGS",
-        "LIBRARY_SEARCH_PATHS", "FRAMEWORK_SEARCH_PATHS",
-    ))
+    flags = " ".join(
+        str(https.get(name, ""))
+        for name in (
+            "GCC_PREPROCESSOR_DEFINITIONS",
+            "SWIFT_ACTIVE_COMPILATION_CONDITIONS",
+            "OTHER_CFLAGS",
+            "OTHER_CPLUSPLUSFLAGS",
+            "OTHER_SWIFT_FLAGS",
+            "OTHER_LDFLAGS",
+            "LIBRARY_SEARCH_PATHS",
+            "FRAMEWORK_SEARCH_PATHS",
+        )
+    )
     check("BUNNY_HTTPS_QUALIFICATION" not in flags, "qualification-flags")
-    if urlsession:
-        check(not re.search(r"BUNNY_HTTPS_URLSESSION_QUALIFICATION|CURL_STATICLIB|libcurl|openssl|(?:^|\s)-l(?:curl|ssl|crypto)\b", flags, re.I),
-              "standard-transport-flags")
-    else:
-        check("CURL_STATICLIB=1" in flags, "static-curl-flags")
+    check(
+        not re.search(
+            r"BUNNY_HTTPS_URLSESSION_QUALIFICATION|CURL_STATICLIB|libcurl|openssl|(?:^|\s)-l(?:curl|ssl|crypto)\b",
+            flags,
+            re.I,
+        ),
+        "standard-transport-flags",
+    )
     sqlite_flags = targets["ExpoSQLite"].get("OTHER_CFLAGS", "").split()
     check({"-DSQLITE_HAS_CODEC=1", "-DSQLCIPHER_CRYPTO_CC"} <= set(sqlite_flags), "sqlcipher-flags")
 
 
-def check_bundle_sources(path, *, candidate=False, laboratory_sources=None):
+def check_bundle_sources(path, *, laboratory_sources=None):
     sources = [name.replace("\\", "/") for name in json.loads(path.read_bytes())["sources"]]
     if laboratory_sources is not None:
-        fixture_sources = {name.rsplit("/qualification/", 1)[1] for name in ("/" + n for n in sources)
-                           if "/qualification/" in name}
-        check(fixture_sources == laboratory_sources
-              and not any(name.endswith("src/composition/App.tsx") for name in sources), "laboratory-js-entry")
-        return
-    if candidate:
-        fixture_sources = {name.rsplit("/qualification/", 1)[1] for name in ("/" + n for n in sources)
-                           if "/qualification/" in name}
-        check(fixture_sources == {CANDIDATE_ENTRY.rsplit("/", 1)[1], "ios-libcurl-scenarios.ts"},
-              "candidate-js-entry")
-        check(not any(name.endswith("/src/composition/App.tsx") or name == "src/composition/App.tsx"
-                      for name in sources), "candidate-standard-entry")
+        fixture_sources = {
+            name.rsplit("/qualification/", 1)[1]
+            for name in ("/" + item for item in sources)
+            if "/qualification/" in name
+        }
+        check(
+            fixture_sources == laboratory_sources
+            and not any(name.endswith("src/composition/App.tsx") for name in sources),
+            "laboratory-js-entry",
+        )
         return
     check(any(name in ("index.ts", "./index.ts") or ("/" + name).endswith("/apps/mobile/index.ts")
               for name in sources)
@@ -190,36 +162,31 @@ def check_bundle_sources(path, *, candidate=False, laboratory_sources=None):
     check(not any("/qualification/" in "/" + name for name in sources), "qualification-js-entry")
 
 
-def link_helpers():
-    path = MOBILE / "qualification/inspect-ios-libcurl-runtime.py"
-    spec = importlib.util.spec_from_file_location("link_inspection", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+def command(*args):
+    try:
+        result = _runtime.run_command(args, cwd=Path.cwd(), timeout=120, capture=True)
+    except (OSError, subprocess.SubprocessError, _runtime.StageError):
+        raise EvidenceUnavailable("inspection-command-unavailable") from None
+    if result.exit_code != 0:
+        raise EvidenceUnavailable("inspection-command-unavailable")
+    return result.output
 
 
-def check_linked_archives(raw_map, archives, digest):
-    result = {}
-    for library in ("libcurl", "libopenssl"):
-        archive = f"{library}.a"
-        paths = set(re.findall(rb"^\[ *\d+\][ \t]+([^\n]+/" + re.escape(archive.encode()) + rb")\(",
-                               raw_map, re.M))
-        if not paths:
-            raise EvidenceUnavailable("linked-archive-path-unavailable")
-        check(len(paths) == 1, "linked-archive-path")
-        actual = digest(Path(next(iter(paths)).decode()))
-        check(actual == archives[f"{library}.xcframework/ios-arm64-simulator/{archive}"],
-              "linked-archive-sha256")
-        result[archive] = actual
-    return result
+def digest(path):
+    return _runtime.digest(Path(path))
 
 
-def inspect_release(derived, source_map, pod_settings, provenance, *, mobile=MOBILE, bundle_id=BUNDLE_ID,
-                    c2=False, urlsession=False, laboratory_sources=None):
-    check_pod_settings(json.loads(pod_settings.read_bytes()), urlsession=urlsession)
-    check_bundle_sources(source_map, candidate=bundle_id == CANDIDATE_BUNDLE_ID,
-                         laboratory_sources=laboratory_sources)
-    link = link_helpers()
+def inspect_release(
+    derived,
+    source_map,
+    pod_settings,
+    *,
+    mobile=MOBILE,
+    bundle_id=BUNDLE_ID,
+    laboratory_sources=None,
+):
+    check_pod_settings(json.loads(pod_settings.read_bytes()))
+    check_bundle_sources(source_map, laboratory_sources=laboratory_sources)
     apps = list((derived / "Build/Products/Release-iphonesimulator").glob("*.app"))
     if not apps:
         raise EvidenceUnavailable("release-application-unavailable")
@@ -235,8 +202,8 @@ def inspect_release(derived, source_map, pod_settings, provenance, *, mobile=MOB
     executable = plist["CFBundleExecutable"]
     check(executable == TARGET, "release-executable")
     binary = app / executable
-    check(link.command("xcrun", "lipo", "-archs", binary).split() == ["arm64"], "release-architecture")
-    build = link.command("xcrun", "vtool", "-show-build", binary)
+    check(command("xcrun", "lipo", "-archs", str(binary)).split() == ["arm64"], "release-architecture")
+    build = command("xcrun", "vtool", "-show-build", str(binary))
     check(re.search(r"^\s*platform\s+IOSSIMULATOR\s*$", build, re.M), "release-platform")
     check(re.search(r"^\s*minos\s+16\.4(?:\.0)?\s*$", build, re.M), "release-macho-minimum")
     bundle = app / "main.jsbundle"
@@ -247,7 +214,7 @@ def inspect_release(derived, source_map, pod_settings, provenance, *, mobile=MOB
     pods = podfile_lock.read_text()
     for name in ("ApplicationHttps", "ExpoSQLite", "ExpoSecureStore", "hermes-engine"):
         check(re.search(rf"^  - {name}(?:\s|:)", pods, re.M), "native-dependencies")
-    dependencies = link.command("xcrun", "otool", "-L", binary)
+    dependencies = command("xcrun", "otool", "-L", str(binary))
     check(not re.search(r"(?:libcurl|libssl|libcrypto|libopenssl)(?:\.|/)", dependencies, re.I),
           "dynamic-transport-provider")
 
@@ -258,91 +225,47 @@ def inspect_release(derived, source_map, pod_settings, provenance, *, mobile=MOB
     if maps[0].stat().st_size > 128 * 1024 * 1024:
         raise EvidenceUnavailable("release-link-map-too-large")
     raw_map = maps[0].read_bytes()
-    if urlsession:
-        check(not re.search(r"libcurl|openssl|ApplicationHttpsLicenses", pods, re.I)
-              and not any(re.search(r"ApplicationHttpsLicenses|lib(?:curl|openssl|ssl|crypto)\.", path.name, re.I)
-                          for path in app.rglob("*")), "legacy-transport-dependency")
-        check(re.search(rb"UrlSessionHttpsTransport(?:\.o|[A-Za-z0-9_]+)", raw_map)
-              and not re.search(rb"CurlHttpsTransport|BunnyHttpsNative|libcurl\.|libopenssl\.|libssl\.|libcrypto\.",
-                                raw_map, re.I), "standard-transport-link-map")
-        symbols = link.command("xcrun", "nm", "-j", binary)
-        check(not re.search(r"(?m)^_(?:curl_|SSL_|OPENSSL_|bunny_https_)", symbols)
+    check(
+        not re.search(r"libcurl|openssl|ApplicationHttpsLicenses", pods, re.I)
+        and not any(
+            re.search(r"ApplicationHttpsLicenses|lib(?:curl|openssl|ssl|crypto)\.", path.name, re.I)
+            for path in app.rglob("*")
+        ),
+        "legacy-transport-dependency",
+    )
+    check(
+        re.search(rb"UrlSessionHttpsTransport(?:\.o|[A-Za-z0-9_]+)", raw_map)
+        and not re.search(
+            rb"CurlHttpsTransport|BunnyHttpsNative|libcurl\.|libopenssl\.|libssl\.|libcrypto\.",
+            raw_map,
+            re.I,
+        ),
+        "standard-transport-link-map",
+    )
+    symbols = command("xcrun", "nm", "-j", str(binary))
+    check(not re.search(r"(?m)^_(?:curl_|SSL_|OPENSSL_|bunny_https_)", symbols)
               and "Foundation.framework/Foundation" in dependencies, "standard-transport-symbols")
-        diagnostic_fields = rb"qualificationReason|qualificationStatus|qualificationBytes"
-        instrumented_profile = rb"https-qualification/standard-json|BunnyHttpsStandardJson"
-        check(not re.search(diagnostic_fields + b"|" + instrumented_profile, binary.read_bytes()),
+    diagnostic_fields = rb"qualificationReason|qualificationStatus|qualificationBytes"
+    instrumented_profile = rb"https-qualification/standard-json|BunnyHttpsStandardJson"
+    check(not re.search(diagnostic_fields + b"|" + instrumented_profile, binary.read_bytes()),
               "qualification-marker")
-        js_forbidden = (diagnostic_fields + b"|" + instrumented_profile
-                        if laboratory_sources is None else diagnostic_fields)
-        check(not re.search(js_forbidden, bundle.read_bytes()), "qualification-marker")
-        return {
-            "verdict": "PASS", "bundleId": bundle_id, "displayName": "Bunny Talks",
-            "configuration": "Release", "platform": "IOSSIMULATOR", "architecture": "arm64",
-            "minimumOS": "16.4", "executableSha256": link.digest(binary),
-            "hermesBundleSha256": link.digest(bundle), "podfileLockSha256": link.digest(podfile_lock),
-            "linkMapSha256": link.digest(maps[0]), "ats": "default", "transport": "urlsession",
-            "qualificationFlagsResourcesAndDiagnostics": "absent-in-checked-scope",
-            "sqlcipherReleaseFlags": True, "secureStoreInPodfileLock": True,
-        }
-
-    vendor = mobile / "modules/application-https/ios/vendor/package"
-    license_bundles = list(app.rglob("ApplicationHttpsLicenses.bundle"))
-    check(len(license_bundles) == 1, "license-bundle")
-    licenses = {}
-    for name in ("curl-COPYING", "openssl-LICENSE.txt"):
-        licenses[name] = link.digest(license_bundles[0] / name)
-        check(licenses[name] == link.digest(vendor / name), "license-bytes")
-
-    link_map = link.inspect_map(raw_map, app.name, executable)
-    definitions = link.inspect_definitions(link.command("xcrun", "nm", "-m", "-U", binary))
-    if not all(definitions.values()):
-        raise EvidenceUnavailable("executable-symbols-unavailable")
-    check(link.link_matches(definitions, link_map), "symbol-provenance-mismatch")
-    linked_archives = check_linked_archives(raw_map, provenance["archives"], link.digest)
-
-    providers = link.inspect_frameworks(app)
-    for dylib in (app / "Frameworks").rglob("*.dylib"):
-        check(re.fullmatch(r"[A-Za-z0-9_.+-]+", dylib.name) and dylib.name not in providers,
-              "dylib-inventory")
-        providers[dylib.name] = {
-            "executableSha256": link.digest(dylib),
-            "definitions": link.inspect_definitions(link.command("xcrun", "nm", "-arch", "arm64", "-m", "-U", dylib)),
-        }
-    check(not any(rows for provider in providers.values() for rows in provider["definitions"].values()),
-          "additional-visible-provider")
-    result = {
+    js_forbidden = (
+        diagnostic_fields + b"|" + instrumented_profile
+        if laboratory_sources is None
+        else diagnostic_fields
+    )
+    check(not re.search(js_forbidden, bundle.read_bytes()), "qualification-marker")
+    return {
         "verdict": "PASS", "bundleId": bundle_id, "displayName": "Bunny Talks",
         "configuration": "Release", "platform": "IOSSIMULATOR", "architecture": "arm64",
-        "minimumOS": "16.4", "executableSha256": link.digest(binary),
-        "hermesBundleSha256": link.digest(bundle), "podfileLockSha256": link.digest(podfile_lock),
-        "ats": "default", "qualificationFlagsResourcesAndDiagnostics": "absent-in-checked-scope",
-        "sqlcipherReleaseFlags": True, "secureStoreInPodfileLock": True, "licenseSha256": licenses,
-        "linkedArchiveSha256": linked_archives, "linkMapSha256": link.digest(maps[0]),
-        "linkMap": link_map, "definitions": definitions, "embeddedProviders": providers,
+        "minimumOS": "16.4", "executableSha256": digest(binary),
+        "hermesBundleSha256": digest(bundle), "podfileLockSha256": digest(podfile_lock),
+        "linkMapSha256": digest(maps[0]),
+        "ats": "default",
+        "transport": "urlsession",
+        "qualificationFlagsResourcesAndDiagnostics": "absent-in-checked-scope",
+        "sqlcipherReleaseFlags": True, "secureStoreInPodfileLock": True,
     }
-    if c2:
-        undefined = link.command("xcrun", "nm", "-u", binary)
-        check(all(re.search(rf"\b{symbol}\b", undefined) for symbol in
-                  ("_SecTrustEvaluateWithError", "_inflate", "_inflateInit2_"))
-              and "Security.framework/Security" in dependencies
-              and re.search(r"/libz(?:\.\d+)*\.dylib\b", dependencies), "c2-transport-imports")
-        result["transportLinkSelection"] = transport_link_selection(raw_map, link.object_label)
-    return result
-
-
-def transport_link_selection(raw_map, object_label):
-    selection = [(name.decode("ascii"), object_label(member)) for name, member in re.findall(
-        rb"^\[[ \t]*\d+\][ \t]+[^\n]*?/"
-        rb"(libcurl\.a|libopenssl\.a|libApplicationHttps\.a|ApplicationHttps)\(([^\n)]+)\)$", raw_map, re.M,
-    )]
-    selection.extend(("module", object_label(member)) for member in re.findall(
-        rb"^\[[ \t]*\d+\][ \t]+[^\n]*?/ApplicationHttps\.build/[^\n]*/([^/\n]+\.o)$", raw_map, re.M,
-    ))
-    libraries = {name for name, _ in selection}
-    if not ({"libcurl.a", "libopenssl.a"} <= libraries and
-            libraries & {"module", "ApplicationHttps", "libApplicationHttps.a"}):
-        raise EvidenceUnavailable("c2-link-selection-unavailable")
-    return sorted(selection)
 
 
 def main():
@@ -365,11 +288,10 @@ def main():
             check_urlsession_sources(MOBILE)
             result = {"verdict": "PASS", "scope": "https-standard-sources", "httpsRuntime": "NOT_RUN"}
         elif args.mode == "pods":
-            check_pod_settings(json.loads(args.pod_settings.read_bytes()), urlsession=True)
+            check_pod_settings(json.loads(args.pod_settings.read_bytes()))
             result = {"verdict": "PASS", "scope": "release-pod-settings"}
         else:
-            result = inspect_release(args.derived, args.source_map, args.pod_settings,
-                                     None, urlsession=True)
+            result = inspect_release(args.derived, args.source_map, args.pod_settings)
     except CheckFailed as error:
         result, status = {"verdict": "FAIL", "reason": str(error)}, 1
     except EvidenceUnavailable as error:

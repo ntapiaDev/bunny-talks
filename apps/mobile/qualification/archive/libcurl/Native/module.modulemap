@@ -1,4 +1,0 @@
-module BunnyHttpsNative {
-  header "BunnyHttpsNative.h"
-  export *
-}
