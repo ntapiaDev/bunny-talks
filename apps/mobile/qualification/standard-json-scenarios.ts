@@ -8,6 +8,16 @@ export const postBody = { message: 'fixture 🐰' };
 export const firstBearer = 'fixture-only';
 export const secondBearer = 'fixture-second';
 
+export const retryFramingFaults: ReadonlyMap<string, string> = new Map([
+  ['/length', 'incomplete-length'],
+  ['/chunked-coding-absent', 'unsupported-chunked'],
+  ['/truncated', 'missing-final-chunk'],
+  ['/chunked-incomplete-end', 'incomplete-chunk-terminator'],
+  ['/unframed', 'close-delimited'],
+  ['/length-conflict', 'conflicting-lengths'],
+  ['/length-and-chunked', 'length-and-transfer'],
+]);
+
 type Scenario = {
   id: string;
   path: string;
@@ -36,14 +46,14 @@ export const probes: readonly Scenario[] = [
   { id: 'other-coding', path: '/coding-other', result: 'reject' },
   { id: 'stacked-coding', path: '/coding-stacked', result: 'reject' },
   { id: 'length-incomplete', path: '/length', result: 'reject' },
-  { id: 'chunked-valid', path: '/chunked-coding-absent', result: 'json' },
+  { id: 'chunked-valid-rejected', path: '/chunked-coding-absent', result: 'reject' },
   { id: 'chunked-incomplete', path: '/truncated', result: 'reject' },
   { id: 'chunk-end-incomplete', path: '/chunked-incomplete-end', result: 'reject' },
   { id: 'close-delimited', path: '/unframed', result: 'reject' },
   { id: 'conflicting-lengths', path: '/length-conflict', result: 'reject' },
   { id: 'length-and-transfer', path: '/length-and-chunked', result: 'reject' },
   { id: 'limit-exact', path: '/identity-exact', result: 'exact' },
-  { id: 'limit-progressive', path: '/identity-oversize', result: 'size' },
+  { id: 'limit-declared', path: '/identity-oversize-length', result: 'size' },
   { id: 'get-loss', path: '/loss-get', result: 'lost-get', bearer: firstBearer },
   { id: 'get-loss-repeated', path: '/loss-get-always', result: 'lost-get', bearer: firstBearer },
   { id: 'post-complete', path: '/request-body', result: 'json', method: 'POST' },

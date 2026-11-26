@@ -2,7 +2,7 @@
 
 **Statut** — accepté en 4.5B2C1.
 
-La révision de préparation du profil JSON métier fixe les exigences communes ci-dessous. Le choix du transport iOS dépend encore de la qualification native et d’une revue humaine.
+La clôture de l’expérimentation URLSession retient l’architecture cible. L’intégration, l’ouverture du verrou iOS, l’usage métier et la mise en production relèvent de décisions distinctes. [Clôture et feuille de route](../../development/native-https-foundation.md#clôture-du-sixième-run-urlsession)
 
 ## Contexte
 
@@ -16,17 +16,33 @@ Le transport utilise l’origine HTTPS approuvée et la validation TLS de la cha
 
 Les petits JSON métier peuvent emprunter un profil sans compression avec `Accept-Encoding: identity` et des réponses standard sans `Content-Encoding`. Le profil doit pouvoir refuser les codages inattendus et les réponses incomplètes ou de cadrage ambigu. Les mécanismes de la pile native et les preuves de comportement suffisent lorsque les API publiques exposent ce qui est nécessaire. La visibilité des champs HTTP bruts, gzip, le champ de réponse `Content-Encoding: identity`, la connexion dédiée à l’appel et un protocole HTTP identique sont des choix de profil. Une session ou un client dédié et réutilisable est admis si l’isolation et l’annulation par tâche sont démontrées.
 
-Le client applicatif ne rejoue aucun appel. Après perte de connexion, le profil natif peut reprendre `GET /v1/session` au sein de la même opération, pour la même origine et le même Bearer, sous l’échéance initiale et avec le même signal d’annulation. Cette autorisation exclut toute reprise différée et toute tâche d’entretien de session. L’expiration absolue et la révocation restent applicables. Le nombre de réceptions est une observation diagnostique et de performance. La mise à jour éventuelle de `lastSeenAt` est admise dans cette fenêtre. Les opérations sensibles conservent leurs garanties propres. Une perte de réponse du login n’autorise aucune réémission susceptible de produire une deuxième connexion. Les autres changements de sémantique de reprise passent en revue. [Conditions par opération](../../development/mobile-application-http.md)
+### Transports retenus et profil à longueur connue
+
+La cible utilise URLSession sur iOS et OkHttp sur Android derrière le port TypeScript injecté existant. Les deux plateformes partagent autant que possible la fixture, la matrice, l’oracle de qualification et les parcours métier. L’API conserve la sérialisation standard de NestJS/Express sans surcouche. [Contrat mobile](../../development/mobile-application-http.md) · [Mesures sur l’API](../../development/native-https-foundation.md#troisième-run-urlsession-et-profil-à-longueur-connue)
+
+Chaque réponse JSON avec corps annonce un unique `Content-Length` décimal exact, sans `Content-Encoding` ni `Transfer-Encoding`. Un 204 vide ne porte aucun de ces champs. Le natif rejette les incompatibilités visibles, refuse une longueur déclarée supérieure à la borne et livre le corps uniquement après achèvement confirmé et concordance du nombre d’octets. Les garde-fous TLS, de reprise, d’isolation et d’annulation restent applicables. Des témoins adverses vérifient le comportement face aux cadrages masqués par la pile. [RFC 9110 § 8.6](https://www.rfc-editor.org/rfc/rfc9110.html#section-8.6)
+
+Le profil réduit la surface à qualifier en écartant la décompression et les cadrages multiples pour les petits JSON. Foundation apporte la confiance et les mises à jour système sur Apple. Android conserve OkHttp et Okio déjà présents. Cette répartition limite le coût de maintenance d’une pile embarquée et garde les parcours indépendants des bibliothèques natives et du framework serveur. Elle demande une veille sur les changements de comportement d’iOS et sur les versions Android effectivement résolues. Les connexions réutilisables peuvent réduire la latence à chaud, les négociations TLS et les réveils réseau. La faible consommation énergétique est un objectif à mesurer avec les coûts au repos, la mémoire et les performances sur appareil. [Protocole de mesure](../../development/native-https-foundation.md#minimum-ios-performances-et-maintenance)
+
+Express peut fournir ces réponses par ses mécanismes usuels. Le dernier intermédiaire TLS contrôlé doit conserver la longueur exacte, désactiver la compression de ce profil et servir les erreurs avec corps sous le même contrat. S’il a déjà émis les en-têtes et ne peut plus finir la réponse, il doit interrompre l’échange ou le flux. Les en-têtes et la complétude devront être vérifiés de bout en bout sur chaque protocole déployé.
+
+### Reprises transparentes des GET autorisés
+
+La politique évaluée sur la candidate URLSession couvre les GET explicitement autorisés, dont `GET /v1/session`. Un profil natif qualifié peut reprendre après une erreur réseau ou de cadrage tant qu’aucune réponse exploitable n’a été livrée. La reprise reste dans l’opération initiale, pour la même origine, le même chemin et le même Bearer, avec l’échéance initiale et le même signal d’annulation. Chaque réponse invalide doit rester refusée. Toute issue terminale, expiration ou annulation met fin à l’opération. Le client applicatif conserve `retry: 'never'` et les reprises différées ainsi que les tâches d’entretien restent exclues.
+
+Le nombre de réceptions GET sert au diagnostic et aux mesures de performance. Android peut conserver l’émission unique. L’expiration absolue et la révocation restent applicables. La mise à jour éventuelle de `lastSeenAt` est admise dans cette fenêtre. Toute extension à d’autres opérations demande une décision sur leur sémantique. Les POST sensibles et DELETE conservent leurs obligations existantes. L’application métier de cette politique reste soumise aux qualifications et à une décision humaine. [Conditions par opération](../../development/mobile-application-http.md) · [Quatrième run et critères de preuve](../../development/native-https-foundation.md#quatrième-run-urlsession-et-reprises-get)
 
 ### Compatibilité avec la messagerie
 
-Le plafond de 1 Mio s’applique à chaque réponse décodée d’une opération de cette fondation HTTP. Les historiques et les espaces partagés peuvent être synchronisés par pages, avec reprise fiable après déconnexion. Les pièces jointes chiffrées et autres transferts volumineux relèveront de mécanismes dédiés, par exemple en streaming ou vers un stockage adapté.
+Le plafond de 1 Mio s’applique à chaque réponse décodée d’une opération de cette fondation HTTP. Les historiques et les espaces partagés peuvent être synchronisés par pages dimensionnées en octets JSON UTF-8, avec reprise fiable après déconnexion. Les reçus et résultats d’amorçage du coffre sont de petites réponses. Une future lecture du coffre devra vérifier son budget de réponse, encodage compris. Les pièces jointes chiffrées et autres transferts volumineux relèveront de mécanismes dédiés, par exemple en streaming ou vers un stockage adapté.
 
 Les futurs parcours couvrent les Lettres asynchrones avec historique durable, le Chat instantané avec événements temps réel et les Petits mots éphémères de 24 heures. La conception devra permettre la distribution E2EE vers plusieurs appareils et les accusés de réception et de lecture. La livraison durable et la reprise après déconnexion exigent des garanties propres, indépendantes de la présence d’une connexion temps réel.
 
 Le domaine de messagerie reste indépendant de HTTPS, du client natif et de WebSocket. L’infrastructure pourra choisir un transport adapté à chaque opération et appliquer une politique commune de sécurité et d’autorisation. Les futurs besoins concrets guideront la définition des interfaces.
 
 ## Alternatives
+
+Le choix de Foundation renonce au contrôle fin des émissions par le garde C de libcurl, à la visibilité de ses champs HTTP et à la maîtrise de la version du moteur réseau embarqué. Le profil commun renonce à servir des réponses gzip et des réponses HTTP/1.1 à découpage `chunked`, deux possibilités qu’offrait la pile libcurl. Les règles par opération et les observations côté serveur restent nécessaires pour traiter les reprises et les issues incertaines. [Preuves libcurl](../../development/native-https-foundation.md#clôture-humaine-de-45b2c4-c2-b)
 
 Garder le flux consommé par JavaScript impose un protocole de fragments, de contre-pression et d’annulation entre le natif et JavaScript pour ces petits corps. Adapter un corps déjà assemblé à ce flux ajouterait des copies et des états intermédiaires. Un contrat générique commun aux appels JSON et aux transferts volumineux augmenterait la surface à maintenir avant de connaître les besoins des transferts. Le port injecté existant suffit aux appels métier.
 

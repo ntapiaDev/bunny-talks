@@ -16,6 +16,7 @@ import { PostgresSessionRepository } from '../../src/auth/sessions/postgres-sess
 import { SessionError } from '../../src/auth/sessions/session-token.js';
 import { VerifiedLogin } from '../../src/auth/verified-login.js';
 import { Database } from '../../src/shared/database/database.js';
+import { expectKnownLengthResponse } from '../support/known-length-response.js';
 import {
   loginApplication,
   loginPassword,
@@ -83,6 +84,7 @@ describe('HTTP login with real Nest, PostgreSQL 18.7 and compiled ESM', () => {
   async function success(body: unknown, origin = base) {
     const response = await post(body, origin);
     expect(response.status).toBe(201);
+    await expectKnownLengthResponse(response);
     expect(response.headers.get('cache-control')).toBe('no-store');
     expect(response.headers.get('set-cookie')).toBeNull();
     const result = (await response.json()) as {
@@ -118,10 +120,14 @@ describe('HTTP login with real Nest, PostgreSQL 18.7 and compiled ESM', () => {
     const headers = { Authorization: `Bearer ${result.sessionToken}` };
     const read = await fetch(`${base}/v1/session`, { headers });
     expect(read.status).toBe(200);
+    await expectKnownLengthResponse(read);
     expect(await read.json()).toEqual(result.session);
     const revoked = await fetch(`${base}/v1/session`, { headers, method: 'DELETE' });
     expect(revoked.status).toBe(204);
-    await failure(await fetch(`${base}/v1/session`, { headers }), 401, 'UNAUTHORIZED');
+    await expectKnownLengthResponse(revoked);
+    const unauthorized = await fetch(`${base}/v1/session`, { headers });
+    await expectKnownLengthResponse(unauthorized);
+    await failure(unauthorized, 401, 'UNAUTHORIZED');
     expect(
       await client.device.findUnique({ where: { id: result.session.deviceId } }),
     ).toMatchObject({ authorizedAt: null });
@@ -255,8 +261,11 @@ describe('HTTP login with real Nest, PostgreSQL 18.7 and compiled ESM', () => {
     );
   });
   it('rejects aliases, queries, HEAD and disallowed methods under the existing sensitive route policy', async () => {
-    for (const alias of [`${path}/`, path.toUpperCase(), '/v1/auth/%6cogin'])
-      expect((await fetch(`${base}${alias}`, { method: 'POST' })).status).toBe(404);
+    for (const alias of [`${path}/`, path.toUpperCase(), '/v1/auth/%6cogin']) {
+      const response = await fetch(`${base}${alias}`, { method: 'POST' });
+      expect(response.status).toBe(404);
+      await expectKnownLengthResponse(response);
+    }
     for (const method of ['GET', 'HEAD', 'OPTIONS', 'DELETE', 'PUT', 'PATCH']) {
       const response = await fetch(`${base}${path}`, { method });
       expect(response.status).toBe(405);

@@ -26,6 +26,7 @@ import {
   bootstrapTestConfig,
   clientBootstrapInput,
 } from '../support/bootstrap-fixture.js';
+import { expectKnownLengthResponse } from '../support/known-length-response.js';
 import { loginTestConfig, registeredLoginAccount } from '../support/login-fixture.js';
 import { createTestDatabase } from '../support/postgres-test-database.js';
 
@@ -139,6 +140,7 @@ describe('bootstrap over real HTTP and PostgreSQL 18.7', () => {
   });
   async function result(response: Response, status: number, expected: object) {
     expect(response.status).toBe(status);
+    await expectKnownLengthResponse(response);
     expect(response.headers.get('cache-control')).toBe('no-store');
     const body = await response.json();
     expect(body).toMatchObject(expected);

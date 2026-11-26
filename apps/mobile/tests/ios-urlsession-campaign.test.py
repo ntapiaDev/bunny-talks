@@ -104,6 +104,49 @@ class CampaignTests(unittest.TestCase):
             self.assertEqual(caught.exception.record['simulatorRemoved'], 'FAIL')
             self.assertTrue(Path(temporary).exists())
 
+    def test_runtime_preserves_filtered_partial_report_after_collection_timeout(self):
+        with tempfile.TemporaryDirectory(dir='/tmp') as temporary:
+            scratch = Path(temporary)
+            campaign = worker.Campaign(scratch / 'report.json', {})
+            campaign.scratch = campaign.staged = scratch
+            campaign.app = scratch / 'Candidate.app'
+            campaign.hashes = {'executableSha256': 'fixture'}
+            runner = campaign.runner = Mock(device_set=scratch, device='simulator')
+            runner.sim.return_value.output = str(scratch / 'simulator' / 'Candidate.app')
+            runner.app_hashes.return_value = campaign.hashes
+            runner.launch_pid.return_value = 42
+            markers = [
+                f'Candidate[42:0] {worker.MARKER}PASS length-and-transfer response',
+                f'Other[43:0] {worker.MARKER}PASS timeout timeout',
+            ]
+            qualification = {
+                'verdict': 'NOT_RUN',
+                'scenarios': [{'id': 'length-and-transfer', 'observed': 'response',
+                               'verdict': 'NOT_RUN'}] * 31,
+            }
+
+            def collect(*args, stdout, **kwargs):
+                stdout.write('\n'.join(markers).encode())
+                stdout.flush()
+                return Mock(poll=Mock(return_value=None))
+
+            def verify(*args, **kwargs):
+                self.assertEqual(Path(args[-2]).read_text(), markers[0])
+                return worker.c1.CommandResult(1, json.dumps(qualification))
+
+            runner.call.side_effect = verify
+            with patch.object(worker.subprocess, 'Popen', side_effect=collect), \
+                    patch.object(worker.time, 'monotonic', side_effect=[0, 181]), \
+                    patch.object(worker.time, 'sleep'), \
+                    patch.object(worker.urllib.request, 'urlopen'), \
+                    patch.object(worker.json, 'load', return_value={'events': []}):
+                with self.assertRaises(worker.c2.StageError) as caught:
+                    campaign.runtime()
+            self.assertEqual(caught.exception.record, {'verdict': 'NOT_RUN', 'code': 'qualification-timeout'})
+            self.assertEqual(campaign.report['qualification'], qualification)
+            runner.launch_pid.assert_called_once()
+            runner.call.assert_called_once()
+
 
 if __name__ == '__main__':
     unittest.main()

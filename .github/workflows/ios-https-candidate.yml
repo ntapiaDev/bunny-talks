@@ -152,7 +152,7 @@ jobs:
           report['checkoutCleanup'] = checkout_cleanup
           report['transport'] = os.environ.get('CANDIDATE_TRANSPORT')
           if report['transport'] == 'urlsession':
-              report['scope'] = 'ios-urlsession-standard-json'
+              report['scope'] = 'ios-urlsession-standard-json-known-length'
           if checkout_cleanup == 'FAIL' or (os.environ.get('CAMPAIGN') == 'success' and checkout_cleanup != 'PASS'):
               report['verdict'] = 'FAIL'
           report_path.write_text(json.dumps(report, sort_keys=True, separators=(',', ':')) + '\n')

@@ -12,10 +12,12 @@ import { describeNativeResult } from '../qualification/standard-json-diagnostics
 import {
   firstBearer,
   marker,
+  plan,
   postBody,
   prefix as standardPrefix,
   probes,
   requestTimeoutMs,
+  retryFramingFaults,
 } from '../qualification/standard-json-scenarios';
 import { verifyStandardJson } from '../qualification/verify-standard-json';
 
@@ -474,7 +476,7 @@ it('serves the standard JSON profile and stops the report at its first discrimin
   const report = verifyStandardJson(
     'ios',
     [
-      'READY standard-json-urlsession',
+      'READY standard-json-known-length-urlsession',
       'START standard-json',
       'PASS standard-json success',
       'START gzip',
@@ -497,10 +499,41 @@ it('serves the standard JSON profile and stops the report at its first discrimin
   ]);
 });
 
+it('offers complete, length-framed JSON on the slow routes when the client keeps reading', async () => {
+  const paths = ['/slow/timeout', '/slow/concurrency-one', '/slow/neighbour'];
+  const replies = await Promise.all(
+    paths.map((path) => get(standardPrefix + path, 0, false, 'identity')),
+  );
+  for (const { status, bytes, headers } of replies) {
+    expect(status).toBe(200);
+    expect(bytes.toString()).toBe(fixtureJson);
+    expect(headers['content-length']).toBe(String(bytes.length));
+    expect(headers['transfer-encoding']).toBeUndefined();
+    expect(headers['content-encoding']).toBeUndefined();
+  }
+});
+
+it('offers both incomplete chunked frames in the known-length profile', async () => {
+  const paths = ['/truncated', '/chunked-incomplete-end'].map((path) => standardPrefix + path);
+  for (const path of paths) await expect(get(path, 0, false, 'identity')).rejects.toThrow();
+  const { events } = await (await fetch(`http://127.0.0.1:${port + 5}/runtime`)).json();
+  for (const path of paths) {
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        path,
+        configuredFraming: 'chunked',
+        fixtureCut: true,
+        closed: true,
+        finished: false,
+      }),
+    );
+  }
+});
+
 it('preserves client failure stages and explains missing server proof without retaining values', () => {
   function run(call: Record<string, unknown>, snapshot: Parameters<typeof verifyStandardJson>[2]) {
     const log = [
-      'READY standard-json-okhttp',
+      'READY standard-json-known-length-okhttp',
       'START standard-json',
       'FAIL standard-json ' + JSON.stringify({ failure: 'assertion', calls: [call] }),
     ]
@@ -647,13 +680,15 @@ it('distinguishes lost GET responses and complete POST bodies before a deliberat
           method: body ? 'POST' : 'GET',
           headers: body
             ? {
+                host: 'localhost:' + port,
                 'content-type': 'application/json',
                 'content-length': Buffer.byteLength(body),
                 'cache-control': 'no-store',
                 'accept-encoding': 'identity',
               }
             : {
-                authorization: 'Bearer ' + firstBearer,
+                host: 'localhost:' + port,
+                ...(path.startsWith('/loss-get') ? { authorization: 'Bearer ' + firstBearer } : {}),
                 'cache-control': 'no-store',
                 'accept-encoding': 'identity',
               },
@@ -683,8 +718,9 @@ it('distinguishes lost GET responses and complete POST bodies before a deliberat
   await expect(send('/loss-post', body)).rejects.toThrow();
   await expect(send('/loss-post-prefix', body)).rejects.toThrow();
   await expect(send('/retry-status-length', body)).resolves.toBe('{}');
-  await expect(get(standardPrefix + '/length-conflict')).rejects.toThrow();
-  await expect(get(standardPrefix + '/length-and-chunked')).rejects.toThrow();
+  for (let attempt = 0; attempt < 3; attempt++)
+    await expect(send('/length-conflict')).rejects.toThrow();
+  await expect(send('/length-and-chunked')).rejects.toThrow();
   await vi.waitFor(async () => {
     const events = (await (await fetch(`http://127.0.0.1:${port + 5}/events`)).json()) as {
       path: string;
@@ -714,8 +750,24 @@ it('distinguishes lost GET responses and complete POST bodies before a deliberat
         closed: true,
       },
     ]);
-    expect(rows('/length-conflict')).toMatchObject([{ fixtureCut: true, closed: true }]);
-    expect(rows('/length-and-chunked')).toMatchObject([{ fixtureCut: true, closed: true }]);
+    expect(rows('/length-conflict')).toHaveLength(3);
+    for (const row of rows('/length-conflict'))
+      expect(row).toMatchObject({
+        framingFault: 'conflicting-lengths',
+        fixtureCut: true,
+        closed: true,
+        iosPrimaryTarget: true,
+        requestComplete: true,
+      });
+    expect(rows('/length-and-chunked')).toMatchObject([
+      {
+        framingFault: 'length-and-transfer',
+        fixtureCut: true,
+        closed: true,
+        iosPrimaryTarget: true,
+        requestComplete: true,
+      },
+    ]);
   });
 
   type Snapshot = Parameters<typeof verifyStandardJson>[2];
@@ -731,9 +783,27 @@ it('distinguishes lost GET responses and complete POST bodies before a deliberat
   });
 
   // Use fixture receipts for the scenarios under review and fixed evidence for the prefix.
-  const log = [marker + 'READY standard-json-urlsession'];
-  const prelude: Snapshot['events'] = [];
-  const firstGet = probes.findIndex(({ id }) => id === 'get-loss');
+  const log = [marker + 'READY standard-json-known-length-urlsession'];
+  const evidence: Snapshot['events'] = [];
+  const observedCalls = new Map<
+    string,
+    { retryWindow: { openedAtMs: number; settledAtMs: number } }
+  >();
+  // Reproduce the fifth run's receipts, callbacks and client terminal times; offers are simulated.
+  const timingCases = new Map([
+    ['chunked-valid-rejected', { settled: 27, receipts: [25], offers: [25], confirmations: [30] }],
+    [
+      'conflicting-lengths',
+      {
+        settled: 114,
+        receipts: [33, 60, 111],
+        offers: [33, 60, 111],
+        confirmations: [46, 93, 128],
+      },
+    ],
+    ['length-and-transfer', { settled: 43, receipts: [40], offers: [40], confirmations: [53] }],
+    ['get-loss', { settled: 91, receipts: [33, 88], offers: [34], confirmations: [] }],
+  ]);
   const cases = probes.slice(0, probes.findIndex(({ id }) => id === 'post-retry-status') + 1);
   for (const [index, { id, path, result }] of cases.entries()) {
     const target = standardPrefix + path;
@@ -747,8 +817,8 @@ it('distinguishes lost GET responses and complete POST bodies before a deliberat
             : result === 'size' || result === 'status-503'
               ? result
               : 'success';
-    log.push(marker + 'START ' + id, marker + `PASS ${id} ${observed}`);
-    if (index >= firstGet) continue;
+    const startedAtMs = (index + 1) * 10_000;
+    const timing = timingCases.get(id);
     const coding = id.startsWith('gzip')
       ? 'gzip'
       : id === 'other-coding'
@@ -756,32 +826,131 @@ it('distinguishes lost GET responses and complete POST bodies before a deliberat
         : id === 'stacked-coding'
           ? 'stacked'
           : 'absent';
-    prelude.push({
-      ...status,
-      path: target,
-      method: 'GET',
-      responseCoding: coding,
-      configuredFraming:
-        id === 'chunked-valid' || id === 'limit-progressive'
-          ? 'chunked'
-          : id === 'close-delimited'
-            ? 'unobserved'
-            : 'length',
-      finished: result !== 'size' && (result !== 'reject' || id === 'close-delimited'),
-      fixtureCut: true,
-      offeredLimitPlusOne: true,
-    });
+    const framingFault = retryFramingFaults.get(path);
+    const matching =
+      index >= probes.findIndex(({ id }) => id === 'conflicting-lengths')
+        ? snapshot.events.filter((event) => event.path === target)
+        : [];
+    const entries = matching.length
+      ? matching
+      : [
+          {
+            ...status,
+            path: target,
+            method: 'GET',
+            iosPrimaryTarget: true,
+            responseCoding: coding,
+            configuredFraming:
+              id === 'chunked-valid-rejected'
+                ? 'chunked'
+                : id === 'close-delimited'
+                  ? 'unobserved'
+                  : 'length',
+            finished:
+              result !== 'size' &&
+              (result !== 'reject' || id === 'close-delimited' || id === 'chunked-valid-rejected'),
+            fixtureCut: true,
+            ...(framingFault
+              ? {
+                  framingFault,
+                  framingFaultOfferedAtMs: startedAtMs,
+                  framingFaultConfirmedAtMs: startedAtMs,
+                }
+              : {}),
+            configuredOversizeLength: id === 'limit-declared',
+            heldLengthEnd: 'peer-close',
+            closedAfterMs: 10,
+          },
+        ];
+    // Separate operation windows deterministically while keeping the fixture's actual fault evidence.
+    evidence.push(
+      ...entries.map((entry, reception) => ({
+        ...entry,
+        startedAtMs: startedAtMs + (timing?.receipts[reception] ?? reception * 100),
+        ...(entry.framingFaultOfferedAtMs === undefined
+          ? {}
+          : {
+              framingFaultOfferedAtMs:
+                startedAtMs + (timing?.offers[reception] ?? reception * 100 + 1),
+            }),
+        ...(entry.framingFaultConfirmedAtMs === undefined
+          ? {}
+          : {
+              framingFaultConfirmedAtMs:
+                startedAtMs + (timing?.confirmations[reception] ?? reception * 100 + 2),
+            }),
+        ...(entry.fixtureCutAtMs === undefined
+          ? {}
+          : { fixtureCutAtMs: startedAtMs + (timing?.offers[reception] ?? reception * 100 + 1) }),
+      })),
+    );
+    const diagnostic = {
+      retryWindow: {
+        openedAtMs: timing ? startedAtMs : startedAtMs - 10,
+        settledAtMs: startedAtMs + (timing?.settled ?? entries.length * 100 + 10),
+      },
+      calls: [
+        observed === 'success'
+          ? {
+              reservation: 'accepted',
+              native: 'success',
+              adapter: 'success',
+              status: 200,
+              bytes: 59,
+            }
+          : {
+              reservation: 'accepted',
+              native: 'rejected',
+              nativeKind: observed,
+              application: observed,
+            },
+      ],
+    };
+    observedCalls.set(id, diagnostic);
+    log.push(
+      marker + 'START ' + id,
+      marker + `PASS ${id} ${observed} ${JSON.stringify(diagnostic)}`,
+    );
   }
-  const actualPaths = new Set(cases.slice(firstGet).map(({ path }) => standardPrefix + path));
-  const evidence = [...prelude, ...snapshot.events.filter(({ path }) => actualPaths.has(path))];
-  function check(events: Snapshot['events'], id: string) {
-    return verifyStandardJson('ios', log.join('\n'), { ...snapshot, events }).scenarios.find(
+  expect(check(evidence, 'chunked-valid-rejected')).toMatchObject({
+    verdict: 'PASS',
+    server: {
+      retryWindowMs: 27,
+      samples: [
+        {
+          receivedAfterStartMs: 25,
+          faultOfferedAfterReceiptMs: 0,
+          faultConfirmedAfterReceiptMs: 5,
+        },
+      ],
+    },
+  });
+  const chunked = evidence.find((row) => row.path === standardPrefix + '/chunked-coding-absent')!;
+  const unconfirmed = { ...chunked };
+  delete unconfirmed.framingFaultConfirmedAtMs;
+  expect(
+    check(
+      evidence.map((row) => (row === chunked ? unconfirmed : row)),
+      'chunked-valid-rejected',
+    ),
+  ).toMatchObject({ verdict: 'NOT_RUN', reason: 'framing-fault-unconfirmed' });
+  function check(events: Snapshot['events'], id: string, markers = log) {
+    return verifyStandardJson('ios', markers.join('\n'), { ...snapshot, events }).scenarios.find(
       (scenario) => scenario.id === id,
     );
   }
+  expect(check(evidence, 'conflicting-lengths')).toMatchObject({
+    verdict: 'PASS',
+    server: { receptions: 3 },
+  });
+  expect(check(evidence, 'length-and-transfer')).toMatchObject({ verdict: 'PASS' });
+  expect(check(evidence, 'get-loss')).toMatchObject({ verdict: 'PASS', receptions: 2 });
   expect(check(evidence, 'get-loss-repeated')).toMatchObject({ verdict: 'PASS', receptions: 3 });
   expect(check(evidence, 'post-retry-status')).toMatchObject({ verdict: 'PASS' });
   expect(check([...evidence, status], 'post-retry-status')).toMatchObject({ verdict: 'FAIL' });
+  expect(check([...evidence, { ...status, destination: 'B' }], 'post-retry-status')).toMatchObject({
+    verdict: 'FAIL',
+  });
   const cut = evidence.findLast(({ path }) => path === standardPrefix + '/loss-get-always')!;
   const wrongBearer = evidence.map((row) =>
     row === cut ? { ...row, authorizationMatchesFixture: false } : row,
@@ -791,5 +960,233 @@ it('distinguishes lost GET responses and complete POST bodies before a deliberat
   expect(check([...evidence, late], 'get-loss-repeated')).toMatchObject({
     verdict: 'FAIL',
     receptions: 4,
+  });
+  const conflict = evidence.find((event) => event.path === standardPrefix + '/length-conflict')!;
+  const divergent = [...evidence, { ...conflict, destination: 'B' }];
+  expect(check(divergent, 'conflicting-lengths')).toMatchObject({ verdict: 'FAIL' });
+  expect(check(divergent, 'post-retry-status')).toMatchObject({
+    verdict: 'NOT_RUN',
+    observed: 'status-503',
+    reason: 'previous-scenario-unqualified',
+    diagnostic: { verdict: 'PASS' },
+    server: { receptions: 1, samples: [{ postBodyMatchesFixture: true, retryAfterZero: true }] },
+  });
+  expect(check([...divergent, status], 'post-retry-status')).toMatchObject({
+    verdict: 'NOT_RUN',
+    diagnostic: { verdict: 'FAIL', reason: 'wire-criteria-failed' },
+  });
+  const conflictRows = (change: Partial<Snapshot['events'][number]>) =>
+    evidence.map((row) => (row === conflict ? { ...row, ...change } : row));
+  // The second receipt is at 60 ms. Only the first offer must precede it.
+  expect(
+    check(
+      conflictRows({ framingFaultConfirmedAtMs: conflict.startedAtMs + 28 }),
+      'conflicting-lengths',
+    ),
+  ).toMatchObject({ verdict: 'PASS' });
+  expect(
+    check(conflictRows({ framingFault: 'length-and-transfer' }), 'conflicting-lengths'),
+  ).toMatchObject({ verdict: 'NOT_RUN', reason: 'framing-fault-unconfirmed' });
+  expect(check(conflictRows({ iosPrimaryTarget: false }), 'conflicting-lengths')).toMatchObject({
+    verdict: 'FAIL',
+  });
+  expect(check(conflictRows({ authorization: true }), 'conflicting-lengths')).toMatchObject({
+    verdict: 'FAIL',
+  });
+  const terminal = observedCalls.get('conflicting-lengths')!;
+  const justAfterTerminal = terminal.retryWindow.settledAtMs + 1;
+  expect(
+    check(
+      [
+        ...evidence,
+        {
+          ...conflict,
+          startedAtMs: justAfterTerminal,
+          framingFaultOfferedAtMs: justAfterTerminal + 1,
+        },
+      ],
+      'conflicting-lengths',
+    ),
+  ).toMatchObject({ verdict: 'FAIL' });
+  const secondConflict = evidence.find((row) => row.path === conflict.path && row !== conflict)!;
+  expect(
+    check(
+      evidence.map((row) =>
+        row === secondConflict
+          ? {
+              ...row,
+              startedAtMs: conflict.startedAtMs - 1,
+              framingFaultOfferedAtMs: conflict.startedAtMs,
+            }
+          : row,
+      ),
+      'conflicting-lengths',
+    ),
+  ).toMatchObject({ verdict: 'FAIL' });
+  expect(
+    check(
+      [
+        ...evidence,
+        {
+          ...conflict,
+          path: '/unexpected',
+          startedAtMs: conflict.startedAtMs + 10,
+        },
+      ],
+      'conflicting-lengths',
+    ),
+  ).toMatchObject({ verdict: 'FAIL' });
+  const nativeSuccess = {
+    ...terminal,
+    calls: [{ reservation: 'accepted', native: 'success', status: 200, bytes: 2 }],
+  };
+  const accepted = log.map((line) =>
+    line.startsWith(marker + 'PASS conflicting-lengths ')
+      ? marker + 'FAIL conflicting-lengths ' + JSON.stringify(nativeSuccess)
+      : line,
+  );
+  expect(check(evidence, 'conflicting-lengths', accepted)).toMatchObject({ verdict: 'FAIL' });
+  const exposedBytes = log.map((line) =>
+    line.startsWith(marker + 'PASS conflicting-lengths ')
+      ? marker +
+        'PASS conflicting-lengths response ' +
+        JSON.stringify({
+          ...terminal,
+          calls: [
+            {
+              reservation: 'accepted',
+              native: 'rejected',
+              nativeKind: 'response',
+              application: 'response',
+              bytes: 2,
+            },
+          ],
+        })
+      : line,
+  );
+  expect(check(evidence, 'conflicting-lengths', exposedBytes)).toMatchObject({ verdict: 'FAIL' });
+  const pending = log.map((line) =>
+    line.startsWith(marker + 'PASS conflicting-lengths ')
+      ? marker +
+        'PASS conflicting-lengths response ' +
+        JSON.stringify({
+          ...terminal,
+          calls: [{ reservation: 'accepted', native: 'pending' }],
+        })
+      : line,
+  );
+  expect(check(evidence, 'conflicting-lengths', pending)).toMatchObject({
+    verdict: 'NOT_RUN',
+    reason: 'terminal-native-result-unconfirmed',
+  });
+  const androidLog = log.map((line) =>
+    line.replace('known-length-urlsession', 'known-length-okhttp'),
+  );
+  const singleConflict = evidence.filter((row) => row.path !== conflict.path || row === conflict);
+  const checkAndroid = (events: Snapshot['events']) =>
+    verifyStandardJson('android', androidLog.join('\n'), { ...snapshot, events }).scenarios.find(
+      ({ id }) => id === 'conflicting-lengths',
+    );
+  expect(checkAndroid(singleConflict)).toMatchObject({ verdict: 'PASS' });
+  expect(checkAndroid(evidence)).toMatchObject({ verdict: 'FAIL' });
+});
+
+it('reports diagnostic evidence by TLS destination and preserves isolation checks after an official stop', () => {
+  type Snapshot = Parameters<typeof verifyStandardJson>[2];
+  const json: Snapshot['events'][number] = {
+    path: standardPrefix + '/json',
+    destination: 'B',
+    method: 'GET',
+    connectionId: 1,
+    requestedCoding: 'identity',
+    responseCoding: 'absent',
+    configuredFraming: 'length',
+    requestNoStore: true,
+    authorization: false,
+    authorizationMatchesFixture: false,
+    cookie: false,
+    contentTypeIsJson: false,
+    postBodyMatchesFixture: false,
+    headersSent: true,
+    responseStatus: 200,
+    responseStarted: false,
+    responseStartedAtMs: null,
+    startedAtMs: 5_000,
+    closed: true,
+    closedAfterMs: 1,
+    finished: true,
+  };
+  const identity = {
+    ...json,
+    path: standardPrefix + '/identity',
+    destination: 'A',
+    connectionId: 4,
+  };
+  const snapshot: Snapshot = {
+    overflow: false,
+    events: [
+      json,
+      { ...identity, authorization: true, authorizationMatchesFixture: true },
+      { ...identity, authorization: true, authorizationMatchesSecond: true },
+      identity,
+    ],
+    connections: [
+      { id: 1, destination: 'B', receivedBytes: true, tls: 'TLSv1.3' },
+      { id: 2, destination: 'unknown', receivedBytes: true, tls: null },
+      { id: 3, destination: 'wrong', receivedBytes: true, tls: null },
+      { id: 4, destination: 'A', receivedBytes: true, tls: 'TLSv1.3' },
+    ],
+  };
+  const log = [
+    'READY standard-json-known-length-urlsession',
+    ...plan.flatMap((id) => [
+      `START ${id}`,
+      `PASS ${id} ${id === 'tls-untrusted' || id === 'tls-wrong-name' ? 'network' : 'success'}`,
+    ]),
+    'DONE',
+  ]
+    .map((line) => marker + line)
+    .join('\n');
+  const report = verifyStandardJson('ios', log, snapshot);
+  expect(report).toMatchObject({ verdict: 'NOT_RUN', appCompleted: true });
+  const scenario = (id: string) => report.scenarios.find((result) => result.id === id);
+  for (const [id, destination, receptions] of [
+    ['tls-other-origin', 'B', 1],
+    ['tls-untrusted', 'unknown', 0],
+    ['tls-wrong-name', 'wrong', 0],
+  ]) {
+    expect(scenario(String(id))).toMatchObject({
+      verdict: 'NOT_RUN',
+      diagnostic: { verdict: 'PASS' },
+      server: {
+        destination,
+        receptions,
+        receptionConnections: receptions,
+        fixtureConnectionsWithBytes: 1,
+        fixtureConnectionsWithTls: receptions,
+      },
+    });
+  }
+  expect(scenario('identity-isolation')).toMatchObject({
+    verdict: 'NOT_RUN',
+    diagnostic: { verdict: 'PASS' },
+    server: {
+      receptions: 3,
+      receptionConnections: 1,
+      samples: Array.from({ length: 3 }, () => ({
+        expectedBearer: true,
+        cookiePresent: false,
+        connectionIdentified: true,
+      })),
+    },
+  });
+  const unexpected = verifyStandardJson('ios', log, {
+    ...snapshot,
+    events: [...snapshot.events, { ...json, destination: 'unknown', connectionId: 2 }],
+  });
+  expect(unexpected.scenarios.find(({ id }) => id === 'tls-untrusted')).toMatchObject({
+    verdict: 'NOT_RUN',
+    diagnostic: { verdict: 'FAIL' },
+    server: { destination: 'unknown', receptions: 1 },
   });
 });

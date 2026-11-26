@@ -15,6 +15,7 @@ import {
   message,
   postBody,
   prefix as standardJsonScope,
+  retryFramingFaults,
   secondBearer,
 } from './standard-json-scenarios.ts';
 
@@ -237,6 +238,10 @@ export async function startFixture(
     heldLengthEnd?: 'peer-close' | 'fixture-watchdog' | 'finished' | 'socket-error';
     fixtureCut?: boolean;
     fixtureCutAtMs?: number;
+    framingFault?: string;
+    framingFaultOfferedAtMs?: number;
+    framingFaultConfirmedAtMs?: number;
+    iosPrimaryTarget?: boolean;
     retryAfterZero?: boolean;
     requestComplete?: boolean;
     processed?: boolean;
@@ -316,8 +321,21 @@ export async function startFixture(
       closedAfterMs: null as number | null,
     };
     if (standardJson) {
-      event.authorizationMatchesSecond = req.headers.authorization === 'Bearer ' + secondBearer;
+      const authorization = req.headersDistinct.authorization ?? [];
+      event.authorization = authorization.length > 0;
+      event.authorizationMatchesFixture =
+        authorization.length === 1 && authorization[0] === 'Bearer ' + firstBearer;
+      event.authorizationMatchesSecond =
+        authorization.length === 1 && authorization[0] === 'Bearer ' + secondBearer;
       event.requestNoStore = req.headers['cache-control'] === 'no-store';
+      event.iosPrimaryTarget =
+        req.url === standardJsonScope + path &&
+        req.headersDistinct.host?.length === 1 &&
+        req.headers.host === 'localhost:' + basePort;
+      if (retryFramingFaults.has(path))
+        req.once('end', () => {
+          event.requestComplete = req.complete;
+        });
     }
     if (trackWire) {
       const connection = socketsByEndpoint.get(endpoint(destination, req.socket));
@@ -376,6 +394,13 @@ export async function startFixture(
       event.closed = true;
       event.closedAfterMs = Date.now() - started;
     });
+    const offerFramingFault = (fault: string) => {
+      event.framingFault = fault;
+      event.framingFaultOfferedAtMs = Date.now();
+      return () => {
+        event.framingFaultConfirmedAtMs = Date.now();
+      };
+    };
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Cache-Control', 'no-store');
     if (
@@ -516,7 +541,10 @@ export async function startFixture(
           ? `http://${hostname}:${basePort + 2}`
           : `https://${hostname}:${basePort + (match[2] === 'host' ? 1 : 0)}`;
       res.writeHead(Number(match[1]), { Location: `${target}/destination` }).end();
-    } else if (standardJson && path === '/slow/neighbour') {
+    } else if (
+      standardJson &&
+      ['/slow/neighbour', '/slow/timeout', '/slow/concurrency-one'].includes(path)
+    ) {
       res.setHeader('Content-Length', fixtureBytes.length);
       res.flushHeaders();
       res.write(fixtureBytes.subarray(0, 2), (error) => {
@@ -525,7 +553,10 @@ export async function startFixture(
           event.responseStartedAtMs = Date.now();
         }
       });
-      const timer = setTimeout(() => res.end(fixtureBytes.subarray(2)), 1200);
+      const timer = setTimeout(
+        () => res.end(fixtureBytes.subarray(2)),
+        path === '/slow/neighbour' ? 1200 : 3000,
+      );
       res.once('close', () => clearTimeout(timer));
     } else if (path === '/slow' || path.startsWith('/slow/')) {
       if (path === '/slow/cancel-length') res.setHeader('Content-Length', '1000');
@@ -540,7 +571,7 @@ export async function startFixture(
       });
       const interval = setInterval(() => res.write('x'), 100);
       res.on('close', () => clearInterval(interval));
-    } else if (path === '/truncated' || path === '/length') {
+    } else if ((!standardJson && path === '/truncated') || path === '/length') {
       event.fixtureCut = false;
       res.setHeader(
         path === '/length' ? 'Content-Length' : 'Transfer-Encoding',
@@ -552,12 +583,14 @@ export async function startFixture(
       const timer = setTimeout(() => {
         if (res.destroyed) return;
         event.fixtureCut = true;
+        if (standardJson) res.once('close', offerFramingFault('incomplete-length'));
         res.destroy();
       }, 100);
       res.on('close', () => clearTimeout(timer));
     } else if (path === '/unframed') {
       res.useChunkedEncodingByDefault = false;
       res.setHeader('Connection', 'close');
+      if (standardJson) res.once('finish', offerFramingFault('close-delimited'));
       res.flushHeaders();
       res.end('{}');
     } else if (path === '/multipart') {
@@ -605,11 +638,23 @@ export async function startFixture(
       (runtimeRoute && ['/curl-length-conflict', '/curl-length-and-chunked'].includes(path)) ||
       (standardJson && ['/length-conflict', '/length-and-chunked'].includes(path))
     ) {
-      event.fixtureCut = true;
-      const framing = path.endsWith('length-conflict')
+      const conflictingLengths = path.endsWith('length-conflict');
+      const framing = conflictingLengths
         ? 'Content-Length: 3\r\n\r\n{}'
         : 'Transfer-Encoding: chunked\r\n\r\n2\r\n{}\r\n0\r\n\r\n';
-      res.socket!.end('HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 2\r\n' + framing);
+      const socket = res.socket!;
+      if (standardJson) {
+        const confirm = offerFramingFault(
+          conflictingLengths ? 'conflicting-lengths' : 'length-and-transfer',
+        );
+        socket.once('finish', () => {
+          event.fixtureCut = true;
+          confirm();
+        });
+      } else {
+        event.fixtureCut = true;
+      }
+      socket.end('HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 2\r\n' + framing);
     } else if (runtimeRoute && path === '/standard-gzip-limit-plus-one') {
       const decoded = exactJson + ' ';
       const encoded = gzipSync(decoded);
@@ -631,16 +676,31 @@ export async function startFixture(
     } else if (path.startsWith('/chunked-') && matrixBodies.has(path)) {
       res.setHeader('Transfer-Encoding', 'chunked');
       if (path === '/chunked-coding-gzip') res.setHeader('Content-Encoding', 'gzip');
+      if (standardJson && path === '/chunked-coding-absent')
+        res.once('finish', offerFramingFault('unsupported-chunked'));
       res.end(matrixBodies.get(path));
-    } else if (path === '/chunked-incomplete-end') {
-      // Fixed fixture only: the last chunk starts, but the trailer section never terminates.
+    } else if (path === '/chunked-incomplete-end' || (standardJson && path === '/truncated')) {
+      // The fixed malformed frame omits the last chunk or its final delimiter.
       event.fixtureCut = false;
       const socket = res.socket!;
-      socket.write(
+      const prefix =
         'HTTP/1.1 200 OK\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n' +
-          (standardJson ? '' : 'Content-Encoding: identity\r\n') +
-          'Content-Type: application/json\r\n\r\n2\r\n{}\r\n',
-      );
+        (standardJson ? '' : 'Content-Encoding: identity\r\n') +
+        'Content-Type: application/json\r\n\r\n2\r\n{}\r\n';
+      if (standardJson) {
+        // Offer the entire malformed frame and EOF together, before a header-only rejection can race the timer.
+        const confirm = offerFramingFault(
+          path === '/truncated' ? 'missing-final-chunk' : 'incomplete-chunk-terminator',
+        );
+        socket.once('finish', () => {
+          event.fixtureCut = true;
+          event.configuredFraming = 'chunked';
+          confirm();
+        });
+        socket.end(prefix + (path === '/truncated' ? '' : '0\r\n'));
+        return;
+      }
+      socket.write(prefix);
       const timer = setTimeout(() => {
         if (socket.destroyed) return;
         socket.once('finish', () => {
@@ -751,10 +811,13 @@ export async function startFixture(
       }
       res.end(fixtureJson);
     } else if (path === '/challenge') {
+      if (standardJson) res.setHeader('Content-Length', 2);
       res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="fixture"' }).end('{}');
     } else if (path === '/invalid') res.end('{invalid');
-    else if (['/destination', '/reuse/one', '/reuse/two'].includes(path)) res.end(fixtureJson);
-    else res.writeHead(404).end('{}');
+    else if (['/destination', '/reuse/one', '/reuse/two'].includes(path)) {
+      if (standardJson) res.setHeader('Content-Length', fixtureBytes.length);
+      res.end(fixtureJson);
+    } else res.writeHead(404).end('{}');
   };
   const destinations = ['A', 'B', 'C', 'unknown', 'wrong'] as const;
   const credentials = async (name: string) => ({

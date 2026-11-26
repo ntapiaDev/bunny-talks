@@ -32,7 +32,7 @@ class Campaign(lab.Feasibility):
         self.runner = None
         self.staged = None
         self.reader = None
-        self.report.update(scope="ios-urlsession-standard-json", profile="hosted-observed",
+        self.report.update(scope="ios-urlsession-standard-json-known-length", profile="hosted-observed",
                            networkObservation="NOT_RUN",
                            standardHttpsRuntime="NOT_RUN", runtimeMinimumIOS="NOT_RUN",
                            physicalDevice="NOT_RUN", memory="NOT_RUN", energy="NOT_RUN")
@@ -185,17 +185,23 @@ class Campaign(lab.Feasibility):
         time.sleep(1)
         runner.pid = runner.launch_pid()
         deadline = time.monotonic() + 180
-        while time.monotonic() < deadline:
-            runner.check_alive(explicit_identity=True)
-            require(self.reader.poll() is None, "log-reader-exited")
+        collection_error = None
+        while True:
             lines = log.read_text(errors="replace").splitlines()
             # Unified logs identify the application process independently from the simulator collector.
             own = [line for line in lines if f"[{runner.pid}:" in line and MARKER in line]
+            try:
+                runner.check_alive(explicit_identity=True)
+                require(self.reader.poll() is None, "log-reader-exited")
+            except c2.StageError as error:
+                collection_error = error
+                break
             if any(MARKER + "DONE" in line or MARKER + "FAIL " in line or MARKER + "UNAVAILABLE" in line for line in own):
                 break
+            if time.monotonic() >= deadline:
+                collection_error = c2.StageError("qualification-timeout", verdict="NOT_RUN")
+                break
             time.sleep(0.2)
-        else:
-            raise c2.StageError("qualification-timeout", verdict="NOT_RUN")
         filtered = self.scratch / "filtered.log"
         filtered.write_text("\n".join(own))
         with urllib.request.urlopen("http://127.0.0.1:29448/runtime", timeout=5) as response:
@@ -208,6 +214,8 @@ class Campaign(lab.Feasibility):
         self.report["qualification"] = qualification
         self.report["pid"] = runner.pid
         require(len(qualification["scenarios"]) == 31, "plan-mismatch")
+        if collection_error:
+            raise collection_error
         require(qualification["verdict"] == "PASS", "qualification-rejected",
                 verdict=qualification["verdict"])
         return {"installedHashesMatch": True, "scenarios": 31}

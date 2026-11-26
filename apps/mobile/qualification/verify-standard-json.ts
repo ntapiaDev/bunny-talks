@@ -8,6 +8,7 @@ import {
   prefix,
   probes,
   requestTimeoutMs,
+  retryFramingFaults,
 } from './standard-json-scenarios.ts';
 
 type Event = {
@@ -29,8 +30,13 @@ type Event = {
   processed?: boolean;
   fixtureCut?: boolean;
   fixtureCutAtMs?: number;
+  framingFault?: string;
+  framingFaultOfferedAtMs?: number;
+  framingFaultConfirmedAtMs?: number;
+  iosPrimaryTarget?: boolean;
   retryAfterZero?: boolean;
-  offeredLimitPlusOne?: boolean;
+  configuredOversizeLength?: boolean;
+  heldLengthEnd?: string;
   headersSent: boolean;
   responseStatus?: number;
   responseStarted: boolean;
@@ -47,10 +53,25 @@ const missing = (reason: string): WireEvidence => ({ reason });
 type Snapshot = {
   overflow: boolean;
   events: Event[];
-  connections: { destination: string; receivedBytes: boolean; tls?: string | null }[];
+  connections: { id?: number; destination: string; receivedBytes: boolean; tls?: string | null }[];
 };
 const cut = (event: Event) => event.fixtureCut === true && event.closed && !event.finished;
+const keepEvidence = new Set([
+  'chunked-valid-rejected',
+  'limit-exact',
+  'limit-declared',
+  'timeout',
+  'cancel-neighbour',
+  'reuse',
+  'identity-isolation',
+  'redirect',
+  'auth-challenge',
+  'empty-204',
+]);
+const knownLength = (event: Event) =>
+  event.headersSent && event.configuredFraming === 'length' && event.responseCoding === 'absent';
 const interrupted = (event: Event) =>
+  knownLength(event) &&
   event.responseStarted &&
   event.closed &&
   !event.finished &&
@@ -58,6 +79,12 @@ const interrupted = (event: Event) =>
   event.closedAfterMs < 3500;
 const completePost = (event: Event) =>
   event.requestComplete && event.contentTypeIsJson && event.postBodyMatchesFixture;
+const neighbourOverlapped = (cancelled: Event, neighbour: Event) =>
+  cancelled.closedAfterMs !== null &&
+  neighbour.responseStartedAtMs !== null &&
+  neighbour.responseStartedAtMs <= cancelled.startedAtMs + cancelled.closedAfterMs &&
+  neighbour.closedAfterMs !== null &&
+  neighbour.startedAtMs + neighbour.closedAfterMs > cancelled.startedAtMs + cancelled.closedAfterMs;
 
 const codings = new Map([
   ['/coding-gzip', 'gzip'],
@@ -73,6 +100,17 @@ const cutPaths = new Set([
   '/length-conflict',
   '/length-and-chunked',
 ]);
+const knownFramingFaults = new Set(retryFramingFaults.values());
+const tlsEstablished = (connection: Snapshot['connections'][number]) =>
+  connection.tls === 'TLSv1.2' || connection.tls === 'TLSv1.3';
+const elapsed = (end: number | undefined, start: number | undefined) =>
+  end !== undefined &&
+  start !== undefined &&
+  Number.isSafeInteger(end - start) &&
+  end - start >= 0 &&
+  end - start <= 120_000
+    ? end - start
+    : undefined;
 
 function readApp(log: string, profile: string) {
   const lines = log.split(/\r?\n/).flatMap((line) => {
@@ -80,39 +118,49 @@ function readApp(log: string, profile: string) {
     if (at < 0) return [];
     return [line.slice(at + marker.length).trim()];
   });
-  const ready = lines.shift() === 'READY standard-json-' + profile;
+  const ready = lines.shift() === 'READY standard-json-known-length-' + profile;
   const observed = new Map<string, string>();
   const diagnostics = new Map<string, ReturnType<typeof readDiagnostic>>();
-  if (!ready) return { observed, diagnostics, done: false, missing: 'app-readiness-unconfirmed' };
+  const started = new Set<string>();
+  if (!ready)
+    return { observed, diagnostics, started, done: false, missing: 'app-readiness-unconfirmed' };
   for (const id of plan) {
     const start = lines.shift();
     if (start === undefined)
-      return { observed, diagnostics, done: false, missing: 'scenario-start-missing' };
+      return { observed, diagnostics, started, done: false, missing: 'scenario-start-missing' };
     if (start !== 'START ' + id)
       return {
-        observed: new Map<string, string>(),
+        observed,
         diagnostics,
+        started,
         done: false,
         missing: 'unexpected-scenario-start',
       };
+    started.add(id);
     const result = lines.shift();
     const fail = /^FAIL ([a-z0-9-]+)(?: (\{.*\}))?$/.exec(result ?? '');
     if (fail?.[1] === id) {
       observed.set(id, 'fail');
       diagnostics.set(id, readDiagnostic(fail[2]));
-      return { observed, diagnostics, done: false };
+      return { observed, diagnostics, started, done: false };
     }
     const pass =
       /^PASS ([a-z0-9-]+) (success|response|network|size|redirect|timeout|status-401|status-503)(?: (\{.*\}))?$/.exec(
         result ?? '',
       );
     if (pass?.[1] !== id)
-      return { observed, diagnostics, done: false, missing: 'scenario-outcome-missing' };
+      return { observed, diagnostics, started, done: false, missing: 'scenario-outcome-missing' };
     observed.set(id, pass[2]!);
     diagnostics.set(id, readDiagnostic(pass[3]));
   }
   const done = lines.length === 1 && lines[0] === 'DONE';
-  return { observed, diagnostics, done, missing: done ? undefined : 'app-completion-unconfirmed' };
+  return {
+    observed,
+    diagnostics,
+    started,
+    done,
+    missing: done ? undefined : 'app-completion-unconfirmed',
+  };
 }
 
 export function verifyStandardJson(platform: 'ios' | 'android', log: string, snapshot: Snapshot) {
@@ -124,6 +172,100 @@ export function verifyStandardJson(platform: 'ios' | 'android', log: string, sna
     event.requestNoStore === true && event.requestedCoding === 'identity' && !event.cookie;
   const anonymous = (event: Event) => clean(event) && !event.authorization;
   const byId = new Map(probes.map((probe) => [probe.id, probe]));
+  const tlsConnections = new Map(
+    connections
+      .filter((connection) => connection.receivedBytes && tlsEstablished(connection))
+      .map((connection) => [connection.id, connection.destination]),
+  );
+
+  function retrySequence(
+    id: string,
+    entries: Event[],
+    offeredAt: (event: Event) => number | undefined,
+    result: string,
+  ): WireEvidence {
+    const diagnostic = app.diagnostics.get(id);
+    const timing = diagnostic?.retryWindow;
+    if (!diagnostic || !timing || timing.openedAtMs > timing.settledAtMs)
+      return missing('retry-window-unconfirmed');
+    const { openedAtMs, settledAtMs } = timing;
+    if (entries.some((event) => event.iosPrimaryTarget === false)) return 'FAIL';
+    if (
+      entries.some(
+        (event) =>
+          Number.isSafeInteger(event.startedAtMs) &&
+          (event.startedAtMs >= openedAtMs + requestTimeoutMs || event.startedAtMs > settledAtMs),
+      )
+    )
+      return 'FAIL';
+    if (
+      entries.some(
+        (event) => !Number.isSafeInteger(event.startedAtMs) || event.startedAtMs < openedAtMs,
+      )
+    )
+      return missing('retry-receipt-clock-unconfirmed');
+    const otherPath = events.filter(
+      (event) =>
+        event.path !== entries[0]!.path &&
+        event.startedAtMs >= openedAtMs &&
+        event.startedAtMs <= settledAtMs,
+    );
+    if (
+      otherPath.some((event) => event.startedAtMs > openedAtMs && event.startedAtMs < settledAtMs)
+    )
+      return 'FAIL';
+    if (otherPath.length) return missing('retry-path-timing-ambiguous');
+    if (entries.some((event) => event.requestComplete === false)) return 'FAIL';
+    if (
+      entries.some(
+        (event) =>
+          event.iosPrimaryTarget !== true ||
+          event.requestComplete !== true ||
+          event.connectionId === undefined ||
+          tlsConnections.get(event.connectionId) !== event.destination,
+      )
+    )
+      return missing('retry-request-or-connection-unconfirmed');
+    for (const [index, event] of entries.entries()) {
+      // The server may confirm a write or close after the client has already rejected it.
+      const currentFault = offeredAt(event);
+      if (
+        currentFault !== undefined &&
+        (!Number.isSafeInteger(currentFault) ||
+          currentFault < event.startedAtMs ||
+          currentFault > settledAtMs)
+      )
+        return missing('retry-fault-offer-clock-unconfirmed');
+      const previous = entries[index - 1];
+      if (!previous) continue;
+      const fault = offeredAt(previous);
+      if (fault === undefined) return missing('previous-retry-fault-unconfirmed');
+      if (event.startedAtMs < fault) return 'FAIL';
+    }
+    const call = diagnostic.calls[0];
+    if (diagnostic.calls.length > 1) return 'FAIL';
+    if (
+      !call ||
+      call.reservation !== 'accepted' ||
+      call.native === 'pending' ||
+      call.native === 'not-called' ||
+      call.native === 'threw' ||
+      call.native === 'invalid'
+    )
+      return missing('terminal-native-result-unconfirmed');
+    if (result === 'success')
+      return call.native === 'success' && call.adapter === 'success' ? 'PASS' : 'FAIL';
+    const kindMatches =
+      result === 'timeout'
+        ? ['network', 'response', 'timeout'].some((kind) => kind === call.nativeKind)
+        : call.nativeKind === result;
+    return call.native === 'rejected' &&
+      call.bytes === undefined &&
+      kindMatches &&
+      call.application === result
+      ? 'PASS'
+      : 'FAIL';
+  }
 
   function wire(id: string, result: string): WireEvidence {
     const probe = byId.get(id);
@@ -135,7 +277,9 @@ export function verifyStandardJson(platform: 'ios' | 'android', log: string, sna
           return missing(first.length ? 'no-second-reception' : 'no-first-reception');
         return first.length === 1 &&
           second.length === 1 &&
-          [...first, ...second].every((event) => anonymous(event) && event.finished) &&
+          [...first, ...second].every(
+            (event) => anonymous(event) && knownLength(event) && event.finished,
+          ) &&
           first[0]!.connectionId !== undefined &&
           first[0]!.connectionId === second[0]!.connectionId
           ? 'PASS'
@@ -146,7 +290,7 @@ export function verifyStandardJson(platform: 'ios' | 'android', log: string, sna
         if (entries.some((event) => !clean(event))) return 'FAIL';
         if (entries.length < 3) return missing('missing-identity-receptions');
         return entries.length === 3 &&
-          entries.every((event) => event.finished) &&
+          entries.every((event) => knownLength(event) && event.finished) &&
           entries[0]!.authorizationMatchesFixture &&
           entries[1]!.authorizationMatchesSecond &&
           !entries[2]!.authorization
@@ -164,12 +308,10 @@ export function verifyStandardJson(platform: 'ios' | 'android', log: string, sna
         anonymous(cancelled!) &&
         anonymous(neighbour!) &&
         interrupted(cancelled!) &&
+        cancelled!.closedAfterMs! >= 200 &&
+        knownLength(neighbour!) &&
         neighbour!.finished &&
-        neighbour!.responseStartedAtMs !== null &&
-        neighbour!.responseStartedAtMs <= cancelled!.startedAtMs + cancelled!.closedAfterMs! &&
-        neighbour!.closedAfterMs !== null &&
-        neighbour!.startedAtMs + neighbour!.closedAfterMs >
-          cancelled!.startedAtMs + cancelled!.closedAfterMs!
+        neighbourOverlapped(cancelled!, neighbour!)
         ? 'PASS'
         : 'FAIL';
     }
@@ -177,8 +319,9 @@ export function verifyStandardJson(platform: 'ios' | 'android', log: string, sna
     const { path, method = 'GET', destination = 'A' } = probe;
     const entries = rows(path, destination);
     const lostGet = probe.result === 'lost-get';
+    const framingFault = retryFramingFaults.get(path);
     if (
-      (lostGet || id === 'post-retry-status') &&
+      (lostGet || framingFault || method === 'POST') &&
       events.some((event) => event.path === prefix + path && event.destination !== destination)
     )
       return 'FAIL';
@@ -230,12 +373,36 @@ export function verifyStandardJson(platform: 'ios' | 'android', log: string, sna
         return missing('get-loss-cut-unconfirmed');
       if (!losses.every((event) => event.requestComplete && event.processed))
         return missing('get-loss-processing-unconfirmed');
-      if (
-        last.finished &&
-        !(last.requestComplete && last.headersSent && last.responseCoding === 'absent')
-      )
+      if (last.finished && !(last.requestComplete && knownLength(last)))
         return missing('get-recovery-response-unconfirmed');
-      return last.finished === (result === 'success') ? 'PASS' : 'FAIL';
+      if (last.finished !== (result === 'success')) return 'FAIL';
+      return platform === 'ios'
+        ? retrySequence(id, entries, (event) => event.fixtureCutAtMs, result)
+        : 'PASS';
+    }
+    if (framingFault && platform === 'ios') {
+      const sequence = retrySequence(id, entries, (event) => event.framingFaultOfferedAtMs, result);
+      if (sequence !== 'PASS') return sequence;
+      const completedFault = id === 'chunked-valid-rejected' || id === 'close-delimited';
+      if (
+        entries.some(
+          (event) =>
+            !(completedFault
+              ? event.finished &&
+                event.headersSent &&
+                event.responseCoding === 'absent' &&
+                event.configuredFraming ===
+                  (id === 'chunked-valid-rejected' ? 'chunked' : 'unobserved')
+              : cut(event)) ||
+            event.framingFault !== framingFault ||
+            event.framingFaultOfferedAtMs === undefined ||
+            event.framingFaultConfirmedAtMs === undefined ||
+            !Number.isSafeInteger(event.framingFaultConfirmedAtMs) ||
+            event.framingFaultConfirmedAtMs < event.framingFaultOfferedAtMs,
+        )
+      )
+        return missing('framing-fault-unconfirmed');
+      return 'PASS';
     }
     if (entries.length !== 1) return 'FAIL';
     if (method === 'POST' && !completePost(first!))
@@ -250,12 +417,17 @@ export function verifyStandardJson(platform: 'ios' | 'android', log: string, sna
         : missing('missing-post-cut-evidence');
     }
     if (cutPaths.has(path)) return cut(first!) ? 'PASS' : missing('fixture-cut-unconfirmed');
-    if (id === 'limit-progressive') {
-      return first!.configuredFraming === 'chunked' && first!.offeredLimitPlusOne === true
-        ? first!.closed && !first!.finished
-          ? 'PASS'
-          : 'FAIL'
-        : missing('progressive-limit-unconfirmed');
+    if (id === 'limit-declared') {
+      if (!knownLength(first) || first.configuredOversizeLength !== true)
+        return missing('excessive-declared-length-unconfirmed');
+      if (!first.closed || first.heldLengthEnd === undefined)
+        return missing('held-response-end-unconfirmed');
+      return !first.finished &&
+        first.closedAfterMs !== null &&
+        first.closedAfterMs < requestTimeoutMs &&
+        (first.heldLengthEnd === 'peer-close' || first.heldLengthEnd === 'socket-error')
+        ? 'PASS'
+        : 'FAIL';
     }
     if (id === 'timeout')
       return interrupted(first!) && first!.closedAfterMs! >= 450 && first!.closedAfterMs! < 2000
@@ -267,16 +439,15 @@ export function verifyStandardJson(platform: 'ios' | 'android', log: string, sna
       return first.responseCoding === coding ? 'PASS' : missing('unexpected-response-coding');
     }
     if (!first.headersSent) return missing('headers-not-observed');
-    if (
-      id === 'standard-json' ||
-      id === 'chunked-valid' ||
-      id === 'limit-exact' ||
-      id === 'close-delimited'
-    ) {
-      const framing =
-        id === 'close-delimited' ? 'unobserved' : id === 'chunked-valid' ? 'chunked' : 'length';
-      if (first.configuredFraming !== framing) return missing('unexpected-configured-framing');
-    }
+    const framing =
+      id === 'chunked-valid-rejected'
+        ? 'chunked'
+        : id === 'close-delimited' || id === 'empty-204'
+          ? 'unobserved'
+          : 'length';
+    if (id !== 'redirect' && first.configuredFraming !== framing)
+      return missing('unexpected-configured-framing');
+    if (id === 'empty-204' && first.responseStatus !== 204) return missing('empty-204-unconfirmed');
     if (first.responseCoding !== 'absent') return missing('unexpected-response-coding');
     if (!first.finished && id !== 'redirect') return missing('response-finish-unconfirmed');
     return 'PASS';
@@ -284,6 +455,7 @@ export function verifyStandardJson(platform: 'ios' | 'android', log: string, sna
 
   function serverDiagnostic(id: string) {
     const probe = byId.get(id);
+    const timing = app.diagnostics.get(id)?.retryWindow;
     const paths = probe
       ? [probe.path]
       : id === 'reuse'
@@ -291,27 +463,65 @@ export function verifyStandardJson(platform: 'ios' | 'android', log: string, sna
         : id === 'identity-isolation'
           ? ['/identity']
           : ['/slow/concurrency-one', '/slow/neighbour'];
-    const entries = events.filter(
-      (event) =>
-        paths.some((path) => event.path === prefix + path) ||
-        (id === 'redirect' && event.path === '/destination'),
+    const destination = probe?.destination ?? 'A';
+    const matchingPath = events.filter((event) =>
+      paths.some((path) => event.path === prefix + path),
     );
-    const targetConnections = connections.filter(
-      (row) => row.destination === (probe?.destination ?? 'A'),
-    );
+    const entries = matchingPath.filter((event) => event.destination === destination);
+    const targetConnections = connections.filter((row) => row.destination === destination);
+    const cancelled = id === 'cancel-neighbour' ? rows('/slow/concurrency-one') : [];
+    const neighbour = id === 'cancel-neighbour' ? rows('/slow/neighbour') : [];
     return {
+      destination,
+      retryWindowMs: elapsed(timing?.settledAtMs, timing?.openedAtMs),
       fixtureConnectionsToDestination: targetConnections.length,
       fixtureConnectionsWithBytes: targetConnections.filter((row) => row.receivedBytes === true)
         .length,
-      fixtureConnectionsWithTls: targetConnections.filter(
-        (row) => row.tls === 'TLSv1.2' || row.tls === 'TLSv1.3',
-      ).length,
+      fixtureConnectionsWithTls: targetConnections.filter(tlsEstablished).length,
       receptionConnections: new Set(
         entries.flatMap((event) => (event.connectionId === undefined ? [] : [event.connectionId])),
       ).size,
       receptions: entries.length,
-      samples: entries.slice(0, 8).map((event) => ({
-        expectedDestination: event.destination === (probe?.destination ?? 'A'),
+      // The three TLS probes share /json, so another listener's row belongs to another scenario.
+      ...(probe?.path !== '/json'
+        ? { offTargetReceptions: matchingPath.length - entries.length }
+        : {}),
+      ...(id === 'redirect'
+        ? {
+            redirectedReceptions: events.filter((event) => event.path === '/destination').length,
+          }
+        : {}),
+      ...(cancelled.length === 1 && neighbour.length === 1
+        ? { neighbourOverlapped: neighbourOverlapped(cancelled[0]!, neighbour[0]!) }
+        : {}),
+      samples: entries.slice(0, 8).map((event, index) => ({
+        connectionIdentified: event.connectionId !== undefined,
+        expectedMethod: event.method === (probe?.method ?? 'GET'),
+        expectedBearer:
+          id === 'identity-isolation'
+            ? index === 0
+              ? event.authorizationMatchesFixture === true
+              : index === 1
+                ? event.authorizationMatchesSecond === true
+                : event.authorization === false
+            : probe?.bearer === firstBearer
+              ? event.authorizationMatchesFixture === true
+              : event.authorization === false,
+        cookiePresent: event.cookie === true,
+        ...(timing
+          ? {
+              exactTarget: event.iosPrimaryTarget === true,
+              receivedAfterStartMs: elapsed(event.startedAtMs, timing.openedAtMs),
+              faultOfferedAfterReceiptMs: elapsed(
+                event.framingFaultOfferedAtMs ?? event.fixtureCutAtMs,
+                event.startedAtMs,
+              ),
+              faultConfirmedAfterReceiptMs: elapsed(
+                event.framingFaultConfirmedAtMs,
+                event.startedAtMs,
+              ),
+            }
+          : {}),
         framing: ['length', 'chunked', 'unobserved'].includes(event.configuredFraming)
           ? event.configuredFraming
           : 'other',
@@ -327,17 +537,62 @@ export function verifyStandardJson(platform: 'ios' | 'android', log: string, sna
         explicitResponseStartObserved: event.responseStarted === true,
         requestComplete:
           typeof event.requestComplete === 'boolean' ? event.requestComplete : undefined,
+        processed: typeof event.processed === 'boolean' ? event.processed : undefined,
+        ...(probe?.method === 'POST'
+          ? {
+              contentTypeIsJson: event.contentTypeIsJson === true,
+              postBodyMatchesFixture: event.postBodyMatchesFixture === true,
+              ...(id === 'post-retry-status'
+                ? { retryAfterZero: event.retryAfterZero === true }
+                : {}),
+            }
+          : {}),
         finished: event.finished === true,
         closed: event.closed === true,
+        closedAfterMs:
+          typeof event.closedAfterMs === 'number' &&
+          Number.isInteger(event.closedAfterMs) &&
+          event.closedAfterMs >= 0 &&
+          event.closedAfterMs <= 120_000
+            ? event.closedAfterMs
+            : undefined,
         fixtureCut: event.fixtureCut === true,
+        framingFault:
+          event.framingFault && knownFramingFaults.has(event.framingFault)
+            ? event.framingFault
+            : undefined,
+        excessiveDeclaredLength: event.configuredOversizeLength === true,
+        heldLengthEnd: ['peer-close', 'socket-error', 'fixture-watchdog', 'finished'].find(
+          (value) => value === event.heldLengthEnd,
+        ),
       })),
+    };
+  }
+
+  function scenarioDiagnostics(id: string) {
+    const diagnostic = app.diagnostics.get(id);
+    return {
+      client: diagnostic && { failure: diagnostic.failure, calls: diagnostic.calls },
+      server: serverDiagnostic(id),
     };
   }
 
   let stopped = false;
   const scenarios = plan.map((id) => {
     const observed = app.observed.get(id);
-    if (stopped || !observed) return { id, verdict: 'NOT_RUN' as const };
+    if (!observed) {
+      return {
+        id,
+        verdict: 'NOT_RUN' as const,
+        ...(app.started.has(id)
+          ? {
+              appStarted: true,
+              reason: stopped ? 'previous-scenario-unqualified' : 'scenario-outcome-missing',
+              ...scenarioDiagnostics(id),
+            }
+          : {}),
+      };
+    }
     const wireEvidence = overflow !== false ? missing('fixture-overflow') : wire(id, observed);
     const evidence = typeof wireEvidence === 'string' ? wireEvidence : 'NOT_RUN';
     const expected = byId.get(id)?.result;
@@ -355,24 +610,40 @@ export function verifyStandardJson(platform: 'ios' | 'android', log: string, sna
                 expected === 'status-503'
               ? [expected]
               : ['success'];
-    const verdict = evidence === 'PASS' && !expectedOutcomes.includes(observed) ? 'FAIL' : evidence;
-    stopped = verdict !== 'PASS';
+    const assessed =
+      evidence === 'PASS' && !expectedOutcomes.includes(observed) ? 'FAIL' : evidence;
+    const reason =
+      assessed === 'PASS'
+        ? undefined
+        : typeof wireEvidence !== 'string'
+          ? wireEvidence.reason
+          : wireEvidence === 'FAIL'
+            ? 'wire-criteria-failed'
+            : 'unexpected-app-outcome';
+    const verdict = stopped ? 'NOT_RUN' : assessed;
+    const afterStop = stopped;
+    stopped ||= assessed !== 'PASS';
     const probe = byId.get(id);
     return {
       id,
       verdict,
       observed,
-      ...(verdict !== 'PASS'
+      ...(afterStop
         ? {
-            reason:
-              typeof wireEvidence !== 'string'
-                ? wireEvidence.reason
-                : wireEvidence === 'FAIL'
-                  ? 'wire-criteria-failed'
-                  : 'unexpected-app-outcome',
-            client: app.diagnostics.get(id),
-            server: serverDiagnostic(id),
+            reason: 'previous-scenario-unqualified',
+            diagnostic: { verdict: assessed, reason },
           }
+        : reason
+          ? { reason }
+          : {}),
+      ...(verdict !== 'PASS' ||
+      keepEvidence.has(id) ||
+      probe?.method === 'POST' ||
+      probe?.path === '/json' ||
+      (platform === 'ios' &&
+        probe &&
+        (probe.result === 'lost-get' || retryFramingFaults.has(probe.path)))
+        ? scenarioDiagnostics(id)
         : {}),
       ...(probe?.result === 'lost-get'
         ? {
@@ -386,7 +657,12 @@ export function verifyStandardJson(platform: 'ios' | 'android', log: string, sna
     : app.done && scenarios.every((row) => row.verdict === 'PASS')
       ? 'PASS'
       : 'NOT_RUN';
-  return { verdict, scenarios, ...(app.missing ? { appEvidence: app.missing } : {}) };
+  return {
+    verdict,
+    scenarios,
+    appCompleted: app.done,
+    ...(app.missing ? { appEvidence: app.missing } : {}),
+  };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

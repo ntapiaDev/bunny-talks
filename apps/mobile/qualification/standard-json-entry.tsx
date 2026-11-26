@@ -19,6 +19,7 @@ import {
   prefix,
   probes,
   requestTimeoutMs,
+  retryFramingFaults,
   secondBearer,
 } from './standard-json-scenarios';
 
@@ -39,9 +40,9 @@ function expectJson(value: unknown) {
 async function qualify() {
   const profile =
     Platform.OS === 'ios'
-      ? 'standard-json-urlsession'
+      ? 'standard-json-known-length-urlsession'
       : Platform.OS === 'android'
-        ? 'standard-json-okhttp'
+        ? 'standard-json-known-length-okhttp'
         : null;
   assert(profile && 'HermesInternal' in globalThis);
   const native = requireNativeModule<ApplicationHttpsModule & { qualificationProfile?(): string }>(
@@ -51,6 +52,7 @@ async function qualify() {
   const host = Platform.OS === 'ios' ? 'localhost' : '10.0.2.2';
   report('READY ' + profile);
   const calls: CallDiagnostic[] = [];
+  let retryWindow: { openedAtMs: number; settledAtMs?: number } | undefined;
 
   function call(
     path: string,
@@ -61,6 +63,7 @@ async function qualify() {
       timeoutMs = requestTimeoutMs,
       signal,
       status = 200,
+      observeRetry = false,
     }: {
       destination?: keyof typeof offsets;
       method?: 'GET' | 'POST';
@@ -68,9 +71,11 @@ async function qualify() {
       timeoutMs?: number;
       signal?: AbortSignal;
       status?: number;
+      observeRetry?: boolean;
     } = {},
   ) {
     let raw: unknown;
+    let execution: Promise<unknown> | undefined;
     const diagnostic: CallDiagnostic = { reservation: 'not-called', native: 'not-called' };
     calls.push(diagnostic);
     const transport = createNativeHttpsTransport(() => ({
@@ -84,7 +89,8 @@ async function qualify() {
       async execute(...args) {
         diagnostic.native = 'pending';
         try {
-          raw = await native.execute(...args);
+          execution = native.execute(...args);
+          raw = await execution;
           Object.assign(diagnostic, describeNativeResult(raw));
         } catch (error) {
           diagnostic.native = 'threw';
@@ -103,37 +109,55 @@ async function qualify() {
         return result;
       },
     });
+    const timing = observeRetry ? { openedAtMs: Date.now(), settledAtMs: 0 } : undefined;
+    retryWindow = timing;
+    const pending = client
+      .request({
+        method,
+        path: prefix + path,
+        ...(method === 'POST' ? { body: postBody } : {}),
+        ...(bearer === undefined ? {} : { bearerToken: bearer }),
+        ...(signal === undefined ? {} : { signal }),
+        expectedStatuses: [status],
+      })
+      .catch((error: unknown) => {
+        if (timing) timing.settledAtMs = Date.now();
+        diagnostic.application =
+          error instanceof ApplicationHttpError ? httpFailure(error.kind) : 'unexpected';
+        if (error instanceof ApplicationHttpError && httpStatus(error.status) !== undefined)
+          diagnostic.status = httpStatus(error.status);
+        throw error;
+      });
     return {
-      pending: client
-        .request({
-          method,
-          path: prefix + path,
-          ...(method === 'POST' ? { body: postBody } : {}),
-          ...(bearer === undefined ? {} : { bearerToken: bearer }),
-          ...(signal === undefined ? {} : { signal }),
-          expectedStatuses: [status],
-        })
-        .catch((error: unknown) => {
-          diagnostic.application =
-            error instanceof ApplicationHttpError ? httpFailure(error.kind) : 'unexpected';
-          if (error instanceof ApplicationHttpError && httpStatus(error.status) !== undefined)
-            diagnostic.status = httpStatus(error.status);
-          throw error;
-        }),
+      pending: timing
+        ? pending.then((value) => {
+            timing.settledAtMs = Date.now();
+            return value;
+          })
+        : pending,
       nativeRejected: () =>
         !!raw && typeof raw === 'object' && 'ok' in raw && raw.ok === false && !('bytes' in raw),
+      async observeTerminal() {
+        if (observeRetry && diagnostic.native === 'pending' && execution) {
+          // A JS timeout can precede the acknowledgement of native cancellation.
+          await Promise.race([execution.catch(() => undefined), wait(250)]);
+        }
+      },
     };
   }
 
   const scenarios = probes.map((probe) => ({
     id: probe.id,
     async run() {
-      const { pending, nativeRejected } = call(probe.path, {
+      const { pending, nativeRejected, observeTerminal } = call(probe.path, {
         ...(probe.destination ? { destination: probe.destination } : {}),
         ...(probe.method ? { method: probe.method } : {}),
         ...(probe.bearer ? { bearer: probe.bearer } : {}),
         ...(probe.result === 'timeout' ? { timeoutMs: 900 } : {}),
         ...(probe.result === 'empty' ? { status: 204 } : {}),
+        observeRetry:
+          Platform.OS === 'ios' &&
+          (probe.result === 'lost-get' || retryFramingFaults.has(probe.path)),
       });
       let result: unknown;
       try {
@@ -143,7 +167,10 @@ async function qualify() {
         const kind = error.kind;
         if (probe.result === 'status-503' && kind === 'status' && error.status === 503)
           return 'status-503';
-        if (probe.result === 'lost-get' && kind === 'timeout') return kind;
+        if (probe.result === 'lost-get' && kind === 'timeout') {
+          await observeTerminal();
+          return kind;
+        }
         if (probe.result === 'auth' && kind === 'status' && error.status === 401)
           return 'status-401';
         if (probe.result === 'auth') {
@@ -237,10 +264,11 @@ async function qualify() {
 
   for (const { id, run } of scenarios) {
     calls.length = 0;
+    retryWindow = undefined;
     report('START ' + id);
     try {
       const result = await run();
-      report(`PASS ${id} ${result} ${JSON.stringify({ calls })}`);
+      report(`PASS ${id} ${result} ${JSON.stringify({ calls, retryWindow })}`);
     } catch (error) {
       const failure =
         error instanceof QualificationAssertion
@@ -248,7 +276,7 @@ async function qualify() {
           : error instanceof ApplicationHttpError
             ? httpFailure(error.kind)
             : 'unexpected';
-      report(`FAIL ${id} ${JSON.stringify({ failure, calls })}`);
+      report(`FAIL ${id} ${JSON.stringify({ failure, calls, retryWindow })}`);
       return;
     }
   }

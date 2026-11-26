@@ -87,8 +87,15 @@ export function readDiagnostic(encoded: string | undefined) {
   try {
     const value = fields(JSON.parse(encoded));
     if (!Array.isArray(value.calls) || value.calls.length > 3) return undefined;
+    const window = fields(value.retryWindow);
+    const openedAtMs = integer(window.openedAtMs, 1, Number.MAX_SAFE_INTEGER);
+    const settledAtMs = integer(window.settledAtMs, 1, Number.MAX_SAFE_INTEGER);
     return {
       failure: choice(value.failure, [...httpFailures, 'assertion', 'unexpected']),
+      retryWindow:
+        openedAtMs !== undefined && settledAtMs !== undefined
+          ? { openedAtMs, settledAtMs }
+          : undefined,
       calls: value.calls.map((entry: unknown): CallDiagnostic => {
         const call = fields(entry);
         return {

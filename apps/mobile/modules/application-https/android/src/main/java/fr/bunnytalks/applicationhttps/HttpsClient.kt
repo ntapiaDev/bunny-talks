@@ -79,7 +79,7 @@ internal object HttpsClient {
         call.cancel()
         return failure("redirect")
       }
-      if (!hasExplicitFraming(it)) throw IOException()
+      if (!BuildConfig.STANDARD_JSON_QUALIFICATION && !hasExplicitFraming(it)) throw IOException()
       // OkHttp removes this header for transparently decoded gzip.
       val encodings = it.headers("Content-Encoding")
       if (encodings.isNotEmpty() && (BuildConfig.STANDARD_JSON_QUALIFICATION ||
@@ -88,7 +88,8 @@ internal object HttpsClient {
         return failure("response")
       }
       val body = it.body ?: throw IOException()
-      val bytes = BoundedBodyReader.read(body.byteStream(), limit, body.contentLength())
+      val length = if (BuildConfig.STANDARD_JSON_QUALIFICATION) knownLength(it) else body.contentLength()
+      val bytes = BoundedBodyReader.read(body.byteStream(), limit, length)
       mapOf("ok" to true, "status" to it.code, "contentType" to it.header("Content-Type"), "bytes" to bytes)
     } catch (_: BodyLimitExceeded) {
       call.cancel()
@@ -97,6 +98,19 @@ internal object HttpsClient {
       call.cancel()
       failure("response")
     }
+  }
+
+  private fun knownLength(response: Response): Long {
+    val headers = (response.networkResponse ?: response).headers
+    if (headers.values("Transfer-Encoding").isNotEmpty()) throw IOException()
+    val values = headers.values("Content-Length")
+    if (response.code == 204) {
+      if (values.isNotEmpty()) throw IOException()
+      return 0
+    }
+    val value = values.singleOrNull() ?: throw IOException()
+    if (value.isEmpty() || value.any { it !in '0'..'9' }) throw IOException()
+    return value.toLongOrNull() ?: throw IOException()
   }
 
   private fun hasExplicitFraming(response: Response): Boolean {

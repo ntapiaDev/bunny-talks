@@ -11,8 +11,6 @@ final class UrlSessionHttpsTransport: NSObject, URLSessionDataDelegate, @uncheck
     var upload: Data?
     var response: HTTPURLResponse?
     var length: Int?
-    var chunked = false
-    var framedProtocol = false
     var limit = 0
     var bytes = Data()
     var failure: String?
@@ -251,18 +249,19 @@ final class UrlSessionHttpsTransport: NSObject, URLSessionDataDelegate, @uncheck
     guard response.value(forHTTPHeaderField: "Content-Encoding") == nil
     else { reject("response", reason: "coding"); return }
 
-    let transfer = response.value(forHTTPHeaderField: "Transfer-Encoding")?.lowercased()
-    if let value = response.value(forHTTPHeaderField: "Content-Length") {
-      guard transfer == nil, !value.isEmpty, value.utf8.allSatisfy({ (48...57).contains($0) }),
-            let length = Int(value), response.statusCode != 204 || length == 0
+    guard response.value(forHTTPHeaderField: "Transfer-Encoding") == nil
+    else { reject("response", reason: "framing"); return }
+    let declaredLength = response.value(forHTTPHeaderField: "Content-Length")
+    if response.statusCode == 204 {
+      guard declaredLength == nil else { reject("response", reason: "framing"); return }
+      slot.length = 0
+    } else {
+      guard let value = declaredLength, !value.isEmpty, value.utf8.allSatisfy({ (48...57).contains($0) }),
+            let length = Int(value)
       else { reject("response", reason: "framing"); return }
       guard length <= slot.limit else { reject("size", reason: "framing"); return }
       slot.length = length
-    } else if let transfer {
-      guard transfer == "chunked", response.statusCode != 204 else { reject("response", reason: "framing"); return }
-      slot.chunked = true
     }
-    if response.statusCode == 204 { slot.length = 0 }
     slot.response = response
     completionHandler(.allow)
   }
@@ -283,12 +282,6 @@ final class UrlSessionHttpsTransport: NSObject, URLSessionDataDelegate, @uncheck
     }
   }
 
-  func urlSession(_ session: URLSession, task: URLSessionTask, didFinishCollecting metrics: URLSessionTaskMetrics) {
-    guard let id = requests[task.taskIdentifier], let slot = active[id] else { return }
-    let name = metrics.transactionMetrics.last?.networkProtocolName
-    slot.framedProtocol = name == "h2" || name == "h3"
-  }
-
   func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
     guard let id = requests[task.taskIdentifier], let slot = active[id] else { return }
     let result: [String: Any]
@@ -306,8 +299,7 @@ final class UrlSessionHttpsTransport: NSObject, URLSessionDataDelegate, @uncheck
           .clientCertificateRejected, .clientCertificateRequired]
         result = failure("network", reason: code.map { tlsCodes.contains($0) } == true ? "tls" : "network", slot: slot)
       }
-    } else if let response = slot.response,
-              slot.length.map({ $0 == slot.bytes.count }) ?? (slot.chunked || slot.framedProtocol) {
+    } else if let response = slot.response, let length = slot.length, length == slot.bytes.count {
       result = ["ok": true, "status": response.statusCode,
                 "contentType": response.value(forHTTPHeaderField: "Content-Type") as Any? ?? NSNull(),
                 "bytes": slot.bytes]

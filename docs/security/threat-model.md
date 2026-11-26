@@ -566,6 +566,12 @@ Les protections comprennent notamment :
 
 La validation côté client ne remplace jamais la validation et l'autorisation côté serveur.
 
+### Transport HTTPS mobile
+
+La cible combine URLSession sur iOS et OkHttp sur Android pour les petits JSON non compressés à longueur connue. La pile doit vérifier la confiance TLS et le nom d’hôte, refuser les redirections avant suivi, isoler les Bearers et les identifiants ambiants, borner le corps complet avant le pont et arrêter la tâche à l’échéance ou sur annulation. Les reprises sont encadrées par opération et les effets métier d’une réponse perdue restent à traiter par le parcours concerné. [ADR-004](../architecture/decisions/004-bounded-mobile-api-responses.md)
+
+Le PASS de la candidate URLSession porte sur la fixture et le simulateur de qualification. La preuve reste à compléter sur les Releases standard et le trajet TLS déployé, avec une attention particulière à la révocation DELETE et à l’annulation pendant une reprise. Le verrou iOS reste fermé. L’usage de secrets applicatifs attend une qualification adaptée au trajet réel. [Périmètre et qualifications restantes](../development/native-https-foundation.md#clôture-du-sixième-run-urlsession)
+
 ## 10. Journalisation et audit
 
 Les journaux ne doivent jamais contenir :

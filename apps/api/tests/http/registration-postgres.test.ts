@@ -10,6 +10,7 @@ import { PostgresRegistrationLimits } from '../../src/auth/registration/postgres
 import type { PasswordBlocklist } from '../../src/auth/registration/registration-policy.js';
 import { RegistrationError } from '../../src/auth/registration/registration-policy.js';
 import { generateOpaqueToken } from '../../src/auth/sessions/session-token.js';
+import { expectKnownLengthResponse } from '../support/known-length-response.js';
 import { createTestDatabase } from '../support/postgres-test-database.js';
 import {
   CapturingRegistrationEmail,
@@ -84,6 +85,7 @@ describe('registration HTTP with real Nest and PostgreSQL 18.7', () => {
   async function intention(email = `${randomUUID()}@EXAMPLE.COM`) {
     const response = await post('request', { email });
     expect(response.status).toBe(202);
+    await expectKnownLengthResponse(response);
     expect(response.headers.get('cache-control')).toBe('no-store');
     expect(await response.json()).toEqual({ status: 'accepted' });
     const message = transport.messages.at(-1)!;
@@ -129,6 +131,7 @@ describe('registration HTTP with real Nest and PostgreSQL 18.7', () => {
     const before = await client.account.count();
     const response = await post('complete', { ...input, email: input.email.toLowerCase() });
     expect(response.status).toBe(200);
+    await expectKnownLengthResponse(response);
     expect(await response.json()).toEqual({ status: 'account-created' });
     expect(response.headers.get('set-cookie')).toBeNull();
     expect(await client.account.count()).toBe(before + 1);

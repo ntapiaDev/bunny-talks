@@ -28,8 +28,9 @@ type HttpTransportResult =
  * The adapter must use HTTPS with platform TLS and hostname verification, refuse redirects
  * before following them, omit ambient credentials (including cookie storage and authentication
  * challenges) and private caching. Authorization comes only from the supplied headers.
- * Never retry at the application layer. Only a qualified native profile may recover a lost
- * session GET transparently, with the same origin and Bearer and within the original deadline.
+ * Never retry at the application layer. A qualified native profile may transparently resume
+ * an explicitly authorized GET on a network or framing error before delivering a response.
+ * Keep the same origin, path, Bearer, deadline and cancellation signal within that operation.
  * Sensitive writes require protection against replay after delivery may have reached the server.
  *
  * Enforce maxResponseBytes on decoded bytes in native code before any body crosses into JS.

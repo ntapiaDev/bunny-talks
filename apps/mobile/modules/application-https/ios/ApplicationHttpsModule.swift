@@ -16,7 +16,7 @@ public final class ApplicationHttpsModule: Module {
     OnDestroy { transport.close() }
 
     #if BUNNY_HTTPS_URLSESSION_QUALIFICATION
-    Function("qualificationProfile") { "standard-json-urlsession" }
+    Function("qualificationProfile") { "standard-json-known-length-urlsession" }
     #elseif BUNNY_HTTPS_QUALIFICATION
     Function("qualificationProfile") {
       bunny_https_runtime_profile().map { String(cString: $0) } ?? "unavailable"
