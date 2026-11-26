@@ -1,0 +1,1100 @@
+{
+  "verdict": "PASS",
+  "scenarios": [
+    {
+      "id": "standard-json",
+      "verdict": "PASS",
+      "observed": "success"
+    },
+    {
+      "id": "gzip",
+      "verdict": "PASS",
+      "observed": "response"
+    },
+    {
+      "id": "gzip-missing-isize",
+      "verdict": "PASS",
+      "observed": "response"
+    },
+    {
+      "id": "gzip-chunked",
+      "verdict": "PASS",
+      "observed": "response"
+    },
+    {
+      "id": "other-coding",
+      "verdict": "PASS",
+      "observed": "response"
+    },
+    {
+      "id": "stacked-coding",
+      "verdict": "PASS",
+      "observed": "response"
+    },
+    {
+      "id": "length-incomplete",
+      "verdict": "PASS",
+      "observed": "response"
+    },
+    {
+      "id": "chunked-valid-rejected",
+      "verdict": "PASS",
+      "observed": "response",
+      "client": {
+        "calls": [
+          {
+            "reservation": "accepted",
+            "native": "rejected",
+            "nativeKind": "response",
+            "adapter": "response",
+            "application": "response"
+          }
+        ]
+      },
+      "server": {
+        "destination": "A",
+        "fixtureConnectionsToDestination": 23,
+        "fixtureConnectionsWithBytes": 23,
+        "fixtureConnectionsWithTls": 23,
+        "receptionConnections": 1,
+        "receptions": 1,
+        "offTargetReceptions": 0,
+        "samples": [
+          {
+            "connectionIdentified": true,
+            "expectedMethod": true,
+            "expectedBearer": true,
+            "cookiePresent": false,
+            "framing": "chunked",
+            "requestedCoding": "identity",
+            "responseCoding": "absent",
+            "headersSent": true,
+            "status": 200,
+            "requestNoStore": true,
+            "explicitResponseStartObserved": false,
+            "requestComplete": true,
+            "finished": true,
+            "closed": true,
+            "closedAfterMs": 1,
+            "fixtureCut": false,
+            "framingFault": "unsupported-chunked",
+            "excessiveDeclaredLength": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "chunked-incomplete",
+      "verdict": "PASS",
+      "observed": "response"
+    },
+    {
+      "id": "chunk-end-incomplete",
+      "verdict": "PASS",
+      "observed": "response"
+    },
+    {
+      "id": "close-delimited",
+      "verdict": "PASS",
+      "observed": "response"
+    },
+    {
+      "id": "conflicting-lengths",
+      "verdict": "PASS",
+      "observed": "response"
+    },
+    {
+      "id": "length-and-transfer",
+      "verdict": "PASS",
+      "observed": "response"
+    },
+    {
+      "id": "limit-exact",
+      "verdict": "PASS",
+      "observed": "success",
+      "client": {
+        "calls": [
+          {
+            "reservation": "accepted",
+            "native": "success",
+            "adapter": "success",
+            "status": 200,
+            "bytes": 1048576
+          }
+        ]
+      },
+      "server": {
+        "destination": "A",
+        "fixtureConnectionsToDestination": 23,
+        "fixtureConnectionsWithBytes": 23,
+        "fixtureConnectionsWithTls": 23,
+        "receptionConnections": 1,
+        "receptions": 1,
+        "offTargetReceptions": 0,
+        "samples": [
+          {
+            "connectionIdentified": true,
+            "expectedMethod": true,
+            "expectedBearer": true,
+            "cookiePresent": false,
+            "framing": "length",
+            "requestedCoding": "identity",
+            "responseCoding": "absent",
+            "headersSent": true,
+            "status": 200,
+            "requestNoStore": true,
+            "explicitResponseStartObserved": false,
+            "finished": true,
+            "closed": true,
+            "closedAfterMs": 107,
+            "fixtureCut": false,
+            "excessiveDeclaredLength": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "limit-declared",
+      "verdict": "PASS",
+      "observed": "size",
+      "client": {
+        "calls": [
+          {
+            "reservation": "accepted",
+            "native": "rejected",
+            "nativeKind": "size",
+            "adapter": "size",
+            "application": "size"
+          }
+        ]
+      },
+      "server": {
+        "destination": "A",
+        "fixtureConnectionsToDestination": 23,
+        "fixtureConnectionsWithBytes": 23,
+        "fixtureConnectionsWithTls": 23,
+        "receptionConnections": 1,
+        "receptions": 1,
+        "offTargetReceptions": 0,
+        "samples": [
+          {
+            "connectionIdentified": true,
+            "expectedMethod": true,
+            "expectedBearer": true,
+            "cookiePresent": false,
+            "framing": "length",
+            "requestedCoding": "identity",
+            "responseCoding": "absent",
+            "headersSent": true,
+            "status": 200,
+            "requestNoStore": true,
+            "explicitResponseStartObserved": true,
+            "finished": false,
+            "closed": true,
+            "closedAfterMs": 8,
+            "fixtureCut": false,
+            "excessiveDeclaredLength": true,
+            "heldLengthEnd": "peer-close"
+          }
+        ]
+      }
+    },
+    {
+      "id": "get-loss",
+      "verdict": "PASS",
+      "observed": "network",
+      "receptions": 1
+    },
+    {
+      "id": "get-loss-repeated",
+      "verdict": "PASS",
+      "observed": "network",
+      "receptions": 1
+    },
+    {
+      "id": "post-complete",
+      "verdict": "PASS",
+      "observed": "success",
+      "client": {
+        "calls": [
+          {
+            "reservation": "accepted",
+            "native": "success",
+            "adapter": "success",
+            "status": 200,
+            "bytes": 59
+          }
+        ]
+      },
+      "server": {
+        "destination": "A",
+        "fixtureConnectionsToDestination": 23,
+        "fixtureConnectionsWithBytes": 23,
+        "fixtureConnectionsWithTls": 23,
+        "receptionConnections": 1,
+        "receptions": 1,
+        "offTargetReceptions": 0,
+        "samples": [
+          {
+            "connectionIdentified": true,
+            "expectedMethod": true,
+            "expectedBearer": true,
+            "cookiePresent": false,
+            "framing": "length",
+            "requestedCoding": "identity",
+            "responseCoding": "absent",
+            "headersSent": true,
+            "status": 200,
+            "requestNoStore": true,
+            "explicitResponseStartObserved": false,
+            "requestComplete": true,
+            "contentTypeIsJson": true,
+            "postBodyMatchesFixture": true,
+            "finished": true,
+            "closed": true,
+            "closedAfterMs": 1,
+            "fixtureCut": false,
+            "excessiveDeclaredLength": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "post-loss",
+      "verdict": "PASS",
+      "observed": "network",
+      "client": {
+        "calls": [
+          {
+            "reservation": "accepted",
+            "native": "rejected",
+            "nativeKind": "network",
+            "adapter": "network",
+            "application": "network"
+          }
+        ]
+      },
+      "server": {
+        "destination": "A",
+        "fixtureConnectionsToDestination": 23,
+        "fixtureConnectionsWithBytes": 23,
+        "fixtureConnectionsWithTls": 23,
+        "receptionConnections": 1,
+        "receptions": 1,
+        "offTargetReceptions": 0,
+        "samples": [
+          {
+            "connectionIdentified": true,
+            "expectedMethod": true,
+            "expectedBearer": true,
+            "cookiePresent": false,
+            "framing": "unobserved",
+            "requestedCoding": "identity",
+            "responseCoding": "absent",
+            "headersSent": false,
+            "requestNoStore": true,
+            "explicitResponseStartObserved": false,
+            "requestComplete": true,
+            "processed": true,
+            "contentTypeIsJson": true,
+            "postBodyMatchesFixture": true,
+            "finished": false,
+            "closed": true,
+            "closedAfterMs": 0,
+            "fixtureCut": true,
+            "excessiveDeclaredLength": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "post-loss-prefix",
+      "verdict": "PASS",
+      "observed": "response",
+      "client": {
+        "calls": [
+          {
+            "reservation": "accepted",
+            "native": "rejected",
+            "nativeKind": "response",
+            "adapter": "response",
+            "application": "response"
+          }
+        ]
+      },
+      "server": {
+        "destination": "A",
+        "fixtureConnectionsToDestination": 23,
+        "fixtureConnectionsWithBytes": 23,
+        "fixtureConnectionsWithTls": 23,
+        "receptionConnections": 1,
+        "receptions": 1,
+        "offTargetReceptions": 0,
+        "samples": [
+          {
+            "connectionIdentified": true,
+            "expectedMethod": true,
+            "expectedBearer": true,
+            "cookiePresent": false,
+            "framing": "length",
+            "requestedCoding": "identity",
+            "responseCoding": "absent",
+            "headersSent": true,
+            "status": 200,
+            "requestNoStore": true,
+            "explicitResponseStartObserved": true,
+            "requestComplete": true,
+            "processed": true,
+            "contentTypeIsJson": true,
+            "postBodyMatchesFixture": true,
+            "finished": false,
+            "closed": true,
+            "closedAfterMs": 101,
+            "fixtureCut": true,
+            "excessiveDeclaredLength": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "post-retry-status",
+      "verdict": "PASS",
+      "observed": "status-503",
+      "client": {
+        "calls": [
+          {
+            "reservation": "accepted",
+            "native": "success",
+            "adapter": "success",
+            "application": "status",
+            "status": 503,
+            "bytes": 2
+          }
+        ]
+      },
+      "server": {
+        "destination": "A",
+        "fixtureConnectionsToDestination": 23,
+        "fixtureConnectionsWithBytes": 23,
+        "fixtureConnectionsWithTls": 23,
+        "receptionConnections": 1,
+        "receptions": 1,
+        "offTargetReceptions": 0,
+        "samples": [
+          {
+            "connectionIdentified": true,
+            "expectedMethod": true,
+            "expectedBearer": true,
+            "cookiePresent": false,
+            "framing": "length",
+            "requestedCoding": "identity",
+            "responseCoding": "absent",
+            "headersSent": true,
+            "status": 503,
+            "requestNoStore": true,
+            "explicitResponseStartObserved": false,
+            "requestComplete": true,
+            "contentTypeIsJson": true,
+            "postBodyMatchesFixture": true,
+            "retryAfterZero": true,
+            "finished": true,
+            "closed": true,
+            "closedAfterMs": 1,
+            "fixtureCut": false,
+            "excessiveDeclaredLength": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "tls-other-origin",
+      "verdict": "PASS",
+      "observed": "success",
+      "client": {
+        "calls": [
+          {
+            "reservation": "accepted",
+            "native": "success",
+            "adapter": "success",
+            "status": 200,
+            "bytes": 59
+          }
+        ]
+      },
+      "server": {
+        "destination": "B",
+        "fixtureConnectionsToDestination": 1,
+        "fixtureConnectionsWithBytes": 1,
+        "fixtureConnectionsWithTls": 1,
+        "receptionConnections": 1,
+        "receptions": 1,
+        "samples": [
+          {
+            "connectionIdentified": true,
+            "expectedMethod": true,
+            "expectedBearer": true,
+            "cookiePresent": false,
+            "framing": "length",
+            "requestedCoding": "identity",
+            "responseCoding": "absent",
+            "headersSent": true,
+            "status": 200,
+            "requestNoStore": true,
+            "explicitResponseStartObserved": false,
+            "finished": true,
+            "closed": true,
+            "closedAfterMs": 1,
+            "fixtureCut": false,
+            "excessiveDeclaredLength": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "tls-untrusted",
+      "verdict": "PASS",
+      "observed": "network",
+      "client": {
+        "calls": [
+          {
+            "reservation": "accepted",
+            "native": "rejected",
+            "nativeKind": "network",
+            "adapter": "network",
+            "application": "network"
+          }
+        ]
+      },
+      "server": {
+        "destination": "unknown",
+        "fixtureConnectionsToDestination": 1,
+        "fixtureConnectionsWithBytes": 1,
+        "fixtureConnectionsWithTls": 0,
+        "receptionConnections": 0,
+        "receptions": 0,
+        "samples": []
+      }
+    },
+    {
+      "id": "tls-wrong-name",
+      "verdict": "PASS",
+      "observed": "network",
+      "client": {
+        "calls": [
+          {
+            "reservation": "accepted",
+            "native": "rejected",
+            "nativeKind": "network",
+            "adapter": "network",
+            "application": "network"
+          }
+        ]
+      },
+      "server": {
+        "destination": "wrong",
+        "fixtureConnectionsToDestination": 1,
+        "fixtureConnectionsWithBytes": 1,
+        "fixtureConnectionsWithTls": 1,
+        "receptionConnections": 0,
+        "receptions": 0,
+        "samples": []
+      }
+    },
+    {
+      "id": "redirect",
+      "verdict": "PASS",
+      "observed": "redirect",
+      "client": {
+        "calls": [
+          {
+            "reservation": "accepted",
+            "native": "rejected",
+            "nativeKind": "redirect",
+            "adapter": "redirect",
+            "application": "redirect"
+          }
+        ]
+      },
+      "server": {
+        "destination": "A",
+        "fixtureConnectionsToDestination": 23,
+        "fixtureConnectionsWithBytes": 23,
+        "fixtureConnectionsWithTls": 23,
+        "receptionConnections": 1,
+        "receptions": 1,
+        "offTargetReceptions": 0,
+        "redirectedReceptions": 0,
+        "samples": [
+          {
+            "connectionIdentified": true,
+            "expectedMethod": true,
+            "expectedBearer": true,
+            "cookiePresent": false,
+            "framing": "unobserved",
+            "requestedCoding": "identity",
+            "responseCoding": "absent",
+            "headersSent": true,
+            "status": 307,
+            "requestNoStore": true,
+            "explicitResponseStartObserved": false,
+            "finished": true,
+            "closed": true,
+            "closedAfterMs": 3,
+            "fixtureCut": false,
+            "excessiveDeclaredLength": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "auth-challenge",
+      "verdict": "PASS",
+      "observed": "status-401",
+      "client": {
+        "calls": [
+          {
+            "reservation": "accepted",
+            "native": "success",
+            "adapter": "success",
+            "application": "status",
+            "status": 401,
+            "bytes": 2
+          }
+        ]
+      },
+      "server": {
+        "destination": "A",
+        "fixtureConnectionsToDestination": 23,
+        "fixtureConnectionsWithBytes": 23,
+        "fixtureConnectionsWithTls": 23,
+        "receptionConnections": 1,
+        "receptions": 1,
+        "offTargetReceptions": 0,
+        "samples": [
+          {
+            "connectionIdentified": true,
+            "expectedMethod": true,
+            "expectedBearer": true,
+            "cookiePresent": false,
+            "framing": "length",
+            "requestedCoding": "identity",
+            "responseCoding": "absent",
+            "headersSent": true,
+            "status": 401,
+            "requestNoStore": true,
+            "explicitResponseStartObserved": false,
+            "finished": true,
+            "closed": true,
+            "closedAfterMs": 1,
+            "fixtureCut": false,
+            "excessiveDeclaredLength": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "empty-204",
+      "verdict": "PASS",
+      "observed": "success",
+      "client": {
+        "calls": [
+          {
+            "reservation": "accepted",
+            "native": "success",
+            "adapter": "success",
+            "status": 204,
+            "bytes": 0
+          }
+        ]
+      },
+      "server": {
+        "destination": "A",
+        "fixtureConnectionsToDestination": 23,
+        "fixtureConnectionsWithBytes": 23,
+        "fixtureConnectionsWithTls": 23,
+        "receptionConnections": 1,
+        "receptions": 1,
+        "offTargetReceptions": 0,
+        "samples": [
+          {
+            "connectionIdentified": true,
+            "expectedMethod": true,
+            "expectedBearer": true,
+            "cookiePresent": false,
+            "framing": "unobserved",
+            "requestedCoding": "identity",
+            "responseCoding": "absent",
+            "headersSent": true,
+            "status": 204,
+            "requestNoStore": true,
+            "explicitResponseStartObserved": false,
+            "finished": true,
+            "closed": true,
+            "closedAfterMs": 1,
+            "fixtureCut": false,
+            "excessiveDeclaredLength": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "timeout",
+      "verdict": "PASS",
+      "observed": "timeout",
+      "client": {
+        "calls": [
+          {
+            "reservation": "accepted",
+            "native": "rejected",
+            "nativeKind": "timeout",
+            "adapter": "timeout",
+            "application": "timeout"
+          }
+        ]
+      },
+      "server": {
+        "destination": "A",
+        "fixtureConnectionsToDestination": 23,
+        "fixtureConnectionsWithBytes": 23,
+        "fixtureConnectionsWithTls": 23,
+        "receptionConnections": 1,
+        "receptions": 1,
+        "offTargetReceptions": 0,
+        "samples": [
+          {
+            "connectionIdentified": true,
+            "expectedMethod": true,
+            "expectedBearer": true,
+            "cookiePresent": false,
+            "framing": "length",
+            "requestedCoding": "identity",
+            "responseCoding": "absent",
+            "headersSent": true,
+            "status": 200,
+            "requestNoStore": true,
+            "explicitResponseStartObserved": true,
+            "finished": false,
+            "closed": true,
+            "closedAfterMs": 897,
+            "fixtureCut": false,
+            "excessiveDeclaredLength": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "reuse",
+      "verdict": "PASS",
+      "observed": "success",
+      "client": {
+        "calls": [
+          {
+            "reservation": "accepted",
+            "native": "success",
+            "adapter": "success",
+            "status": 200,
+            "bytes": 59
+          },
+          {
+            "reservation": "accepted",
+            "native": "success",
+            "adapter": "success",
+            "status": 200,
+            "bytes": 59
+          }
+        ]
+      },
+      "server": {
+        "destination": "A",
+        "fixtureConnectionsToDestination": 23,
+        "fixtureConnectionsWithBytes": 23,
+        "fixtureConnectionsWithTls": 23,
+        "receptionConnections": 1,
+        "receptions": 2,
+        "offTargetReceptions": 0,
+        "samples": [
+          {
+            "connectionIdentified": true,
+            "expectedMethod": true,
+            "expectedBearer": true,
+            "cookiePresent": false,
+            "framing": "length",
+            "requestedCoding": "identity",
+            "responseCoding": "absent",
+            "headersSent": true,
+            "status": 200,
+            "requestNoStore": true,
+            "explicitResponseStartObserved": false,
+            "finished": true,
+            "closed": true,
+            "closedAfterMs": 2,
+            "fixtureCut": false,
+            "excessiveDeclaredLength": false
+          },
+          {
+            "connectionIdentified": true,
+            "expectedMethod": true,
+            "expectedBearer": true,
+            "cookiePresent": false,
+            "framing": "length",
+            "requestedCoding": "identity",
+            "responseCoding": "absent",
+            "headersSent": true,
+            "status": 200,
+            "requestNoStore": true,
+            "explicitResponseStartObserved": false,
+            "finished": true,
+            "closed": true,
+            "closedAfterMs": 1,
+            "fixtureCut": false,
+            "excessiveDeclaredLength": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "identity-isolation",
+      "verdict": "PASS",
+      "observed": "success",
+      "client": {
+        "calls": [
+          {
+            "reservation": "accepted",
+            "native": "success",
+            "adapter": "success",
+            "status": 200,
+            "bytes": 78
+          },
+          {
+            "reservation": "accepted",
+            "native": "success",
+            "adapter": "success",
+            "status": 200,
+            "bytes": 79
+          },
+          {
+            "reservation": "accepted",
+            "native": "success",
+            "adapter": "success",
+            "status": 200,
+            "bytes": 82
+          }
+        ]
+      },
+      "server": {
+        "destination": "A",
+        "fixtureConnectionsToDestination": 23,
+        "fixtureConnectionsWithBytes": 23,
+        "fixtureConnectionsWithTls": 23,
+        "receptionConnections": 1,
+        "receptions": 3,
+        "offTargetReceptions": 0,
+        "samples": [
+          {
+            "connectionIdentified": true,
+            "expectedMethod": true,
+            "expectedBearer": true,
+            "cookiePresent": false,
+            "framing": "length",
+            "requestedCoding": "identity",
+            "responseCoding": "absent",
+            "headersSent": true,
+            "status": 200,
+            "requestNoStore": true,
+            "explicitResponseStartObserved": false,
+            "finished": true,
+            "closed": true,
+            "closedAfterMs": 1,
+            "fixtureCut": false,
+            "excessiveDeclaredLength": false
+          },
+          {
+            "connectionIdentified": true,
+            "expectedMethod": true,
+            "expectedBearer": true,
+            "cookiePresent": false,
+            "framing": "length",
+            "requestedCoding": "identity",
+            "responseCoding": "absent",
+            "headersSent": true,
+            "status": 200,
+            "requestNoStore": true,
+            "explicitResponseStartObserved": false,
+            "finished": true,
+            "closed": true,
+            "closedAfterMs": 0,
+            "fixtureCut": false,
+            "excessiveDeclaredLength": false
+          },
+          {
+            "connectionIdentified": true,
+            "expectedMethod": true,
+            "expectedBearer": true,
+            "cookiePresent": false,
+            "framing": "length",
+            "requestedCoding": "identity",
+            "responseCoding": "absent",
+            "headersSent": true,
+            "status": 200,
+            "requestNoStore": true,
+            "explicitResponseStartObserved": false,
+            "finished": true,
+            "closed": true,
+            "closedAfterMs": 1,
+            "fixtureCut": false,
+            "excessiveDeclaredLength": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "cancel-neighbour",
+      "verdict": "PASS",
+      "observed": "success",
+      "client": {
+        "calls": [
+          {
+            "reservation": "accepted",
+            "native": "rejected",
+            "nativeKind": "network",
+            "adapter": "network",
+            "application": "cancelled"
+          },
+          {
+            "reservation": "accepted",
+            "native": "success",
+            "adapter": "success",
+            "status": 200,
+            "bytes": 59
+          },
+          {
+            "reservation": "refused",
+            "native": "not-called",
+            "adapter": "network",
+            "application": "network"
+          }
+        ]
+      },
+      "server": {
+        "destination": "A",
+        "fixtureConnectionsToDestination": 23,
+        "fixtureConnectionsWithBytes": 23,
+        "fixtureConnectionsWithTls": 23,
+        "receptionConnections": 2,
+        "receptions": 2,
+        "offTargetReceptions": 0,
+        "neighbourOverlapped": true,
+        "samples": [
+          {
+            "connectionIdentified": true,
+            "expectedMethod": true,
+            "expectedBearer": true,
+            "cookiePresent": false,
+            "framing": "length",
+            "requestedCoding": "identity",
+            "responseCoding": "absent",
+            "headersSent": true,
+            "status": 200,
+            "requestNoStore": true,
+            "explicitResponseStartObserved": true,
+            "finished": false,
+            "closed": true,
+            "closedAfterMs": 455,
+            "fixtureCut": false,
+            "excessiveDeclaredLength": false
+          },
+          {
+            "connectionIdentified": true,
+            "expectedMethod": true,
+            "expectedBearer": true,
+            "cookiePresent": false,
+            "framing": "length",
+            "requestedCoding": "identity",
+            "responseCoding": "absent",
+            "headersSent": true,
+            "status": 200,
+            "requestNoStore": true,
+            "explicitResponseStartObserved": true,
+            "finished": true,
+            "closed": true,
+            "closedAfterMs": 1201,
+            "fixtureCut": false,
+            "excessiveDeclaredLength": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "session-delete",
+      "verdict": "PASS",
+      "observed": "success",
+      "client": {
+        "calls": [
+          {
+            "reservation": "accepted",
+            "native": "success",
+            "adapter": "success",
+            "status": 204,
+            "bytes": 0
+          },
+          {
+            "reservation": "accepted",
+            "native": "rejected",
+            "nativeKind": "network",
+            "adapter": "network",
+            "application": "network"
+          },
+          {
+            "reservation": "accepted",
+            "native": "success",
+            "adapter": "success",
+            "application": "status",
+            "status": 401,
+            "bytes": 2
+          }
+        ]
+      },
+      "server": {
+        "destination": "A",
+        "fixtureConnectionsToDestination": 23,
+        "fixtureConnectionsWithBytes": 23,
+        "fixtureConnectionsWithTls": 23,
+        "receptionConnections": 2,
+        "receptions": 3,
+        "offTargetReceptions": 0,
+        "samples": [
+          {
+            "connectionIdentified": true,
+            "expectedMethod": true,
+            "expectedBearer": true,
+            "cookiePresent": false,
+            "framing": "unobserved",
+            "requestedCoding": "identity",
+            "responseCoding": "absent",
+            "headersSent": true,
+            "status": 204,
+            "requestNoStore": true,
+            "explicitResponseStartObserved": false,
+            "requestComplete": true,
+            "processed": true,
+            "finished": true,
+            "closed": true,
+            "closedAfterMs": 2,
+            "fixtureCut": false,
+            "excessiveDeclaredLength": false
+          },
+          {
+            "connectionIdentified": true,
+            "expectedMethod": true,
+            "expectedBearer": true,
+            "cookiePresent": false,
+            "framing": "unobserved",
+            "requestedCoding": "identity",
+            "responseCoding": "absent",
+            "headersSent": false,
+            "requestNoStore": true,
+            "explicitResponseStartObserved": false,
+            "requestComplete": true,
+            "processed": true,
+            "finished": false,
+            "closed": true,
+            "closedAfterMs": 1,
+            "fixtureCut": true,
+            "excessiveDeclaredLength": false
+          },
+          {
+            "connectionIdentified": true,
+            "expectedMethod": true,
+            "expectedBearer": true,
+            "cookiePresent": false,
+            "framing": "length",
+            "requestedCoding": "identity",
+            "responseCoding": "absent",
+            "headersSent": true,
+            "status": 401,
+            "requestNoStore": true,
+            "explicitResponseStartObserved": false,
+            "requestComplete": true,
+            "finished": true,
+            "closed": true,
+            "closedAfterMs": 2,
+            "fixtureCut": false,
+            "excessiveDeclaredLength": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "framing-recovery",
+      "verdict": "PASS",
+      "observed": "success",
+      "client": {
+        "calls": [
+          {
+            "reservation": "accepted",
+            "native": "rejected",
+            "nativeKind": "response",
+            "adapter": "response",
+            "application": "response"
+          },
+          {
+            "reservation": "accepted",
+            "native": "success",
+            "adapter": "success",
+            "status": 200,
+            "bytes": 59
+          }
+        ]
+      },
+      "server": {
+        "destination": "A",
+        "fixtureConnectionsToDestination": 23,
+        "fixtureConnectionsWithBytes": 23,
+        "fixtureConnectionsWithTls": 23,
+        "receptionConnections": 2,
+        "receptions": 2,
+        "offTargetReceptions": 0,
+        "samples": [
+          {
+            "connectionIdentified": true,
+            "expectedMethod": true,
+            "expectedBearer": true,
+            "cookiePresent": false,
+            "framing": "length",
+            "requestedCoding": "identity",
+            "responseCoding": "absent",
+            "headersSent": true,
+            "status": 200,
+            "requestNoStore": true,
+            "explicitResponseStartObserved": false,
+            "finished": false,
+            "closed": true,
+            "closedAfterMs": 102,
+            "fixtureCut": true,
+            "framingFault": "incomplete-length",
+            "excessiveDeclaredLength": false
+          },
+          {
+            "connectionIdentified": true,
+            "expectedMethod": true,
+            "expectedBearer": true,
+            "cookiePresent": false,
+            "framing": "length",
+            "requestedCoding": "identity",
+            "responseCoding": "absent",
+            "headersSent": true,
+            "status": 200,
+            "requestNoStore": true,
+            "explicitResponseStartObserved": false,
+            "finished": true,
+            "closed": true,
+            "closedAfterMs": 0,
+            "fixtureCut": false,
+            "excessiveDeclaredLength": false
+          }
+        ]
+      }
+    }
+  ],
+  "appCompleted": true
+}

@@ -154,7 +154,8 @@ function readApp(log: string, profile: string, scenarioIds: readonly string[]) {
     if (fail?.[1] === id) {
       observed.set(id, 'fail');
       diagnostics.set(id, readDiagnostic(fail[2]));
-      return { observed, diagnostics, started, done: false };
+      if (!lines.length) return { observed, diagnostics, started, done: false };
+      continue;
     }
     const pass =
       /^PASS ([a-z0-9-]+) (success|response|network|size|redirect|timeout|status-401|status-503)(?: (\{.*\}))?$/.exec(

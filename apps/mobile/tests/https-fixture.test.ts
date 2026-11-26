@@ -1293,3 +1293,30 @@ it('correlates revocation after a lost DELETE and cancellation during an observe
     ).toEqual({ verdict: 'NOT_RUN', reason: 'retry-not-observed-before-cancel' });
   });
 });
+
+it('retains later scenario diagnostics after an application failure', () => {
+  const log = [
+    'READY standard-json-known-length-okhttp',
+    'START standard-json',
+    'FAIL standard-json ' + JSON.stringify({ failure: 'assertion', calls: [] }),
+    'START gzip',
+    'PASS gzip response ' +
+      JSON.stringify({
+        calls: [{ reservation: 'accepted', native: 'rejected', nativeKind: 'response' }],
+      }),
+  ]
+    .map((line) => marker + line)
+    .join('\n');
+  const report = verifyStandardJson('android', log, {
+    events: [],
+    connections: [],
+    overflow: false,
+  });
+  expect(report.scenarios[0]).toMatchObject({ observed: 'fail', verdict: 'NOT_RUN' });
+  expect(report.scenarios[1]).toMatchObject({
+    observed: 'response',
+    verdict: 'NOT_RUN',
+    diagnostic: { verdict: 'NOT_RUN', reason: 'no-http-reception' },
+    client: { calls: [{ reservation: 'accepted', native: 'rejected', nativeKind: 'response' }] },
+  });
+});

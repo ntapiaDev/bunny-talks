@@ -196,7 +196,7 @@ class Campaign(lab.Feasibility):
             except c2.StageError as error:
                 collection_error = error
                 break
-            if any(MARKER + "DONE" in line or MARKER + "FAIL " in line or MARKER + "UNAVAILABLE" in line for line in own):
+            if any(MARKER + "DONE" in line or MARKER + "UNAVAILABLE" in line for line in own):
                 break
             if time.monotonic() >= deadline:
                 collection_error = c2.StageError("qualification-timeout", verdict="NOT_RUN")

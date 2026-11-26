@@ -344,7 +344,6 @@ async function qualify() {
             ? httpFailure(error.kind)
             : 'unexpected';
       report(`FAIL ${id} ${JSON.stringify({ failure, calls, retryWindow })}`);
-      return;
     }
   }
   report('DONE');
