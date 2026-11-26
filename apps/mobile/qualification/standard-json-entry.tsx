@@ -7,6 +7,8 @@ import {
 } from '../src/infrastructure/http/application-http';
 import type { ApplicationHttpsModule } from '../src/infrastructure/http/native-https-transport';
 import { createNativeHttpsTransport } from '../src/infrastructure/http/native-https-transport';
+import type { CallDiagnostic } from './standard-json-diagnostics';
+import { describeNativeResult, httpFailure, httpStatus } from './standard-json-diagnostics';
 import {
   firstBearer,
   limit,
@@ -24,8 +26,10 @@ const report = (line: string) => console.log(marker + line);
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const offsets = { A: 0, B: 1, unknown: 3, wrong: 4 };
 
+class QualificationAssertion extends Error {}
+
 function assert(condition: unknown): asserts condition {
-  if (!condition) throw new Error('Qualification assertion');
+  if (!condition) throw new QualificationAssertion();
 }
 
 function expectJson(value: unknown) {
@@ -46,6 +50,7 @@ async function qualify() {
   assert(native.qualificationProfile?.() === profile);
   const host = Platform.OS === 'ios' ? 'localhost' : '10.0.2.2';
   report('READY ' + profile);
+  const calls: CallDiagnostic[] = [];
 
   function call(
     path: string,
@@ -66,11 +71,25 @@ async function qualify() {
     } = {},
   ) {
     let raw: unknown;
+    const diagnostic: CallDiagnostic = { reservation: 'not-called', native: 'not-called' };
+    calls.push(diagnostic);
     const transport = createNativeHttpsTransport(() => ({
-      reserve: (timeout) => native.reserve(timeout),
+      reserve(timeout) {
+        diagnostic.reservation = 'threw';
+        const id = native.reserve(timeout);
+        diagnostic.reservation = id == null ? 'refused' : 'accepted';
+        return id;
+      },
       cancel: (id) => native.cancel(id),
       async execute(...args) {
-        raw = await native.execute(...args);
+        diagnostic.native = 'pending';
+        try {
+          raw = await native.execute(...args);
+          Object.assign(diagnostic, describeNativeResult(raw));
+        } catch (error) {
+          diagnostic.native = 'threw';
+          throw error;
+        }
         return raw;
       },
     }));
@@ -78,17 +97,29 @@ async function qualify() {
       origin: `https://${host}:${port + offsets[destination]}`,
       maxResponseBytes: limit,
       timeoutMs,
-      transport,
+      async transport(request) {
+        const result = await transport(request);
+        diagnostic.adapter = result.ok ? 'success' : result.kind;
+        return result;
+      },
     });
     return {
-      pending: client.request({
-        method,
-        path: prefix + path,
-        ...(method === 'POST' ? { body: postBody } : {}),
-        ...(bearer === undefined ? {} : { bearerToken: bearer }),
-        ...(signal === undefined ? {} : { signal }),
-        expectedStatuses: [status],
-      }),
+      pending: client
+        .request({
+          method,
+          path: prefix + path,
+          ...(method === 'POST' ? { body: postBody } : {}),
+          ...(bearer === undefined ? {} : { bearerToken: bearer }),
+          ...(signal === undefined ? {} : { signal }),
+          expectedStatuses: [status],
+        })
+        .catch((error: unknown) => {
+          diagnostic.application =
+            error instanceof ApplicationHttpError ? httpFailure(error.kind) : 'unexpected';
+          if (error instanceof ApplicationHttpError && httpStatus(error.status) !== undefined)
+            diagnostic.status = httpStatus(error.status);
+          throw error;
+        }),
       nativeRejected: () =>
         !!raw && typeof raw === 'object' && 'ok' in raw && raw.ok === false && !('bytes' in raw),
     };
@@ -205,12 +236,19 @@ async function qualify() {
   );
 
   for (const { id, run } of scenarios) {
+    calls.length = 0;
     report('START ' + id);
     try {
       const result = await run();
-      report(`PASS ${id} ${result}`);
-    } catch {
-      report('FAIL ' + id);
+      report(`PASS ${id} ${result} ${JSON.stringify({ calls })}`);
+    } catch (error) {
+      const failure =
+        error instanceof QualificationAssertion
+          ? 'assertion'
+          : error instanceof ApplicationHttpError
+            ? httpFailure(error.kind)
+            : 'unexpected';
+      report(`FAIL ${id} ${JSON.stringify({ failure, calls })}`);
       return;
     }
   }

@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import { httpStatus, readDiagnostic } from './standard-json-diagnostics.ts';
 import {
   firstBearer,
   marker,
@@ -31,6 +32,7 @@ type Event = {
   retryAfterZero?: boolean;
   offeredLimitPlusOne?: boolean;
   headersSent: boolean;
+  responseStatus?: number;
   responseStarted: boolean;
   responseStartedAtMs: number | null;
   startedAtMs: number;
@@ -40,10 +42,12 @@ type Event = {
 };
 
 type Verdict = 'PASS' | 'FAIL' | 'NOT_RUN';
+type WireEvidence = 'PASS' | 'FAIL' | { reason: string };
+const missing = (reason: string): WireEvidence => ({ reason });
 type Snapshot = {
   overflow: boolean;
   events: Event[];
-  connections: { destination: string; receivedBytes: boolean }[];
+  connections: { destination: string; receivedBytes: boolean; tls?: string | null }[];
 };
 const cut = (event: Event) => event.fixtureCut === true && event.closed && !event.finished;
 const interrupted = (event: Event) =>
@@ -78,24 +82,37 @@ function readApp(log: string, profile: string) {
   });
   const ready = lines.shift() === 'READY standard-json-' + profile;
   const observed = new Map<string, string>();
-  if (!ready) return { observed, done: false };
+  const diagnostics = new Map<string, ReturnType<typeof readDiagnostic>>();
+  if (!ready) return { observed, diagnostics, done: false, missing: 'app-readiness-unconfirmed' };
   for (const id of plan) {
     const start = lines.shift();
-    if (start === undefined) return { observed, done: false };
-    if (start !== 'START ' + id) return { observed: new Map<string, string>(), done: false };
+    if (start === undefined)
+      return { observed, diagnostics, done: false, missing: 'scenario-start-missing' };
+    if (start !== 'START ' + id)
+      return {
+        observed: new Map<string, string>(),
+        diagnostics,
+        done: false,
+        missing: 'unexpected-scenario-start',
+      };
     const result = lines.shift();
-    if (result === 'FAIL ' + id) {
+    const fail = /^FAIL ([a-z0-9-]+)(?: (\{.*\}))?$/.exec(result ?? '');
+    if (fail?.[1] === id) {
       observed.set(id, 'fail');
-      return { observed, done: false };
+      diagnostics.set(id, readDiagnostic(fail[2]));
+      return { observed, diagnostics, done: false };
     }
     const pass =
-      /^PASS ([a-z0-9-]+) (success|response|network|size|redirect|timeout|status-401|status-503)$/.exec(
+      /^PASS ([a-z0-9-]+) (success|response|network|size|redirect|timeout|status-401|status-503)(?: (\{.*\}))?$/.exec(
         result ?? '',
       );
-    if (pass?.[1] !== id) return { observed, done: false };
+    if (pass?.[1] !== id)
+      return { observed, diagnostics, done: false, missing: 'scenario-outcome-missing' };
     observed.set(id, pass[2]!);
+    diagnostics.set(id, readDiagnostic(pass[3]));
   }
-  return { observed, done: lines.length === 1 && lines[0] === 'DONE' };
+  const done = lines.length === 1 && lines[0] === 'DONE';
+  return { observed, diagnostics, done, missing: done ? undefined : 'app-completion-unconfirmed' };
 }
 
 export function verifyStandardJson(platform: 'ios' | 'android', log: string, snapshot: Snapshot) {
@@ -108,13 +125,14 @@ export function verifyStandardJson(platform: 'ios' | 'android', log: string, sna
   const anonymous = (event: Event) => clean(event) && !event.authorization;
   const byId = new Map(probes.map((probe) => [probe.id, probe]));
 
-  function wire(id: string, result: string): Verdict {
+  function wire(id: string, result: string): WireEvidence {
     const probe = byId.get(id);
     if (!probe) {
       if (id === 'reuse') {
         const first = rows('/reuse/one');
         const second = rows('/reuse/two');
-        if (!first.length || !second.length) return 'NOT_RUN';
+        if (!first.length || !second.length)
+          return missing(first.length ? 'no-second-reception' : 'no-first-reception');
         return first.length === 1 &&
           second.length === 1 &&
           [...first, ...second].every((event) => anonymous(event) && event.finished) &&
@@ -126,7 +144,7 @@ export function verifyStandardJson(platform: 'ios' | 'android', log: string, sna
       if (id === 'identity-isolation') {
         const entries = rows('/identity');
         if (entries.some((event) => !clean(event))) return 'FAIL';
-        if (entries.length < 3) return 'NOT_RUN';
+        if (entries.length < 3) return missing('missing-identity-receptions');
         return entries.length === 3 &&
           entries.every((event) => event.finished) &&
           entries[0]!.authorizationMatchesFixture &&
@@ -137,7 +155,8 @@ export function verifyStandardJson(platform: 'ios' | 'android', log: string, sna
       }
       const first = rows('/slow/concurrency-one');
       const second = rows('/slow/neighbour');
-      if (!first.length || !second.length) return 'NOT_RUN';
+      if (!first.length || !second.length)
+        return missing(first.length ? 'no-second-reception' : 'no-first-reception');
       const [cancelled] = first;
       const [neighbour] = second;
       return first.length === 1 &&
@@ -167,10 +186,10 @@ export function verifyStandardJson(platform: 'ios' | 'android', log: string, sna
       if (entries.length !== 0) return 'FAIL';
       return connections.some((row) => row.destination === destination && row.receivedBytes)
         ? 'PASS'
-        : 'NOT_RUN';
+        : missing('no-tls-attempt-observed');
     }
     if (id === 'redirect' && events.some((event) => event.path === '/destination')) return 'FAIL';
-    if (!entries.length) return 'NOT_RUN';
+    if (!entries.length) return missing('no-http-reception');
     if (
       entries.some(
         (event) =>
@@ -207,44 +226,47 @@ export function verifyStandardJson(platform: 'ios' | 'android', log: string, sna
         })
       )
         return 'FAIL';
+      if (!losses.every((event) => cut(event) && event.fixtureCutAtMs !== undefined))
+        return missing('get-loss-cut-unconfirmed');
+      if (!losses.every((event) => event.requestComplete && event.processed))
+        return missing('get-loss-processing-unconfirmed');
       if (
-        !losses.every(
-          (event) =>
-            cut(event) &&
-            event.requestComplete &&
-            event.processed &&
-            event.fixtureCutAtMs !== undefined,
-        ) ||
-        (last.finished &&
-          !(last.requestComplete && last.headersSent && last.responseCoding === 'absent'))
+        last.finished &&
+        !(last.requestComplete && last.headersSent && last.responseCoding === 'absent')
       )
-        return 'NOT_RUN';
+        return missing('get-recovery-response-unconfirmed');
       return last.finished === (result === 'success') ? 'PASS' : 'FAIL';
     }
     if (entries.length !== 1) return 'FAIL';
-    if (method === 'POST' && !completePost(first!)) return result === 'fail' ? 'FAIL' : 'NOT_RUN';
-    if (id === 'post-retry-status' && first.retryAfterZero !== true) return 'NOT_RUN';
+    if (method === 'POST' && !completePost(first!))
+      return result === 'fail' ? 'FAIL' : missing('incomplete-post-request');
+    if (id === 'post-retry-status' && first.retryAfterZero !== true)
+      return missing('missing-retry-after-zero');
     if (id === 'post-loss' || id === 'post-loss-prefix') {
       return cut(first!) &&
         first!.processed &&
         (id === 'post-loss' ? !first!.headersSent : first!.responseStarted)
         ? 'PASS'
-        : 'NOT_RUN';
+        : missing('missing-post-cut-evidence');
     }
-    if (cutPaths.has(path)) return cut(first!) ? 'PASS' : 'NOT_RUN';
+    if (cutPaths.has(path)) return cut(first!) ? 'PASS' : missing('fixture-cut-unconfirmed');
     if (id === 'limit-progressive') {
       return first!.configuredFraming === 'chunked' && first!.offeredLimitPlusOne === true
         ? first!.closed && !first!.finished
           ? 'PASS'
           : 'FAIL'
-        : 'NOT_RUN';
+        : missing('progressive-limit-unconfirmed');
     }
     if (id === 'timeout')
       return interrupted(first!) && first!.closedAfterMs! >= 450 && first!.closedAfterMs! < 2000
         ? 'PASS'
-        : 'NOT_RUN';
+        : missing('timeout-interruption-unconfirmed');
     const coding = codings.get(path);
-    if (coding) return first!.headersSent && first!.responseCoding === coding ? 'PASS' : 'NOT_RUN';
+    if (coding) {
+      if (!first.headersSent) return missing('headers-not-observed');
+      return first.responseCoding === coding ? 'PASS' : missing('unexpected-response-coding');
+    }
+    if (!first.headersSent) return missing('headers-not-observed');
     if (
       id === 'standard-json' ||
       id === 'chunked-valid' ||
@@ -253,20 +275,71 @@ export function verifyStandardJson(platform: 'ios' | 'android', log: string, sna
     ) {
       const framing =
         id === 'close-delimited' ? 'unobserved' : id === 'chunked-valid' ? 'chunked' : 'length';
-      if (first!.configuredFraming !== framing) return 'NOT_RUN';
+      if (first.configuredFraming !== framing) return missing('unexpected-configured-framing');
     }
-    return first!.headersSent &&
-      first!.responseCoding === 'absent' &&
-      (first!.finished || id === 'redirect')
-      ? 'PASS'
-      : 'NOT_RUN';
+    if (first.responseCoding !== 'absent') return missing('unexpected-response-coding');
+    if (!first.finished && id !== 'redirect') return missing('response-finish-unconfirmed');
+    return 'PASS';
+  }
+
+  function serverDiagnostic(id: string) {
+    const probe = byId.get(id);
+    const paths = probe
+      ? [probe.path]
+      : id === 'reuse'
+        ? ['/reuse/one', '/reuse/two']
+        : id === 'identity-isolation'
+          ? ['/identity']
+          : ['/slow/concurrency-one', '/slow/neighbour'];
+    const entries = events.filter(
+      (event) =>
+        paths.some((path) => event.path === prefix + path) ||
+        (id === 'redirect' && event.path === '/destination'),
+    );
+    const targetConnections = connections.filter(
+      (row) => row.destination === (probe?.destination ?? 'A'),
+    );
+    return {
+      fixtureConnectionsToDestination: targetConnections.length,
+      fixtureConnectionsWithBytes: targetConnections.filter((row) => row.receivedBytes === true)
+        .length,
+      fixtureConnectionsWithTls: targetConnections.filter(
+        (row) => row.tls === 'TLSv1.2' || row.tls === 'TLSv1.3',
+      ).length,
+      receptionConnections: new Set(
+        entries.flatMap((event) => (event.connectionId === undefined ? [] : [event.connectionId])),
+      ).size,
+      receptions: entries.length,
+      samples: entries.slice(0, 8).map((event) => ({
+        expectedDestination: event.destination === (probe?.destination ?? 'A'),
+        framing: ['length', 'chunked', 'unobserved'].includes(event.configuredFraming)
+          ? event.configuredFraming
+          : 'other',
+        requestedCoding: ['absent', 'identity', 'gzip', 'stacked'].includes(event.requestedCoding)
+          ? event.requestedCoding
+          : 'other',
+        responseCoding: ['absent', 'identity', 'gzip', 'stacked'].includes(event.responseCoding)
+          ? event.responseCoding
+          : 'other',
+        headersSent: event.headersSent === true,
+        status: httpStatus(event.responseStatus),
+        requestNoStore: event.requestNoStore === true,
+        explicitResponseStartObserved: event.responseStarted === true,
+        requestComplete:
+          typeof event.requestComplete === 'boolean' ? event.requestComplete : undefined,
+        finished: event.finished === true,
+        closed: event.closed === true,
+        fixtureCut: event.fixtureCut === true,
+      })),
+    };
   }
 
   let stopped = false;
   const scenarios = plan.map((id) => {
     const observed = app.observed.get(id);
-    if (overflow !== false || stopped || !observed) return { id, verdict: 'NOT_RUN' as const };
-    const evidence = wire(id, observed);
+    if (stopped || !observed) return { id, verdict: 'NOT_RUN' as const };
+    const wireEvidence = overflow !== false ? missing('fixture-overflow') : wire(id, observed);
+    const evidence = typeof wireEvidence === 'string' ? wireEvidence : 'NOT_RUN';
     const expected = byId.get(id)?.result;
     const expectedOutcomes =
       expected === 'reject'
@@ -289,6 +362,18 @@ export function verifyStandardJson(platform: 'ios' | 'android', log: string, sna
       id,
       verdict,
       observed,
+      ...(verdict !== 'PASS'
+        ? {
+            reason:
+              typeof wireEvidence !== 'string'
+                ? wireEvidence.reason
+                : wireEvidence === 'FAIL'
+                  ? 'wire-criteria-failed'
+                  : 'unexpected-app-outcome',
+            client: app.diagnostics.get(id),
+            server: serverDiagnostic(id),
+          }
+        : {}),
       ...(probe?.result === 'lost-get'
         ? {
             receptions: events.filter((event) => event.path === prefix + probe.path).length,
@@ -301,7 +386,7 @@ export function verifyStandardJson(platform: 'ios' | 'android', log: string, sna
     : app.done && scenarios.every((row) => row.verdict === 'PASS')
       ? 'PASS'
       : 'NOT_RUN';
-  return { verdict, scenarios };
+  return { verdict, scenarios, ...(app.missing ? { appEvidence: app.missing } : {}) };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

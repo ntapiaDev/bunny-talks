@@ -246,6 +246,7 @@ export async function startFixture(
     ambientFixtureCookieMatches?: boolean;
     responseFixtureCookie?: 'none' | 'ambient' | 'native' | 'unexpected';
     headersSent: boolean;
+    responseStatus?: number;
     responseStarted: boolean;
     responseStartedAtMs: number | null;
     startedAtMs: number;
@@ -341,6 +342,7 @@ export async function startFixture(
     const recordHeaders = () => {
       event.headersSent = res.headersSent;
       if (!event.headersSent) return;
+      if (standardJson) event.responseStatus = res.statusCode;
       if (standardJson && path === '/retry-status-length')
         event.retryAfterZero = res.statusCode === 503 && res.getHeader('Retry-After') === '0';
       event.responseCoding = coding(res.getHeader('Content-Encoding'));

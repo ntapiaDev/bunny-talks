@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { brotliDecompressSync, gunzipSync } from 'node:zlib';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { fixtureJson, startFixture } from '../qualification/server.js';
+import { describeNativeResult } from '../qualification/standard-json-diagnostics';
 import {
   firstBearer,
   marker,
@@ -486,9 +487,152 @@ it('serves the standard JSON profile and stops the report at its first discrimin
   expect(report.verdict).toBe('FAIL');
   expect(report.scenarios.slice(0, 3)).toEqual([
     { id: 'standard-json', verdict: 'PASS', observed: 'success' },
-    { id: 'gzip', verdict: 'FAIL', observed: 'fail' },
+    expect.objectContaining({
+      id: 'gzip',
+      verdict: 'FAIL',
+      observed: 'fail',
+      reason: 'unexpected-app-outcome',
+    }),
     { id: 'gzip-missing-isize', verdict: 'NOT_RUN' },
   ]);
+});
+
+it('preserves client failure stages and explains missing server proof without retaining values', () => {
+  function run(call: Record<string, unknown>, snapshot: Parameters<typeof verifyStandardJson>[2]) {
+    const log = [
+      'READY standard-json-okhttp',
+      'START standard-json',
+      'FAIL standard-json ' + JSON.stringify({ failure: 'assertion', calls: [call] }),
+    ]
+      .map((line) => marker + line)
+      .join('\n');
+    return verifyStandardJson('android', log, snapshot).scenarios[0];
+  }
+  const empty = { events: [], connections: [], overflow: false };
+  expect(
+    run({ reservation: 'refused', native: 'not-called', adapter: 'network' }, empty),
+  ).toMatchObject({
+    observed: 'fail',
+    verdict: 'NOT_RUN',
+    reason: 'no-http-reception',
+    client: { calls: [{ reservation: 'refused', native: 'not-called' }] },
+    server: { fixtureConnectionsToDestination: 0, receptions: 0 },
+  });
+  const handshake = { ...empty, connections: [{ destination: 'A', receivedBytes: true }] };
+  expect(
+    run(
+      {
+        reservation: 'accepted',
+        native: 'rejected',
+        nativeKind: 'network',
+        nativeReason: 'tls',
+      },
+      handshake,
+    ),
+  ).toMatchObject({
+    verdict: 'NOT_RUN',
+    reason: 'no-http-reception',
+    client: { calls: [{ native: 'rejected', nativeKind: 'network', nativeReason: 'tls' }] },
+    server: {
+      fixtureConnectionsToDestination: 1,
+      fixtureConnectionsWithBytes: 1,
+      fixtureConnectionsWithTls: 0,
+      receptions: 0,
+    },
+  });
+  const event = {
+    path: standardPrefix + '/coding-absent',
+    destination: 'A',
+    method: 'GET',
+    connectionId: 1,
+    requestedCoding: 'identity',
+    responseCoding: 'absent',
+    configuredFraming: 'length',
+    requestNoStore: true,
+    authorization: false,
+    authorizationMatchesFixture: false,
+    cookie: false,
+    contentTypeIsJson: false,
+    postBodyMatchesFixture: false,
+    headersSent: true,
+    responseStatus: 200,
+    responseStarted: false,
+    responseStartedAtMs: null,
+    startedAtMs: 42,
+    closed: true,
+    closedAfterMs: 1,
+    finished: true,
+  };
+  const call = {
+    reservation: 'accepted',
+    native: 'success',
+    adapter: 'success',
+    application: 'response',
+    status: 200,
+    bytes: 8,
+    body: 'fixture-only',
+    nativeReason: 'fixture-only',
+  };
+  const invalidResponse = run(call, { ...handshake, events: [event] });
+  expect(invalidResponse).toMatchObject({
+    observed: 'fail',
+    verdict: 'FAIL',
+    reason: 'unexpected-app-outcome',
+    client: { calls: [{ native: 'success', application: 'response', status: 200, bytes: 8 }] },
+    server: {
+      receptions: 1,
+      receptionConnections: 1,
+      samples: [{ framing: 'length', responseCoding: 'absent', finished: true }],
+    },
+  });
+  expect(JSON.stringify(invalidResponse)).not.toContain('fixture-only');
+  for (const [evidence, reason] of [
+    [{ headersSent: false }, 'headers-not-observed'],
+    [{ configuredFraming: 'unobserved' }, 'unexpected-configured-framing'],
+    [{ responseCoding: 'gzip' }, 'unexpected-response-coding'],
+  ] as const) {
+    expect(run(call, { ...handshake, events: [{ ...event, ...evidence }] })).toMatchObject({
+      observed: 'fail',
+      verdict: 'NOT_RUN',
+      reason,
+    });
+  }
+  expect(run(call, { ...handshake, events: [{ ...event, finished: false }] })).toMatchObject({
+    observed: 'fail',
+    verdict: 'NOT_RUN',
+    reason: 'response-finish-unconfirmed',
+    server: { receptions: 1, samples: [{ closed: true, finished: false }] },
+  });
+});
+
+it('describes native envelopes without retaining response content or native error details', () => {
+  const envelope = { ok: true, status: 200, contentType: 'application/json' };
+  expect(describeNativeResult({ ...envelope, bytes: new Uint8Array(8) })).toEqual({
+    native: 'success',
+    status: 200,
+    bytes: 8,
+  });
+  expect(describeNativeResult({ ...envelope, bytes: [] })).toEqual({
+    native: 'invalid',
+    status: 200,
+    bytes: undefined,
+  });
+  expect(
+    describeNativeResult({
+      ok: false,
+      kind: 'response',
+      qualificationReason: 'body',
+      qualificationBytes: 8,
+      qualificationStatus: 200,
+      detail: 'fixture-only',
+    }),
+  ).toEqual({
+    native: 'rejected',
+    nativeKind: 'response',
+    nativeReason: 'body',
+    nativeBytes: 8,
+    status: 200,
+  });
 });
 
 it('distinguishes lost GET responses and complete POST bodies before a deliberate cut', async () => {

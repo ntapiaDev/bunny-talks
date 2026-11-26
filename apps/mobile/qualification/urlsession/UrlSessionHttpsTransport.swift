@@ -16,6 +16,9 @@ final class UrlSessionHttpsTransport: NSObject, URLSessionDataDelegate, @uncheck
     var limit = 0
     var bytes = Data()
     var failure: String?
+    var qualificationReason: String?
+    var qualificationStatus: Int?
+    var qualificationBytes: Int?
 
     init(deadline: DispatchTime, timer: DispatchSourceTimer) {
       self.deadline = deadline
@@ -76,7 +79,7 @@ final class UrlSessionHttpsTransport: NSObject, URLSessionDataDelegate, @uncheck
       closing?.invalidateAndCancel()
       for slot in active.values {
         slot.timer.cancel()
-        slot.promise?.resolve(failure("network"))
+        slot.promise?.resolve(failure("network", reason: "network", slot: slot))
       }
       requests.removeAll()
       active.removeAll()
@@ -90,18 +93,18 @@ final class UrlSessionHttpsTransport: NSObject, URLSessionDataDelegate, @uncheck
     let upload = body.map { Data($0.utf8) }
     queue.sync {
       guard let session, let slot = active[id], slot.task == nil else {
-        promise.resolve(failure("network"))
+        promise.resolve(failure("network", reason: "reservation"))
         return
       }
       slot.promise = promise
       guard !slot.expired else {
-        finish(id: id, slot: slot, result: failure("timeout"))
+        finish(id: id, slot: slot, result: failure("timeout", reason: "deadline"))
         return
       }
       guard (1...1_048_576).contains(limit), var request,
             (method == "GET" && upload == nil) || (method == "POST" && upload != nil)
       else {
-        finish(id: id, slot: slot, result: failure("network"))
+        finish(id: id, slot: slot, result: failure("network", reason: "request"))
         return
       }
 
@@ -117,7 +120,7 @@ final class UrlSessionHttpsTransport: NSObject, URLSessionDataDelegate, @uncheck
       slot.limit = limit
       if slot.expired {
         task.cancel()
-        finish(id: id, slot: slot, result: failure("timeout"))
+        finish(id: id, slot: slot, result: failure("timeout", reason: "deadline"))
         return
       }
       requests[task.taskIdentifier] = id
@@ -144,14 +147,18 @@ final class UrlSessionHttpsTransport: NSObject, URLSessionDataDelegate, @uncheck
     return request
   }
 
-  private func failure(_ kind: String) -> [String: Any] {
-    ["ok": false, "kind": kind]
+  private func failure(_ kind: String, reason: String, slot: Slot? = nil) -> [String: Any] {
+    var result: [String: Any] = ["ok": false, "kind": kind, "qualificationReason": reason]
+    result["qualificationStatus"] = slot?.qualificationStatus
+    result["qualificationBytes"] = slot?.qualificationBytes
+    return result
   }
 
-  private func stop(id: String, kind: String) {
+  private func stop(id: String, kind: String, reason: String = "network") {
     guard let slot = active[id], slot.failure == nil else { return }
     slot.timer.cancel()
     slot.failure = kind
+    slot.qualificationReason = kind == "timeout" ? "deadline" : reason
     slot.bytes = Data()
     slot.upload = nil
     if let task = slot.task {
@@ -166,7 +173,8 @@ final class UrlSessionHttpsTransport: NSObject, URLSessionDataDelegate, @uncheck
     active.removeValue(forKey: id)
     slot.timer.cancel()
     if let task = slot.task { requests.removeValue(forKey: task.taskIdentifier) }
-    let outcome = slot.expired ? failure("timeout") : slot.failure.map(failure) ?? result
+    let outcome = slot.expired ? failure("timeout", reason: "deadline", slot: slot)
+      : slot.failure.map { failure($0, reason: slot.qualificationReason ?? "network", slot: slot) } ?? result
     slot.promise?.resolve(outcome)
   }
 
@@ -174,7 +182,11 @@ final class UrlSessionHttpsTransport: NSObject, URLSessionDataDelegate, @uncheck
                   willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest,
                   completionHandler: @escaping (URLRequest?) -> Void) {
     completionHandler(nil)
-    if let id = requests[task.taskIdentifier] { stop(id: id, kind: "redirect") }
+    if let id = requests[task.taskIdentifier] {
+      active[id]?.qualificationStatus = response.statusCode
+      active[id]?.qualificationBytes = 0
+      stop(id: id, kind: "redirect", reason: "redirect")
+    }
   }
 
   func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge,
@@ -222,29 +234,32 @@ final class UrlSessionHttpsTransport: NSObject, URLSessionDataDelegate, @uncheck
       completionHandler(.cancel)
       return
     }
-    func reject(_ kind: String) {
+    slot.qualificationStatus = (response as? HTTPURLResponse)?.statusCode
+    slot.qualificationBytes = 0
+    func reject(_ kind: String, reason: String) {
       slot.failure = kind
+      slot.qualificationReason = reason
       slot.bytes = Data()
       completionHandler(.cancel)
     }
-    guard !slot.expired else { reject("timeout"); return }
+    guard !slot.expired else { reject("timeout", reason: "deadline"); return }
     guard slot.response == nil, let response = response as? HTTPURLResponse,
           (200...599).contains(response.statusCode),
           response.mimeType?.lowercased() != "multipart/x-mixed-replace"
-    else { reject("response"); return }
-    guard !(300...399).contains(response.statusCode) else { reject("redirect"); return }
+    else { reject("response", reason: "headers"); return }
+    guard !(300...399).contains(response.statusCode) else { reject("redirect", reason: "redirect"); return }
     guard response.value(forHTTPHeaderField: "Content-Encoding") == nil
-    else { reject("response"); return }
+    else { reject("response", reason: "coding"); return }
 
     let transfer = response.value(forHTTPHeaderField: "Transfer-Encoding")?.lowercased()
     if let value = response.value(forHTTPHeaderField: "Content-Length") {
       guard transfer == nil, !value.isEmpty, value.utf8.allSatisfy({ (48...57).contains($0) }),
             let length = Int(value), response.statusCode != 204 || length == 0
-      else { reject("response"); return }
-      guard length <= slot.limit else { reject("size"); return }
+      else { reject("response", reason: "framing"); return }
+      guard length <= slot.limit else { reject("size", reason: "framing"); return }
       slot.length = length
     } else if let transfer {
-      guard transfer == "chunked", response.statusCode != 204 else { reject("response"); return }
+      guard transfer == "chunked", response.statusCode != 204 else { reject("response", reason: "framing"); return }
       slot.chunked = true
     }
     if response.statusCode == 204 { slot.length = 0 }
@@ -255,12 +270,14 @@ final class UrlSessionHttpsTransport: NSObject, URLSessionDataDelegate, @uncheck
   func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
     guard let id = requests[dataTask.taskIdentifier], let slot = active[id], slot.failure == nil
     else { return }
+    // The extra value means that the native delegate received more than the body limit.
+    slot.qualificationBytes = slot.bytes.count + min(data.count, slot.limit + 1 - slot.bytes.count)
     if slot.expired {
       stop(id: id, kind: "timeout")
     } else if data.count > slot.limit - slot.bytes.count {
-      stop(id: id, kind: "size")
+      stop(id: id, kind: "size", reason: "body")
     } else if let length = slot.length, data.count > length - slot.bytes.count {
-      stop(id: id, kind: "response")
+      stop(id: id, kind: "response", reason: "body")
     } else {
       slot.bytes.append(data)
     }
@@ -276,17 +293,26 @@ final class UrlSessionHttpsTransport: NSObject, URLSessionDataDelegate, @uncheck
     guard let id = requests[task.taskIdentifier], let slot = active[id] else { return }
     let result: [String: Any]
     if slot.failure != nil || slot.expired {
-      result = failure("network")
+      result = failure("network", reason: "network", slot: slot)
     } else if let error {
-      result = failure((error as? URLError)?.code == .timedOut ? "timeout" :
-                       slot.response == nil ? "network" : "response")
+      let code = (error as? URLError)?.code
+      if code == .timedOut {
+        result = failure("timeout", reason: "deadline", slot: slot)
+      } else if slot.response != nil {
+        result = failure("response", reason: "body", slot: slot)
+      } else {
+        let tlsCodes: [URLError.Code] = [.secureConnectionFailed, .serverCertificateHasBadDate,
+          .serverCertificateUntrusted, .serverCertificateHasUnknownRoot, .serverCertificateNotYetValid,
+          .clientCertificateRejected, .clientCertificateRequired]
+        result = failure("network", reason: code.map { tlsCodes.contains($0) } == true ? "tls" : "network", slot: slot)
+      }
     } else if let response = slot.response,
               slot.length.map({ $0 == slot.bytes.count }) ?? (slot.chunked || slot.framedProtocol) {
       result = ["ok": true, "status": response.statusCode,
                 "contentType": response.value(forHTTPHeaderField: "Content-Type") as Any? ?? NSNull(),
                 "bytes": slot.bytes]
     } else {
-      result = failure("response")
+      result = failure("response", reason: slot.response == nil ? "headers" : "framing", slot: slot)
     }
     finish(id: id, slot: slot, result: result)
   }

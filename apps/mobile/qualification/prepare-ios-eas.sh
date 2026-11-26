@@ -93,7 +93,7 @@ if [[ "$urlsession" == 1 ]]; then
   cp "$module/expo-module.config.json" "$native/../"
   cp "$module/ios/ApplicationHttpsModule.swift" "$native/"
   cp apps/mobile/qualification/urlsession/{ApplicationHttps.podspec,UrlSessionHttpsTransport.swift} "$native/"
-  cp apps/mobile/qualification/{standard-json-entry.tsx,standard-json-scenarios.ts,verify-standard-json.ts,server.ts,certificates.sh} \
+  cp apps/mobile/qualification/{standard-json-entry.tsx,standard-json-diagnostics.ts,standard-json-scenarios.ts,verify-standard-json.ts,server.ts,certificates.sh} \
     "$mobile/qualification/"
   cp apps/mobile/src/infrastructure/http/{application-http,native-https-transport}.ts "$mobile/src/infrastructure/http/"
 else
