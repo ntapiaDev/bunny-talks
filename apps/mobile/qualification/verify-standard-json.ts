@@ -51,12 +51,19 @@ type Event = {
 type Verdict = 'PASS' | 'FAIL' | 'NOT_RUN';
 type WireEvidence = 'PASS' | 'FAIL' | { reason: string };
 const missing = (reason: string): WireEvidence => ({ reason });
-type Snapshot = {
+export type Snapshot = {
   overflow: boolean;
   events: Event[];
-  connections: { id?: number; destination: string; receivedBytes: boolean; tls?: string | null }[];
+  connections: {
+    id?: number;
+    destination: string;
+    receivedBytes: boolean;
+    fixtureName?: boolean;
+    closedAtMs?: number | null;
+    tls?: string | null;
+  }[];
 };
-const cut = (event: Event) => event.fixtureCut === true && event.closed && !event.finished;
+export const cut = (event: Event) => event.fixtureCut === true && event.closed && !event.finished;
 const keepEvidence = new Set([
   'chunked-valid-rejected',
   'limit-exact',
@@ -80,16 +87,16 @@ const supplementalPaths = new Map([
   ['framing-recovery', ['/recover-bad-length', '/recover-json']],
   ['cancel-retried-get', ['/loss-get-cancel']],
 ]);
-const knownLength = (event: Event) =>
+export const knownLength = (event: Event) =>
   event.headersSent && event.configuredFraming === 'length' && event.responseCoding === 'absent';
-const interrupted = (event: Event) =>
+export const interrupted = (event: Event) =>
   knownLength(event) &&
   event.responseStarted &&
   event.closed &&
   !event.finished &&
   event.closedAfterMs !== null &&
   event.closedAfterMs < 3500;
-const completePost = (event: Event) =>
+export const completePost = (event: Event) =>
   event.requestComplete && event.contentTypeIsJson && event.postBodyMatchesFixture;
 const neighbourOverlapped = (cancelled: Event, neighbour: Event) =>
   cancelled.closedAfterMs !== null &&
@@ -113,7 +120,7 @@ const cutPaths = new Set([
   '/length-and-chunked',
 ]);
 const knownFramingFaults = new Set(retryFramingFaults.values());
-const tlsEstablished = (connection: Snapshot['connections'][number]) =>
+export const tlsEstablished = (connection: Snapshot['connections'][number]) =>
   connection.tls === 'TLSv1.2' || connection.tls === 'TLSv1.3';
 const elapsed = (end: number | undefined, start: number | undefined) =>
   end !== undefined &&
@@ -124,11 +131,16 @@ const elapsed = (end: number | undefined, start: number | undefined) =>
     ? end - start
     : undefined;
 
-function readApp(log: string, profile: string, scenarioIds: readonly string[]) {
+export function readApp(
+  log: string,
+  profile: string,
+  scenarioIds: readonly string[],
+  logMarker = marker,
+) {
   const lines = log.split(/\r?\n/).flatMap((line) => {
-    const at = line.lastIndexOf(marker);
+    const at = line.lastIndexOf(logMarker);
     if (at < 0) return [];
-    return [line.slice(at + marker.length).trim()];
+    return [line.slice(at + logMarker.length).trim()];
   });
   const ready = lines.shift() === 'READY standard-json-known-length-' + profile;
   const observed = new Map<string, string>();

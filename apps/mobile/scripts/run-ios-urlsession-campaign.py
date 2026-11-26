@@ -24,6 +24,8 @@ PNPM_VERSION = "10.34.9"
 
 
 class Campaign(lab.Feasibility):
+    bundle_id = BUNDLE
+
     def __init__(self, report_path, env):
         super().__init__(report_path, env)
         self.process_env.update(CI="true", EXPO_NO_DOTENV="1", EXPO_OFFLINE="1",
@@ -62,7 +64,7 @@ class Campaign(lab.Feasibility):
     def toolchain(self):
         self.runner = c1.RuntimeRun(self.scratch, self.scratch / "unused.json", self.env,
                                     command=self.isolated_command, device_name="Bunny Talks URLSession",
-                                    bundle_id=BUNDLE)
+                                    bundle_id=self.bundle_id)
         self.runner.verify_toolchain()
         self.runner.find_runtime()
         return self.runner.evidence
@@ -72,7 +74,7 @@ class Campaign(lab.Feasibility):
         self.runner.stages["simulatorPreparation"] = {"verdict": "PASS"}
         return {"booted": True}
 
-    def build(self):
+    def prepare_dependencies(self):
         root = self.staged
         mobile = root / "apps/mobile"
         self.process_env["COREPACK_HOME"] = str(self.scratch / "corepack")
@@ -89,6 +91,13 @@ class Campaign(lab.Feasibility):
         for args, cwd, timeout in (
             (("pnpm", "install", "--frozen-lockfile", "--store-dir", str(self.scratch / "store")), root, 360),
             (("pnpm", "--filter", "@bunny-talks/mobile^...", "run", "--if-present", "build"), root, 180),
+        ):
+            self.runner.call(*args, cwd=cwd, timeout=timeout, code="project-preparation-failed")
+
+    def build(self):
+        self.prepare_dependencies()
+        mobile = self.staged / "apps/mobile"
+        for args, cwd, timeout in (
             (("pnpm", "exec", "expo", "prebuild", "--platform", "ios", "--no-install", "--no-clean"), mobile, 180),
             (("pod", "install"), mobile / "ios", 600),
         ):
@@ -142,7 +151,7 @@ class Campaign(lab.Feasibility):
                 "minimumIOS": "16.4", "hermes": True, "ats": "PASS",
                 "transportSymbolInspection": "PASS"}
 
-    def start_fixture(self):
+    def prepare_certificates(self):
         certs = self.scratch / "certificates"
         version = self.command(("openssl", "version"), capture=True)
         if not version.startswith("OpenSSL 3."):
@@ -150,15 +159,27 @@ class Campaign(lab.Feasibility):
             self.process_env["PATH"] = prefix + "/bin" + os.pathsep + self.process_env["PATH"]
         mobile = self.staged / "apps/mobile"
         self.command(("bash", str(mobile / "qualification/certificates.sh"), str(certs)), timeout=60)
+        return certs
+
+    def start_fixture(self):
+        certs = self.prepare_certificates()
+        mobile = self.staged / "apps/mobile"
         self.fixture = subprocess.Popen(("node", str(mobile / "qualification/server.ts"), str(certs)),
             env={**self.process_env, "BUNNY_HTTPS_STANDARD_JSON": "1", "FIXTURE_PORT": "29443"},
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        evidence = self.wait_for_fixture()
+        self.runner.sim("keychain", self.runner.device, "add-root-cert", str(certs / "ca.pem"), code="ca-install-failed")
+        return evidence
+
+    def wait_for_fixture(self, *, require_empty_connections=False):
         for _ in range(100):
             require(self.fixture.poll() is None, "fixture-exited")
             try:
                 with urllib.request.urlopen("http://127.0.0.1:29448/runtime", timeout=1) as response:
                     snapshot = json.load(response)
                 require(snapshot["events"] == [] and snapshot["overflow"] is False, "fixture-contaminated")
+                if require_empty_connections:
+                    require(snapshot["connections"] == [], "fixture-contaminated")
                 break
             except OSError:
                 time.sleep(0.1)
@@ -166,48 +187,58 @@ class Campaign(lab.Feasibility):
             raise c2.StageError("fixture-unavailable")
         listeners = self.command(("lsof", "-nP", "-a", "-p", str(self.fixture.pid), "-iTCP", "-sTCP:LISTEN"), capture=True)
         require(all("127.0.0.1:" + str(port) in listeners for port in range(29443, 29450)), "fixture-listeners-unconfirmed")
-        self.runner.sim("keychain", self.runner.device, "add-root-cert", str(certs / "ca.pem"), code="ca-install-failed")
         return {"loopbackListeners": 7}
 
-    def runtime(self):
+    def install(self):
         runner = self.runner
         runner.sim("install", runner.device, str(self.app), code="installation-refused", timeout=90)
-        runner.installed = Path(runner.sim("get_app_container", runner.device, BUNDLE, "app",
+        runner.installed = Path(runner.sim("get_app_container", runner.device, self.bundle_id, "app",
                                         code="installed-app-missing", capture=True).output).resolve()
         require(runner.installed.is_relative_to(runner.device_set / runner.device), "installed-container-mismatch")
         require(runner.app_hashes(runner.installed) == self.hashes, "installed-app-mismatch")
-        log = self.scratch / "app.log"
+
+    def collect_runtime(self, log, marker, *launch_args):
+        runner = self.runner
         with log.open("wb") as output:
             self.reader = subprocess.Popen(("xcrun", "simctl", "--set", str(runner.device_set),
                 "spawn", runner.device, "log", "stream", "--level", "info", "--style", "compact",
-                "--predicate", 'eventMessage CONTAINS "[BunnyHttpsStandardJson]"'),
+                "--predicate", f'eventMessage CONTAINS "{marker.strip()}"'),
                 stdout=output, stderr=subprocess.DEVNULL, env=self.process_env, start_new_session=True)
         time.sleep(1)
-        runner.pid = runner.launch_pid()
+        runner.pid = runner.launch_pid(*launch_args)
         deadline = time.monotonic() + 180
         collection_error = None
         while True:
             lines = log.read_text(errors="replace").splitlines()
             # Unified logs identify the application process independently from the simulator collector.
-            own = [line for line in lines if f"[{runner.pid}:" in line and MARKER in line]
+            own = [line for line in lines if f"[{runner.pid}:" in line and marker in line]
             try:
                 runner.check_alive(explicit_identity=True)
                 require(self.reader.poll() is None, "log-reader-exited")
             except c2.StageError as error:
                 collection_error = error
                 break
-            if any(MARKER + "DONE" in line or MARKER + "UNAVAILABLE" in line for line in own):
+            if any(marker + "DONE" in line or marker + "UNAVAILABLE" in line for line in own):
                 break
             if time.monotonic() >= deadline:
                 collection_error = c2.StageError("qualification-timeout", verdict="NOT_RUN")
                 break
             time.sleep(0.2)
-        filtered = self.scratch / "filtered.log"
+        filtered = log.with_name(log.stem + "-filtered.log")
         filtered.write_text("\n".join(own))
+        return filtered, collection_error
+
+    def fixture_snapshot(self, wire):
         with urllib.request.urlopen("http://127.0.0.1:29448/runtime", timeout=5) as response:
             snapshot = json.load(response)
-        wire = self.scratch / "runtime.json"
         wire.write_text(json.dumps(snapshot))
+
+    def runtime(self):
+        self.install()
+        runner = self.runner
+        filtered, collection_error = self.collect_runtime(self.scratch / "app.log", MARKER)
+        wire = self.scratch / "runtime.json"
+        self.fixture_snapshot(wire)
         result = self.runner.call("node", str(self.staged / "apps/mobile/qualification/verify-standard-json.ts"),
             "ios", str(filtered), str(wire), code="oracle-failed", capture=True, allowed=(0, 1))
         qualification = json.loads(result.output)

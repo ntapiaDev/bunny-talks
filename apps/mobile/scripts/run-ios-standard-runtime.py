@@ -322,16 +322,18 @@ class RuntimeRun:
             self.evidence["podfileLockSha256"] = lock_hash
         return app
 
-    def compile_release(self, ios, output, *, verbose=False):
+    def compile_release(self, ios, output, *, verbose=False, dry_run=False):
         return self.call(
-            "xcodebuild", "build", "-workspace", "BunnyTalks.xcworkspace", "-scheme", EXECUTABLE,
+            "xcodebuild", *(("-dry-run",) if dry_run else ("build",)),
+            "-workspace", "BunnyTalks.xcworkspace", "-scheme", EXECUTABLE,
             "-configuration", "Release", "-sdk", "iphonesimulator", "-destination",
             "generic/platform=iOS Simulator", "-derivedDataPath", str(output / "DerivedData"), "ARCHS=arm64",
             "CODE_SIGNING_ALLOWED=NO", "-resultBundlePath", str(output / "build.xcresult"),
             f"SOURCEMAP_FILE={output / 'bundle.map'}", "LD_GENERATE_MAP_FILE=YES",
             "LD_MAP_FILE_PATH=$(TARGET_TEMP_DIR)/$(TARGET_NAME)-LinkMap-$(CURRENT_ARCH).txt",
             *(("-verbose",) if verbose else ()),
-            cwd=ios, output=output / "xcodebuild.log", merge_output=True, timeout=1500, code="xcodebuild-failed",
+            cwd=ios, output=output / "xcodebuild.log", merge_output=True,
+            timeout=180 if dry_run else 1500, code="xcodebuild-failed",
         )
 
     def collect_build_diagnostics(self, build_dir, exit_code):

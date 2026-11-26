@@ -168,8 +168,14 @@ def check_pod_settings(settings, *, urlsession=False):
     check({"-DSQLITE_HAS_CODEC=1", "-DSQLCIPHER_CRYPTO_CC"} <= set(sqlite_flags), "sqlcipher-flags")
 
 
-def check_bundle_sources(path, *, candidate=False):
+def check_bundle_sources(path, *, candidate=False, laboratory_sources=None):
     sources = [name.replace("\\", "/") for name in json.loads(path.read_bytes())["sources"]]
+    if laboratory_sources is not None:
+        fixture_sources = {name.rsplit("/qualification/", 1)[1] for name in ("/" + n for n in sources)
+                           if "/qualification/" in name}
+        check(fixture_sources == laboratory_sources
+              and not any(name.endswith("src/composition/App.tsx") for name in sources), "laboratory-js-entry")
+        return
     if candidate:
         fixture_sources = {name.rsplit("/qualification/", 1)[1] for name in ("/" + n for n in sources)
                            if "/qualification/" in name}
@@ -209,9 +215,10 @@ def check_linked_archives(raw_map, archives, digest):
 
 
 def inspect_release(derived, source_map, pod_settings, provenance, *, mobile=MOBILE, bundle_id=BUNDLE_ID,
-                    c2=False, urlsession=False):
+                    c2=False, urlsession=False, laboratory_sources=None):
     check_pod_settings(json.loads(pod_settings.read_bytes()), urlsession=urlsession)
-    check_bundle_sources(source_map, candidate=bundle_id == CANDIDATE_BUNDLE_ID)
+    check_bundle_sources(source_map, candidate=bundle_id == CANDIDATE_BUNDLE_ID,
+                         laboratory_sources=laboratory_sources)
     link = link_helpers()
     apps = list((derived / "Build/Products/Release-iphonesimulator").glob("*.app"))
     if not apps:
@@ -261,10 +268,13 @@ def inspect_release(derived, source_map, pod_settings, provenance, *, mobile=MOB
         symbols = link.command("xcrun", "nm", "-j", binary)
         check(not re.search(r"(?m)^_(?:curl_|SSL_|OPENSSL_|bunny_https_)", symbols)
               and "Foundation.framework/Foundation" in dependencies, "standard-transport-symbols")
-        for path in (binary, bundle):
-            check(not re.search(rb"qualificationReason|qualificationStatus|qualificationBytes|"
-                                rb"https-qualification/standard-json|BunnyHttpsStandardJson", path.read_bytes()),
-                  "qualification-marker")
+        diagnostic_fields = rb"qualificationReason|qualificationStatus|qualificationBytes"
+        instrumented_profile = rb"https-qualification/standard-json|BunnyHttpsStandardJson"
+        check(not re.search(diagnostic_fields + b"|" + instrumented_profile, binary.read_bytes()),
+              "qualification-marker")
+        js_forbidden = (diagnostic_fields + b"|" + instrumented_profile
+                        if laboratory_sources is None else diagnostic_fields)
+        check(not re.search(js_forbidden, bundle.read_bytes()), "qualification-marker")
         return {
             "verdict": "PASS", "bundleId": bundle_id, "displayName": "Bunny Talks",
             "configuration": "Release", "platform": "IOSSIMULATOR", "architecture": "arm64",

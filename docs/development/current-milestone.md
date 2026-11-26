@@ -1,6 +1,10 @@
-# État courant — qualification HTTPS standard étape B
+# État courant — qualification HTTPS standard clôturée
 
-La revue humaine accepte l’étape A à la révision `f468f303b3e0ce8ecb5fdb9172343aef4356d63f`. Le plan Android instrumenté compte 33 PASS et l’APK Release standard a été construit, inspecté, installé et démarré sur AVD. La préparation Apple et les limites de ces preuves sont décrites dans la fondation HTTPS. Le verrou iOS reste fermé. [Préparation et résultats](native-https-foundation.md#qualification-https-standard-étape-b--préparation-locale)
+La revue humaine accepte la candidate URLSession (34 PASS), le démarrage de la Release standard iOS (PASS, `httpsRuntime: NOT_RUN`) et le runtime HTTPS de laboratoire (16 PASS). Le verdict global du laboratoire reste `NOT_RUN` pour la comparaison SwiftDriver. L’étape A et les 33 scénarios instrumentés Android restent acceptés, avec l’inspection et le démarrage de l’APK Release standard sur AVD. Le verrou iOS reste fermé. [Clôture Apple et rapports originaux](native-https-foundation.md#clôture-humaine-de-la-qualification-https-standard) · [Preuve Android](native-https-foundation.md#résultats-android-locaux)
+
+Le parcours métier standard, la comparaison SwiftDriver exhaustive, l’exécution iOS 16.4, les appareils physiques, le trajet TLS déployé, le confinement intégral et les mesures de mémoire, de performances et d’énergie restent ouverts. La commande SwiftDriver standard sera collectée à l’occasion d’une future qualification utile.
+
+Le retrait du banc historique attend la validation de la stratégie de conservation. [Plan de retrait HTTPS](native-https-foundation.md#plan-de-retrait-des-composants-https-historiques)
 
 ## Résultats antérieurs applicables
 

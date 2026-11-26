@@ -172,6 +172,10 @@ export async function startFixture(
   runtimeRoutes?: ReadonlyMap<string, string>,
   fixtureId?: string,
   standardJsonProfile = false,
+  standardLab?: {
+    routes: ReadonlyMap<string, string>;
+    primaryCertificate: 'server' | 'wrong';
+  },
 ) {
   const trackWire = runtimeRoutes !== undefined || standardJsonProfile;
   const controls = new Map<string, Control>();
@@ -263,9 +267,12 @@ export async function startFixture(
   const handler = (destination: string) => (req: IncomingMessage, res: ServerResponse) => {
     const requestPath = new URL(req.url ?? '/', 'https://fixture.invalid').pathname;
     const runtimeRoute = runtimeRoutes?.get(requestPath);
-    const standardJson = standardJsonProfile && requestPath.startsWith(standardJsonScope + '/');
+    const labRoute = standardLab?.routes.get(req.method + ' ' + requestPath);
+    const standardJson =
+      standardJsonProfile &&
+      (standardLab ? labRoute !== undefined : requestPath.startsWith(standardJsonScope + '/'));
     const path = standardJson
-      ? requestPath.slice(standardJsonScope.length)
+      ? (labRoute ?? requestPath.slice(standardJsonScope.length))
       : (runtimeRoute ?? requestPath.replace(/^\/v1\/https-qualification(?=\/)/, ''));
     const safePath = evidencePath(path);
     const standardJsonRoute =
@@ -293,11 +300,14 @@ export async function startFixture(
       .map((cookie) => cookie.split('=', 1)[0]?.trim());
     const event: (typeof events)[number] = {
       destination,
-      path: runtimeRoute
-        ? requestPath
-        : standardJson && standardJsonRoute !== '/unexpected'
-          ? standardJsonScope + standardJsonRoute
-          : evidencePath(requestPath),
+      path:
+        runtimeRoute || labRoute
+          ? requestPath
+          : standardLab
+            ? '/unexpected'
+            : standardJson && standardJsonRoute !== '/unexpected'
+              ? standardJsonScope + standardJsonRoute
+              : evidencePath(requestPath),
       method:
         runtimeRoutes && !['GET', 'POST', 'DELETE'].includes(req.method ?? '')
           ? 'unexpected'
@@ -330,7 +340,7 @@ export async function startFixture(
         authorization.length === 1 && authorization[0] === 'Bearer ' + secondBearer;
       event.requestNoStore = req.headers['cache-control'] === 'no-store';
       event.iosPrimaryTarget =
-        req.url === standardJsonScope + path &&
+        req.url === (labRoute ? requestPath : standardJsonScope + path) &&
         req.headersDistinct.host?.length === 1 &&
         req.headers.host === 'localhost:' + basePort;
       if (retryFramingFaults.has(path))
@@ -591,7 +601,11 @@ export async function startFixture(
         match[2] === 'http'
           ? `http://${hostname}:${basePort + 2}`
           : `https://${hostname}:${basePort + (match[2] === 'host' ? 1 : 0)}`;
-      res.writeHead(Number(match[1]), { Location: `${target}/destination` }).end();
+      res
+        .writeHead(Number(match[1]), {
+          Location: target + (standardLab ? '/v1/session' : '/destination'),
+        })
+        .end();
     } else if (
       standardJson &&
       ['/slow/neighbour', '/slow/timeout', '/slow/concurrency-one'].includes(path)
@@ -904,7 +918,7 @@ export async function startFixture(
     );
   };
   const servers = [
-    await httpsServer('server', 'A'),
+    await httpsServer(standardLab?.primaryCertificate ?? 'server', 'A'),
     await httpsServer('server', 'B'),
     createHttpServer(handler('C')),
     await httpsServer('unknown', 'unknown'),

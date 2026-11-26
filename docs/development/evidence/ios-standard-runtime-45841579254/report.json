@@ -1,0 +1,112 @@
+{
+  "complete": true,
+  "evidence": {
+    "inspectedApp": {
+      "bundleId": "fr.bunnytalks.mobile",
+      "executableSha256": "6b255be4f885822faa64b567f5e276528ec26e70a12b674d899dbf13a995a53f",
+      "hermesBundleSha256": "0d26a9ae8c5df7f3f30be7fe9d5dfd8c294a4a37f9d4095e9ee5e821032c807f"
+    },
+    "installedApp": {
+      "bundleId": "fr.bunnytalks.mobile",
+      "executableSha256": "6b255be4f885822faa64b567f5e276528ec26e70a12b674d899dbf13a995a53f",
+      "hermesBundleSha256": "0d26a9ae8c5df7f3f30be7fe9d5dfd8c294a4a37f9d4095e9ee5e821032c807f"
+    },
+    "launchPid": 30724,
+    "negativeRenderControl": true,
+    "podfileLockSha256": "37d3a1e88b8a6e36c9e9666edb775c73ebf83f8fc27ef7de6b9294e239232c90",
+    "release": {
+      "architecture": "arm64",
+      "configuration": "Release",
+      "jsEngine": "Hermes",
+      "minimumOS": "16.4",
+      "platform": "IOSSIMULATOR"
+    },
+    "renderingMethod": "simulator-screenshot-vision-ocr",
+    "simulator": {
+      "iOS": "26.5",
+      "iOSBuild": "23F77",
+      "model": "iPhone 17"
+    },
+    "simulatorBootExitCode": 0,
+    "simulatorBooted": true,
+    "simulatorBootstatusExitCode": 0,
+    "simulatorCreated": true,
+    "simulatorRemoved": true,
+    "simulatorState": "Booted",
+    "stabilityWindowSeconds": 15,
+    "toolchain": {
+      "architecture": "arm64",
+      "cocoaPods": "1.17.0",
+      "macOS": "26.7.2",
+      "macOSBuild": "25G332",
+      "node": "24.22.3",
+      "pnpm": "10.34.9",
+      "sdk": "26.5",
+      "sdkBuild": "23F81a",
+      "xcode": "26.6",
+      "xcodeBuild": "17F113"
+    },
+    "xcodeExitCode": 0
+  },
+  "revision": "b7dca8ed038436a950ac70e040781ca30aa28bc2",
+  "run": 45841579254,
+  "schemaVersion": 1,
+  "scope": "ios-standard-runtime-c1",
+  "stages": {
+    "build": {
+      "verdict": "PASS"
+    },
+    "cleanup": {
+      "verdict": "PASS"
+    },
+    "dependencies": {
+      "verdict": "PASS"
+    },
+    "httpsRuntime": {
+      "verdict": "NOT_RUN"
+    },
+    "installation": {
+      "verdict": "PASS"
+    },
+    "installedExecutable": {
+      "verdict": "PASS"
+    },
+    "launch": {
+      "verdict": "PASS"
+    },
+    "physicalDevice": {
+      "verdict": "NOT_RUN"
+    },
+    "processStability": {
+      "verdict": "PASS"
+    },
+    "project": {
+      "verdict": "PASS"
+    },
+    "reactNativeRendering": {
+      "verdict": "PASS"
+    },
+    "revision": {
+      "verdict": "PASS"
+    },
+    "runtimeMinimumIOS": {
+      "verdict": "NOT_RUN"
+    },
+    "simulatorAvailability": {
+      "verdict": "PASS"
+    },
+    "simulatorPreparation": {
+      "verdict": "PASS"
+    },
+    "staticInspection": {
+      "verdict": "PASS"
+    },
+    "stop": {
+      "verdict": "PASS"
+    },
+    "toolchain": {
+      "verdict": "PASS"
+    }
+  },
+  "verdict": "PASS"
+}

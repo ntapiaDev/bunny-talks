@@ -1,3 +1,7 @@
+# Clôture de la qualification HTTPS standard
+
+Le 26 novembre 2026, la revue accepte les runs Apple `45841518053` et `45841579254` sur `b7dca8ed038436a950ac70e040781ca30aa28bc2`, et le run de laboratoire `45845228016` sur `610ac5362d60c41c8360a87e411ab786c319885e`. La candidate compte 34 PASS. La Release standard est PASS pour l’inspection et le démarrage, avec `httpsRuntime: NOT_RUN`. Le laboratoire compte 16 PASS HTTPS et son verdict global reste `NOT_RUN` pour le plan SwiftDriver indisponible. La revue reporte cette comparaison à une future qualification utile et garde le verrou iOS fermé. [Périmètres, empreintes et rapports originaux](native-https-foundation.md#clôture-humaine-de-la-qualification-https-standard)
+
 # Clôture de la qualification expérimentale URLSession
 
 La revue humaine accepte le sixième run `45826086010`, révision `9a181a3c74e869a3f85022dc5c4efa5ed80a6f6b`, pour la candidate Release arm64 Hermes sur iPhone 17 Simulator iOS 26.5 avec Xcode 26.6. La matrice compte 31 `PASS`, 0 `FAIL` et 0 `NOT_RUN`. Le verdict global est `PASS` avec `complete: true`. Le cinquième run `45811250133` conserve ses 7 `PASS` et 24 `NOT_RUN`. [Rapport original archivé](evidence/ios-https-urlsession-45826086010/report.json) · [Premiers runs et corrections](native-https-foundation.md#premier-run-urlsession-et-correction-corepack)
