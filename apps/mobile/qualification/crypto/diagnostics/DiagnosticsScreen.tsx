@@ -14,13 +14,16 @@ type DiagnosticsScreenProps = {
   runVaultDiagnostics: (report: Report, full: boolean) => Promise<void>;
 };
 
-export function DiagnosticsScreen({
-  createNativeVaultDiagnostics,
-  runApiDiagnostic,
-  runDiagnostics,
-  runVaultDiagnostics,
-}: DiagnosticsScreenProps) {
-  const [vaultDiagnostic] = useState(createNativeVaultDiagnostics);
+export function DiagnosticsScreen(
+  props:
+    | DiagnosticsScreenProps
+    | {
+        initializationActions: readonly { label: string; run: (report: Report) => Promise<void> }[];
+      },
+) {
+  const [vaultDiagnostic] = useState(() =>
+    'initializationActions' in props ? undefined : props.createNativeVaultDiagnostics(),
+  );
   const [pulse, setPulse] = useState(0);
   const [entries, setEntries] = useState<DiagnosticEntry[]>([]);
   const [running, setRunning] = useState(false);
@@ -37,6 +40,38 @@ export function DiagnosticsScreen({
       setRunning(false);
     }
   };
+  const feedback = (
+    <>
+      <Button title={`Réactivité : ${pulse}`} onPress={() => setPulse((value) => value + 1)} />
+      {entries.map((entry, index) => (
+        <Text key={`${entry.label}-${index}`}>
+          {entry.status === 'pass' ? 'OK' : entry.status === 'fail' ? 'Échec' : 'Info'} :{' '}
+          {entry.label}
+          {entry.durationMs === undefined ? '' : ` (${entry.durationMs} ms)`}
+        </Text>
+      ))}
+    </>
+  );
+  if ('initializationActions' in props) {
+    return (
+      <SafeAreaView style={{ flex: 1, padding: 20 }}>
+        <ScrollView>
+          <Text>Qualification synthétique de l’initialisation locale</Text>
+          {props.initializationActions.map(({ label, run }) => (
+            <Button
+              key={label}
+              title={label}
+              disabled={running}
+              onPress={() => void runExclusive(run)}
+            />
+          ))}
+          {feedback}
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+  const { runApiDiagnostic, runDiagnostics, runVaultDiagnostics } = props;
+  if (!vaultDiagnostic) throw new Error('Missing vault diagnostics');
   const run = () => runExclusive(runDiagnostics);
   const runVault = (full: boolean) => runExclusive((report) => runVaultDiagnostics(report, full));
   const runNative = (reopen = false) =>
@@ -72,14 +107,7 @@ export function DiagnosticsScreen({
           disabled={running}
           onPress={() => void runNative(true)}
         />
-        <Button title={`Réactivité : ${pulse}`} onPress={() => setPulse((value) => value + 1)} />
-        {entries.map((entry, index) => (
-          <Text key={`${entry.label}-${index}`}>
-            {entry.status === 'pass' ? 'OK' : entry.status === 'fail' ? 'Échec' : 'Info'} :{' '}
-            {entry.label}
-            {entry.durationMs === undefined ? '' : ` (${entry.durationMs} ms)`}
-          </Text>
-        ))}
+        {feedback}
       </ScrollView>
     </SafeAreaView>
   );

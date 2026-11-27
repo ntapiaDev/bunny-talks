@@ -45,7 +45,7 @@ Restent ouvertes : l'annulation effective au niveau natif, la désactivation et 
 
 ## Configurations d'identité crypto
 
-La configuration standard conserve `fr.bunnytalks.mobile`. `BUNNY_CRYPTO_QUALIFICATION=synthetic` sélectionne `fr.bunnytalks.mobile.cryptoqualification`. Le prebuild applique cette identité et le script Gradle la vérifie avant de sélectionner l’entrée de qualification. Les réglages historiques sont refusés. L’[investigation B2-A](android-crypto-historical-b2a.md) conserve la provenance de l’APK historique et les limites observées à l’ouverture des stores.
+La configuration standard conserve `fr.bunnytalks.mobile`. `BUNNY_CRYPTO_QUALIFICATION=synthetic` sélectionne `fr.bunnytalks.mobile.cryptoqualification`. Le prebuild applique cette identité et le script Gradle la vérifie avant de sélectionner l’entrée de qualification. Les réglages historiques sont refusés. L’[investigation B2-A](android-crypto-historical-b2a.md) conserve la provenance de l’APK historique et les limites observées à l’ouverture des stores. Le profil Android `initialization` sélectionne `fr.bunnytalks.mobile.cryptoinitialization`. Il réutilise l’entrée de qualification. Seule sa résolution Metro charge la composition d’initialisation avec les capacités Expo expérimentales. Les deux autres graphes gardent leurs entrées et les exports Metro ont vérifié leur séparation. [Jalon 3A](current-milestone.md).
 
 ## Nettoyage ciblé C
 

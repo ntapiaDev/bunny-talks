@@ -68,7 +68,26 @@ it('resolves an isolated synthetic crypto qualification identity', () => {
   expect(manifest.main).toBe('index.ts');
 });
 
-it('guards the Android crypto entry to the synthetic qualification profile', () => {
+it('resolves the initialization identity independently of standard and B1', () => {
+  const config = readExpoOutput('expo/bin/cli', ['config', '--type', 'public'], {
+    BUNNY_CRYPTO_QUALIFICATION: 'initialization',
+    EXPO_PUBLIC_BUNNY_CRYPTO_QUALIFICATION: 'initialization',
+  });
+  expect(config.android.package).toBe('fr.bunnytalks.mobile.cryptoinitialization');
+  expect(config.ios.bundleIdentifier).toBe('fr.bunnytalks.mobile');
+  expect(manifest.main).toBe('index.ts');
+});
+
+it('rejects contradictory initialization selectors', () => {
+  expect(() =>
+    readExpoOutput('expo/bin/cli', ['config', '--type', 'public'], {
+      BUNNY_CRYPTO_QUALIFICATION: 'initialization',
+      EXPO_PUBLIC_BUNNY_CRYPTO_QUALIFICATION: 'synthetic',
+    }),
+  ).toThrow();
+});
+
+it('guards the Android crypto entry by qualification profile and application identity', () => {
   const script = readFileSync(resolve(mobile, 'qualification/crypto/android.init.gradle'), 'utf8');
   expect(script).toContain('BUNNY_CRYPTO_QUALIFICATION');
   expect(script).toContain('BUNNY_CRYPTO_HISTORICAL_REQUALIFICATION');
@@ -77,6 +96,8 @@ it('guards the Android crypto entry to the synthetic qualification profile', () 
   expect(script).not.toContain("'historical'");
   expect(script).toContain("'synthetic'");
   expect(script).toContain("'fr.bunnytalks.mobile.cryptoqualification'");
+  expect(script).toContain("'fr.bunnytalks.mobile.cryptoinitialization'");
+  expect(script).toContain('android.defaultConfig.applicationId != packageId');
   expect(script).toContain("'entry.tsx'");
   expect(readFileSync(resolve(mobile, 'qualification/crypto/entry.tsx'), 'utf8')).toContain(
     "import '../../src/infrastructure/crypto/random-provider'",
@@ -131,6 +152,16 @@ it('autolinks ApplicationHttps on Apple and Android from the local module', () =
     ]),
   );
   const android = readExpoOutput('expo/bin/autolinking', ['resolve', '--platform', 'android']);
+  for (const packageName of [
+    'expo-sqlite',
+    'expo-secure-store',
+    'expo-file-system',
+    '@sonnetstationsolutions/expo-argon2',
+  ]) {
+    expect(
+      android.modules.filter((entry: { packageName: string }) => entry.packageName === packageName),
+    ).toHaveLength(1);
+  }
   expect(android.modules).toContainEqual(
     expect.objectContaining({
       packageName: 'application-https',

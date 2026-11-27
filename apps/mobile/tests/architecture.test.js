@@ -98,11 +98,26 @@ describe('mobile architecture boundaries', () => {
       'key-envelope-recovery.json',
       'native-vault-v1.json',
     ];
-    const productFiles = [path.join(mobile, 'index.ts'), ...files(path.join(mobile, 'src'))];
-    for (const file of productFiles) {
+    const sources = new Map(
+      files(path.join(mobile, 'src')).map((file) => [file.replace(/\.[^.]+$/, ''), file]),
+    );
+    const visited = new Set();
+    function visitProduct(file) {
+      if (visited.has(file)) return;
+      visited.add(file);
       const source = readFileSync(file, 'utf8');
       for (const marker of experimental) expect(source, file).not.toContain(marker);
+      expect(path.basename(file), file).not.toMatch(
+        /^(local-crypto-initialization|expo-local-store)\.ts$/,
+      );
+      for (const specifier of imports(file)) {
+        if (!specifier.startsWith('.')) continue;
+        const stem = path.resolve(path.dirname(file), specifier).replace(/\.[cm]?tsx?$/, '');
+        const target = sources.get(stem);
+        if (target) visitProduct(target);
+      }
     }
+    visitProduct(path.join(mobile, 'index.ts'));
   });
   it('exposes diagnostics only through the crypto qualification entry', () => {
     const entry = path.join(qualification, 'crypto/entry.tsx');
@@ -126,7 +141,9 @@ describe('mobile architecture boundaries', () => {
       active.add(file);
       for (const specifier of imports(file)) {
         if (!specifier.startsWith('.')) continue;
-        const target = byStem.get(path.resolve(path.dirname(file), specifier).replace(/\.js$/, ''));
+        const target = byStem.get(
+          path.resolve(path.dirname(file), specifier).replace(/\.[cm]?[jt]sx?$/, ''),
+        );
         if (target) visit(target);
       }
       active.delete(file);

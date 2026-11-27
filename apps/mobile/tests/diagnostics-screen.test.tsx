@@ -41,6 +41,19 @@ beforeEach(() => {
 });
 
 describe('diagnostic screen', () => {
+  it('uses the shared screen for initialization-only actions', async () => {
+    const run = vi.fn(async () => {});
+    const screen = DiagnosticsScreen({
+      initializationActions: [{ label: 'Reprendre la qualification', run }],
+    });
+    const [heading, actions] = screen.props.children.props.children;
+    expect(heading.props.children).toBe('Qualification synthétique de l’initialisation locale');
+    expect(actions).toHaveLength(1);
+    expect(actions[0].props.title).toBe('Reprendre la qualification');
+    actions[0].props.onPress();
+    await vi.waitFor(() => expect(run).toHaveBeenCalledTimes(1));
+  });
+
   it('disables the API button and prevents concurrent invocations before a rerender', async () => {
     let finish!: () => void;
     const action = vi.fn(

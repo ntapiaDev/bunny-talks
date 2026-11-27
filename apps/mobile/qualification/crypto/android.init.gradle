@@ -2,16 +2,18 @@ def profile = System.getenv('BUNNY_CRYPTO_QUALIFICATION')
 def historicalAuthorization = System.getenv('BUNNY_CRYPTO_HISTORICAL_REQUALIFICATION')
 def historicalEntry = System.getenv('BUNNY_CRYPTO_HISTORICAL_ENTRY')
 def publicProfile = System.getenv('EXPO_PUBLIC_BUNNY_CRYPTO_QUALIFICATION')
-if (profile != 'synthetic' || historicalAuthorization != null || historicalEntry != null ||
+if ((profile != 'synthetic' && profile != 'initialization') || historicalAuthorization != null || historicalEntry != null ||
     (publicProfile != null && publicProfile != profile)) {
   throw new GradleException('Crypto qualification profile, identity, and entry are inconsistent')
 }
+
+def packageId = profile == 'initialization' ? 'fr.bunnytalks.mobile.cryptoinitialization' : 'fr.bunnytalks.mobile.cryptoqualification'
 
 gradle.beforeProject { project ->
   if (project.path != ':app') return
   project.plugins.withId('com.android.application') {
     project.extensions.getByName('androidComponents').finalizeDsl { android ->
-      if (android.defaultConfig.applicationId != 'fr.bunnytalks.mobile.cryptoqualification') {
+      if (android.defaultConfig.applicationId != packageId) {
         throw new GradleException('Crypto qualification application identity mismatch')
       }
       def qualification = new File(project.rootDir.parentFile, 'qualification/crypto')

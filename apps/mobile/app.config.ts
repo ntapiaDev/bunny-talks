@@ -14,10 +14,19 @@ export default function getAppConfig(): ExpoConfig {
 
   const publicProfile = process.env.EXPO_PUBLIC_BUNNY_CRYPTO_QUALIFICATION;
   if (profile === undefined && publicProfile === undefined) return standard;
-  if (profile !== 'synthetic' || (publicProfile !== undefined && publicProfile !== profile)) {
+  if (
+    (profile !== 'synthetic' && profile !== 'initialization') ||
+    (publicProfile !== undefined && publicProfile !== profile)
+  ) {
     throw new Error('Invalid crypto qualification profile');
   }
 
+  if (profile === 'initialization') {
+    return {
+      ...standard,
+      android: { ...standard.android, package: 'fr.bunnytalks.mobile.cryptoinitialization' },
+    };
+  }
   return {
     ...standard,
     android: { ...standard.android, package: 'fr.bunnytalks.mobile.cryptoqualification' },

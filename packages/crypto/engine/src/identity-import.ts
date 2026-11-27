@@ -9,9 +9,44 @@ import { validateExportedIdentity } from './identity-validation.js';
 
 const pendingImports = new WeakMap<IdentityKeyStore, Promise<void>>();
 
+export type SqliteIdentityStore =
+  ExpoSignalProtocolStore | NodeSignalProtocolStore | ReactNativeSignalProtocolStore;
+
+export async function readLocalIdentity(store: IdentityKeyStore) {
+  try {
+    const identity = await store.getIdentityKey('aci');
+    const hasIdentity = await store.hasIdentityKey('aci');
+    const registrationId = await store.getLocalRegistrationId('aci');
+    return { identity, hasIdentity, registrationId };
+  } catch {
+    throw new CryptoError('STORAGE_FAILURE', 'Identity store read failed');
+  }
+}
+
+export function isLocalIdentityAbsent(state: Awaited<ReturnType<typeof readLocalIdentity>>) {
+  return state.identity === null && !state.hasIdentity && state.registrationId === 0;
+}
+
+export function matchesLocalIdentity(
+  state: Awaited<ReturnType<typeof readLocalIdentity>>,
+  expected: IdentityKeyPair,
+) {
+  const stored = state.identity;
+  return (
+    state.hasIdentity &&
+    stored !== null &&
+    state.registrationId === expected.registrationId &&
+    stored.registrationId === expected.registrationId &&
+    stored.dhKey.publicKey === expected.dhKey.publicKey &&
+    stored.dhKey.privateKey === expected.dhKey.privateKey &&
+    stored.signingKey.publicKey === expected.signingKey.publicKey &&
+    stored.signingKey.privateKey === expected.signingKey.privateKey
+  );
+}
+
 /** Import into an uninitialized SQLite ACI store. Other writers must be excluded by the caller. */
 export async function importIdentity(
-  store: ExpoSignalProtocolStore | NodeSignalProtocolStore | ReactNativeSignalProtocolStore,
+  store: SqliteIdentityStore,
   identity: unknown,
   registrationId: number,
 ): Promise<void> {
@@ -24,32 +59,12 @@ export async function importIdentity(
   pendingImports.set(store, current);
   try {
     await previous;
-    let existing: IdentityKeyPair | null;
-    let currentId: number;
-    let hasIdentity: boolean;
-    try {
-      existing = await store.getIdentityKey('aci');
-      hasIdentity = await store.hasIdentityKey('aci');
-      currentId = await store.getLocalRegistrationId('aci');
-    } catch {
-      throw new CryptoError('STORAGE_FAILURE', 'Identity store read failed');
-    }
-    if (existing !== null || hasIdentity || currentId !== 0) {
+    if (!isLocalIdentityAbsent(await readLocalIdentity(store))) {
       throw new CryptoError('KEY_ACCESS_DENIED', 'Identity store is already initialized');
     }
     try {
       await store.storeIdentityKey(prepared, 'aci');
-      const stored = await store.getIdentityKey('aci');
-      const storedId = await store.getLocalRegistrationId('aci');
-      if (
-        stored === null ||
-        stored.registrationId !== registrationId ||
-        storedId !== registrationId ||
-        stored.dhKey.publicKey !== prepared.dhKey.publicKey ||
-        stored.dhKey.privateKey !== prepared.dhKey.privateKey ||
-        stored.signingKey.publicKey !== prepared.signingKey.publicKey ||
-        stored.signingKey.privateKey !== prepared.signingKey.privateKey
-      ) {
+      if (!matchesLocalIdentity(await readLocalIdentity(store), prepared)) {
         throw new Error();
       }
     } catch {
