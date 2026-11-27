@@ -1,6 +1,6 @@
 # Jalon 1 — Enveloppes de clé maîtresse V1
 
-Statut : implémentation réutilisable pour revue, profil candidat expérimental. Ce jalon ne compose pas le coffre et ne réalise aucune récupération de compte. OpenE2EE, Expo, le backend et SQLCipher ne sont pas des dépendances de cette API. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts.
+Statut : profils cryptographiques expérimentaux retenus et implémentés dans une API réutilisable pour revue. Le jalon qui a introduit ces enveloppes ne composait pas le coffre et ne réalisait pas de récupération de compte ; la composition V1 est décrite dans [account-vault-v1.md](account-vault-v1.md). OpenE2EE, Expo, le backend et SQLCipher ne sont pas des dépendances de cette API. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts.
 
 ## API et propriété des secrets
 

@@ -1,5 +1,10 @@
-if (System.getenv('BUNNY_CRYPTO_QUALIFICATION') != 'synthetic') {
-  throw new GradleException('Crypto qualification requires BUNNY_CRYPTO_QUALIFICATION=synthetic')
+def profile = System.getenv('BUNNY_CRYPTO_QUALIFICATION')
+def historicalAuthorization = System.getenv('BUNNY_CRYPTO_HISTORICAL_REQUALIFICATION')
+def historicalEntry = System.getenv('BUNNY_CRYPTO_HISTORICAL_ENTRY')
+def publicProfile = System.getenv('EXPO_PUBLIC_BUNNY_CRYPTO_QUALIFICATION')
+if (profile != 'synthetic' || historicalAuthorization != null || historicalEntry != null ||
+    (publicProfile != null && publicProfile != profile)) {
+  throw new GradleException('Crypto qualification profile, identity, and entry are inconsistent')
 }
 
 gradle.beforeProject { project ->
@@ -7,7 +12,7 @@ gradle.beforeProject { project ->
   project.plugins.withId('com.android.application') {
     project.extensions.getByName('androidComponents').finalizeDsl { android ->
       if (android.defaultConfig.applicationId != 'fr.bunnytalks.mobile.cryptoqualification') {
-        throw new GradleException('Synthetic crypto qualification application identity mismatch')
+        throw new GradleException('Crypto qualification application identity mismatch')
       }
       def qualification = new File(project.rootDir.parentFile, 'qualification/crypto')
       def react = project.extensions.getByName('react')

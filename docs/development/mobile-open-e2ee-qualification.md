@@ -38,6 +38,8 @@ Le diagnostic n'affiche ni erreurs brutes ni secrets. Une recherche limitée de 
 
 ## Reproduction et limites
 
+**Procédure historique, obsolète depuis l'étape A d'isolation.** Les commandes et l'émulateur `emulator-5554` ci-dessous décrivent les essais antérieurs ; l'entrée standard `index.ts` ne compose désormais plus cet écran de diagnostic. Ne pas les utiliser pour lancer les diagnostics crypto. L'entrée actuelle est `qualification/crypto/entry.tsx`, réservée au profil synthétique `fr.bunnytalks.mobile.cryptoqualification`. Le build APK et l'exécution dédiés restent partiellement vérifiés : suivre l'[état B1](android-crypto-isolation-b1.md). Le rapport ci-dessous conserve uniquement la preuve historique obtenue avant cette séparation.
+
 Les modifications de ce jalon portent sur le JavaScript et les tests ; les dépendances, plugins et projets natifs n'ont pas changé. Dans le Development Build existant connecté à Metro, recharger le bundle suffit : une reconstruction d'APK n'a pas été nécessaire pour les essais ci-dessus. Une modification future des dépendances natives ou des plugins nécessitera de régénérer le projet via Expo Prebuild puis de reconstruire et réinstaller l'APK, sans modifications manuelles des dossiers générés.
 
 Depuis WSL, avec Metro déjà actif et le transfert configuré :

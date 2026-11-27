@@ -19,6 +19,10 @@ function readExpoOutput(binary: string, args: string[], overrides: Record<string
         cwd: mobile,
         env: {
           ...process.env,
+          BUNNY_CRYPTO_QUALIFICATION: undefined,
+          BUNNY_CRYPTO_HISTORICAL_REQUALIFICATION: undefined,
+          BUNNY_CRYPTO_HISTORICAL_ENTRY: undefined,
+          EXPO_PUBLIC_BUNNY_CRYPTO_QUALIFICATION: undefined,
           ...overrides,
           EXPO_OFFLINE: '1',
           EXPO_NO_DOTENV: '1',
@@ -67,6 +71,10 @@ it('resolves an isolated synthetic crypto qualification identity', () => {
 it('guards the Android crypto entry to the synthetic qualification profile', () => {
   const script = readFileSync(resolve(mobile, 'qualification/crypto/android.init.gradle'), 'utf8');
   expect(script).toContain('BUNNY_CRYPTO_QUALIFICATION');
+  expect(script).toContain('BUNNY_CRYPTO_HISTORICAL_REQUALIFICATION');
+  expect(script).toContain('BUNNY_CRYPTO_HISTORICAL_ENTRY');
+  expect(script).not.toContain("'fr.bunnytalks.mobile'");
+  expect(script).not.toContain("'historical'");
   expect(script).toContain("'synthetic'");
   expect(script).toContain("'fr.bunnytalks.mobile.cryptoqualification'");
   expect(script).toContain("'entry.tsx'");
@@ -75,29 +83,23 @@ it('guards the Android crypto entry to the synthetic qualification profile', () 
   );
 });
 
-it('refuses the historical identity unless explicit requalification authorization is set', () => {
-  expect(() =>
-    readExpoOutput('expo/bin/cli', ['config', '--type', 'introspect'], {
-      BUNNY_CRYPTO_QUALIFICATION: 'historical',
-    }),
-  ).toThrow();
-  const config = readExpoOutput('expo/bin/cli', ['config', '--type', 'introspect'], {
+it.each([
+  { BUNNY_CRYPTO_QUALIFICATION: 'historical' },
+  {
     BUNNY_CRYPTO_QUALIFICATION: 'historical',
     BUNNY_CRYPTO_HISTORICAL_REQUALIFICATION: 'AUTHORIZED',
-  });
-  expect(config.android.package).toBe('fr.bunnytalks.mobile');
-  expect(config.ios.bundleIdentifier).toBe('fr.bunnytalks.mobile');
-  expect(() =>
-    readExpoOutput('expo/bin/cli', ['config', '--type', 'introspect'], {
-      BUNNY_CRYPTO_HISTORICAL_REQUALIFICATION: 'AUTHORIZED',
-    }),
-  ).toThrow();
-  expect(() =>
-    readExpoOutput('expo/bin/cli', ['config', '--type', 'introspect'], {
-      BUNNY_CRYPTO_QUALIFICATION: 'synthetic',
-      BUNNY_CRYPTO_HISTORICAL_REQUALIFICATION: 'AUTHORIZED',
-    }),
-  ).toThrow();
+    BUNNY_CRYPTO_HISTORICAL_ENTRY: 'qualification/crypto/entry.tsx',
+    EXPO_PUBLIC_BUNNY_CRYPTO_QUALIFICATION: 'historical',
+  },
+  { BUNNY_CRYPTO_HISTORICAL_REQUALIFICATION: 'AUTHORIZED' },
+  { BUNNY_CRYPTO_HISTORICAL_ENTRY: 'qualification/crypto/entry.tsx' },
+  { EXPO_PUBLIC_BUNNY_CRYPTO_QUALIFICATION: 'historical' },
+  {
+    BUNNY_CRYPTO_QUALIFICATION: 'synthetic',
+    EXPO_PUBLIC_BUNNY_CRYPTO_QUALIFICATION: 'historical',
+  },
+])('rejects retired historical settings %j', (env) => {
+  expect(() => readExpoOutput('expo/bin/cli', ['config', '--type', 'public'], env)).toThrow();
 });
 
 it('autolinks ApplicationHttps on Apple and Android from the local module', () => {

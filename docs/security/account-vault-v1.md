@@ -1,6 +1,6 @@
 # Jalon 2 — Composition authentifiée du coffre V1
 
-Statut : implémentation pour revue sous Node, indépendante de la logique métier. Les enveloppes du [jalon 1](key-envelopes-v1.md) sont réutilisées sans modification de leur format ni de leurs profils. Aucun backend, stockage, import OpenE2EE, archivage ou parcours de compte n'est implémenté. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. Une qualification expérimentale Android/Hermes ultérieure est documentée dans le [rapport natif](../development/native-argon2-qualification.md) ; iOS, les appareils physiques et la production restent à qualifier.
+Statut : composition cryptographique implémentée pour revue sous Node, indépendante de la logique métier. Les enveloppes du [jalon 1](key-envelopes-v1.md) sont réutilisées sans modification de leur format ni de leurs profils. Le backend possède séparément un endpoint d'amorçage et de publication initiale avec stockage transactionnel et reçu ([amorçage HTTP](../development/http-initial-device-bootstrap.md)). Il n'est pas intégré à cette API cryptographique ni à un parcours mobile complet de récupération. L'import OpenE2EE, l'archivage applicatif et la restauration métier restent incomplets. SEC-CRYPTO-002 et SEC-CRYPTO-003 restent ouverts. Une qualification expérimentale Android/Hermes est documentée dans le [rapport natif](../development/native-argon2-qualification.md) ; iOS, les appareils physiques et la production restent à qualifier.
 
 ## API et garanties
 
@@ -68,7 +68,7 @@ Tous les compteurs sont des entiers sûrs positifs, jusqu'à 9 007 199 254 740 9
 
 Création : génération et trois révisions à 1. Réenveloppement : génération et révision mot de passe augmentées exactement de 1 ; révisions de contenu et récupération inchangées. Toute révision supérieure à la génération est refusée, de même que tout débordement. L'égalité des compteurs n'est pas exigée : ils représentent des cycles de vie distincts. Aucune API de modification du contenu ou de rotation de récupération n'est introduite ici.
 
-Les ouvertures renvoient les quatre compteurs dans `revisions`. Une future couche de publication devra conserver les octets lus et utiliser une révision transactionnelle de backend pour ses écritures conditionnelles. Ce numéro de backend ne sera ni la génération cryptographique ni une ancre indépendante de fraîcheur. L'API actuelle retourne seulement une nouvelle publication complète en mémoire : elle n'établit aucune atomicité ou exclusivité de stockage.
+Les ouvertures renvoient les quatre compteurs dans `revisions`. Dans cette API cryptographique, la création retourne une publication complète en mémoire et ne fournit pas à elle seule d'atomicité ni d'exclusivité de stockage. Le dépôt backend séparé conserve les octets lus et applique une révision transactionnelle aux écritures conditionnelles ; cette révision n'est ni la génération cryptographique ni une ancre indépendante de fraîcheur. Le serveur vérifie l'intégrité de la publication par digest mais n'authentifie pas le HMAC du manifest.
 
 ## Erreurs et limites de confiance
 

@@ -1,6 +1,6 @@
 # CRYPTO-004 — Proposition d'architecture du coffre de récupération
 
-**Statut au 14 novembre 2026 : décisions fonctionnelles confirmées ; enveloppes et composition opaque du jalon 2 implémentées pour revue, restauration métier non implémentée.** Ce document décrit la cible actuelle et conserve les analyses de CRYPTO-004 et CRYPTO-005. Le coffre direct expérimental n'implémente pas cette cible.
+**Statut au 27 novembre 2026 : décisions fonctionnelles confirmées ; le profil cryptographique des enveloppes et la composition opaque du coffre V1 sont implémentés expérimentalement ; la restauration métier reste incomplète.** Les profils retenus sont spécifiés dans [key-envelopes-v1.md](key-envelopes-v1.md) et leur composition dans [account-vault-v1.md](account-vault-v1.md). Ce document conserve les analyses de CRYPTO-004 et CRYPTO-005 ; les formulations de « candidat à évaluer » ci-dessous décrivent l'état de ces analyses historiques, pas les décisions actuelles. Le coffre direct expérimental n'implémente pas le parcours complet de récupération.
 
 Le [coffre direct V1](recovery-vault-direct-v1.md) reste le format expérimental conservé avec son code et ses vecteurs ; il ne définit pas la cible à deux enveloppes. Les anciennes analyses de spécification, composants et interopérabilité ont été retirées après transfert de leurs exigences et résultats utiles dans cette référence et les rapports de qualification ciblés. Leur restauration est documentée dans l'[index de conservation](../development/https-archive-index.md#documents-crypto-retirés-de-larbre-actif).
 
