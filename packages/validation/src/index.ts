@@ -1,5 +1,6 @@
 export * from './schemas/email.schema.js';
 export * from './schemas/registration.schema.js';
+export * from './schemas/session.schema.js';
 export * from './schemas/vault-bootstrap.schema.js';
 export * from './schemas/vault-publication.schema.js';
 

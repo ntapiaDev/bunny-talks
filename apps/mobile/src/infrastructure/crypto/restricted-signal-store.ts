@@ -2,6 +2,7 @@ import type { SignalProtocolLocalStore } from '@open-e2ee/signal-protocol-sdk/ty
 import type { SqliteIdentityStore } from '@bunny-talks/crypto-engine';
 
 export const initializationMetadataKey = 'bunny-talks.crypto.initialization';
+export const initialBootstrapOperationMetadataKey = 'bunny-talks.bootstrap.initial-operation';
 
 // Review this list when the SDK changes. Methods outside it have no automatic delegation.
 const delegated = [
@@ -109,6 +110,7 @@ async function deny(): Promise<never> {
 function isProtectedMetadataKey(key: string): boolean {
   return (
     key === initializationMetadataKey ||
+    key === initialBootstrapOperationMetadataKey ||
     key === 'registrationId:aci' ||
     key === 'registrationId:pni'
   );

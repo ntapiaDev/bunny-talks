@@ -1,3 +1,4 @@
+import { sha256 } from '@noble/hashes/sha2.js';
 import { MAX_REGISTRATION_ID, MIN_REGISTRATION_ID } from '@open-e2ee/signal-protocol-sdk';
 import { createSignalProtocolClient } from '@open-e2ee/signal-protocol-sdk/client';
 import { base64ToBytes, bytesToBase64 } from '@open-e2ee/signal-protocol-sdk/encoding';
@@ -30,8 +31,17 @@ import {
   prepareImportedIdentity,
   readLocalIdentity,
 } from '@bunny-talks/crypto-engine';
+import type {
+  ExistingBootstrapAttempt,
+  ExistingBootstrapMetadataStore,
+} from './bootstrap-operation-metadata.ts';
+import {
+  createBootstrapOperationMetadataStore,
+  validBootstrapStoreContext,
+} from './bootstrap-operation-metadata.ts';
 import {
   createRestrictedSignalStore,
+  initialBootstrapOperationMetadataKey,
   initializationMetadataKey,
 } from './restricted-signal-store.ts';
 
@@ -74,10 +84,163 @@ export class LocalCryptoInitializationError extends Error {
   }
 }
 
+function snapshotContext(expected: LocalInitializationContext): LocalInitializationContext {
+  if (!expected || typeof expected !== 'object') {
+    throw new LocalCryptoInitializationError('CONTEXT');
+  }
+  const context = Object.freeze({
+    account: expected.account,
+    device: expected.device,
+    vaultId: expected.vaultId,
+  });
+  if (!validBootstrapStoreContext(context)) throw new LocalCryptoInitializationError('CONTEXT');
+  return context;
+}
+
+// Issuance is private to the store owner. Copies and recombinations have a different identity.
+const issuedBootstrapCapabilities = new WeakSet<object>();
+
+function issueBootstrapCapability<T extends object>(capability: T): Readonly<T> {
+  issuedBootstrapCapabilities.add(capability);
+  return Object.freeze(capability);
+}
+
+export function isOwnedBootstrapCapability(capability: object): boolean {
+  return issuedBootstrapCapabilities.has(capability);
+}
+
+export type LocalBootstrapAttempt = Awaited<ReturnType<typeof initializeLocalCrypto>>['bootstrap'];
+
 const ownedStores = new WeakSet<SqliteIdentityStore>();
 const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
 const encoder = new TextEncoder();
 const maxPublicationBytes = 131072;
+
+function acquireStore(store: SqliteIdentityStore): SqliteIdentityStore {
+  if (ownedStores.has(store)) throw new LocalCryptoInitializationError('UNAVAILABLE');
+  ownedStores.add(store);
+  return store;
+}
+
+async function releaseStore(store: SqliteIdentityStore): Promise<void> {
+  try {
+    await store.close();
+  } catch {
+    // A failed close leaves custody uncertain for this store object.
+    throw new LocalCryptoInitializationError('UNAVAILABLE');
+  }
+  ownedStores.delete(store);
+}
+
+function requireProtectedStore(store: SqliteIdentityStore) {
+  if (store.protection.atRest !== 'file-cipher') {
+    throw new LocalCryptoInitializationError('UNAVAILABLE');
+  }
+}
+
+async function withExistingBootstrapStore<T>(
+  context: LocalInitializationContext,
+  dependencies: Pick<Dependencies, 'openExistingStore'>,
+  work: (store: SqliteIdentityStore, attempt: Attempt) => Promise<T>,
+): Promise<T> {
+  let owned: SqliteIdentityStore | undefined;
+  try {
+    owned = acquireStore(await dependencies.openExistingStore(context));
+    requireProtectedStore(owned);
+    const raw = await owned.getMetadata(initializationMetadataKey);
+    if (raw === null) throw new LocalCryptoInitializationError('STATE');
+    const attempt = readAttempt(raw, context);
+    if (attempt.status !== 'ready') throw new LocalCryptoInitializationError('STATE');
+    return await work(owned, attempt);
+  } catch (error) {
+    if (error instanceof LocalCryptoInitializationError) throw error;
+    throw new LocalCryptoInitializationError('UNAVAILABLE');
+  } finally {
+    if (owned) await releaseStore(owned);
+  }
+}
+
+/** Reads structurally ready metadata. This capability does not open the vault or construct a client. */
+export async function readExistingBootstrapAttempt(
+  expected: LocalInitializationContext,
+  dependencies: Pick<Dependencies, 'openExistingStore'>,
+): Promise<ExistingBootstrapAttempt> {
+  return readBootstrapAttempt(snapshotContext(expected), dependencies);
+}
+
+function readBootstrapAttempt(
+  context: LocalInitializationContext,
+  dependencies: Pick<Dependencies, 'openExistingStore'>,
+) {
+  return withExistingBootstrapStore(context, dependencies, async (store, attempt) => ({
+    publicationBytes: encoder.encode(attempt.publication),
+    operationMetadata: await store.getMetadata(initialBootstrapOperationMetadataKey),
+  }));
+}
+
+/** Opens SQLCipher only for a snapshot read or a journal CAS with readback. */
+export function createExistingBootstrapMetadataCapability(
+  expected: LocalInitializationContext,
+  dependencies: Pick<Dependencies, 'openExistingStore'>,
+): ExistingBootstrapMetadataStore {
+  const context = snapshotContext(expected);
+  return issueBootstrapCapability({
+    context,
+    ...createBootstrapOperationMetadataStore(
+      (work, expectedDigest) =>
+        withExistingBootstrapStore(context, dependencies, (store, attempt) => {
+          if (
+            expectedDigest !== undefined &&
+            expectedDigest !== digestPublication(encoder.encode(attempt.publication))
+          ) {
+            throw new LocalCryptoInitializationError('STATE');
+          }
+          return work(store);
+        }),
+      () => undefined,
+    ),
+    readAttempt: () => readBootstrapAttempt(context, dependencies),
+  });
+}
+
+function createBootstrapStoreLifetime() {
+  let closed = false;
+  const pending = new Set<Promise<void>>();
+  function assertAvailable() {
+    if (closed) throw new LocalCryptoInitializationError('UNAVAILABLE');
+  }
+  return {
+    assertAvailable,
+    async run<T>(work: () => Promise<T>): Promise<T> {
+      assertAvailable();
+      let finish!: () => void;
+      const operation = new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      pending.add(operation);
+      try {
+        const value = await work();
+        assertAvailable();
+        return value;
+      } finally {
+        pending.delete(operation);
+        finish();
+      }
+    },
+    async drain() {
+      closed = true;
+      await Promise.all(pending);
+    },
+  };
+}
+
+function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function digestPublication(bytes: Uint8Array): string {
+  return bytesToBase64(sha256(bytes)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+}
 
 function validRegistrationId(id: unknown): id is number {
   return (
@@ -201,6 +364,13 @@ async function recoverIdentity(
     access.type === 'password'
       ? await openAccountVaultWithPassword(bytes, access.password, context, argon2)
       : await openAccountVaultWithRecoveryKey(bytes, access.recoveryKey, context);
+  return decodeInitialVaultIdentity(opened, attempt.registrationId);
+}
+
+function decodeInitialVaultIdentity(
+  opened: Awaited<ReturnType<typeof openAccountVaultWithPassword>>,
+  registrationId: number,
+): IdentityKeyPair {
   if (!opened.ok) throw new LocalCryptoInitializationError('ACCESS');
   try {
     const revisions = opened.revisions;
@@ -212,30 +382,34 @@ async function recoverIdentity(
     ) {
       throw new LocalCryptoInitializationError('STATE');
     }
-    const decoded = decodeRecoveryPayloadV1(opened.plaintext);
-    if (!decoded.ok) throw new LocalCryptoInitializationError('STATE');
-    const { identity, archiveKeys } = decoded.payload;
-    try {
-      if (archiveKeys.length !== 0) throw new LocalCryptoInitializationError('STATE');
-      return prepareImportedIdentity(
-        {
-          dhKey: {
-            publicKey: bytesToBase64(identity.dhPublicKey),
-            privateKey: bytesToBase64(identity.dhPrivateKey),
-          },
-          signingKey: {
-            publicKey: bytesToBase64(identity.signingPublicKey),
-            privateKey: bytesToBase64(identity.signingPrivateKey),
-          },
-        },
-        attempt.registrationId,
-      );
-    } finally {
-      for (const key of Object.values(identity)) key.fill(0);
-      for (const entry of archiveKeys) entry.key.fill(0);
-    }
+    return decodeRecoveryIdentity(opened.plaintext, registrationId);
   } finally {
     opened.plaintext.fill(0);
+  }
+}
+
+function decodeRecoveryIdentity(plaintext: Uint8Array, registrationId: number): IdentityKeyPair {
+  const decoded = decodeRecoveryPayloadV1(plaintext);
+  if (!decoded.ok) throw new LocalCryptoInitializationError('STATE');
+  const { identity, archiveKeys } = decoded.payload;
+  try {
+    if (archiveKeys.length !== 0) throw new LocalCryptoInitializationError('STATE');
+    return prepareImportedIdentity(
+      {
+        dhKey: {
+          publicKey: bytesToBase64(identity.dhPublicKey),
+          privateKey: bytesToBase64(identity.dhPrivateKey),
+        },
+        signingKey: {
+          publicKey: bytesToBase64(identity.signingPublicKey),
+          privateKey: bytesToBase64(identity.signingPrivateKey),
+        },
+      },
+      registrationId,
+    );
+  } finally {
+    for (const key of Object.values(identity)) key.fill(0);
+    for (const entry of archiveKeys) entry.key.fill(0);
   }
 }
 
@@ -286,7 +460,7 @@ async function completeInitialization(
   ) {
     throw new LocalCryptoInitializationError('STATE');
   }
-  return encoder.encode(attempt.publication);
+  return { publication: encoder.encode(attempt.publication), identity };
 }
 
 export async function initializeLocalCrypto(
@@ -294,19 +468,7 @@ export async function initializeLocalCrypto(
   input: Request,
   dependencies: Dependencies,
 ) {
-  const context = Object.freeze({
-    account: expected.account,
-    device: expected.device,
-    vaultId: expected.vaultId,
-  });
-  const vaultIdentifier = /^[A-Za-z0-9_-]{21}[AQgw]$/u;
-  if (
-    !/^[!-~]{1,128}$/u.test(context.account) ||
-    !vaultIdentifier.test(context.vaultId) ||
-    !/^[A-Za-z0-9_-]{1,128}$/u.test(context.device)
-  ) {
-    throw new LocalCryptoInitializationError('CONTEXT');
-  }
+  const context = snapshotContext(expected);
   if (input.mode === 'create') {
     try {
       encodeEnvelopePassword(input.password).fill(0);
@@ -337,49 +499,150 @@ export async function initializeLocalCrypto(
         : undefined;
   let owned: SqliteIdentityStore | undefined;
   try {
-    const store =
+    const store = acquireStore(
       request.mode === 'create'
         ? await dependencies.openFreshStore(context)
-        : await dependencies.openExistingStore(context);
-    if (ownedStores.has(store)) throw new LocalCryptoInitializationError('UNAVAILABLE');
-    ownedStores.add(store);
+        : await dependencies.openExistingStore(context),
+    );
     owned = store;
-    if (store.protection.atRest !== 'file-cipher') {
-      throw new LocalCryptoInitializationError('UNAVAILABLE');
-    }
-    const publication = await completeInitialization(store, context, request, dependencies);
+    requireProtectedStore(store);
+    const initialized = await completeInitialization(store, context, request, dependencies);
+    const publication = initialized.publication;
+    const localRegistrationId = initialized.identity.registrationId;
+    const verificationPublication = Uint8Array.from(publication);
+    const lifetime = createBootstrapStoreLifetime();
+    const publicationDigest = digestPublication(verificationPublication);
     const storage = createRestrictedSignalStore(store);
     const client = await createSignalProtocolClient({
       identity: { userId: context.account, enablePniKeys: false },
       adapters: { storage },
     });
+    async function verifyOpenedIdentity(
+      opened: Awaited<ReturnType<typeof openAccountVaultWithPassword>>,
+    ) {
+      const recovered = decodeInitialVaultIdentity(opened, localRegistrationId);
+      lifetime.assertAvailable();
+      if (!matchesLocalIdentity(await readLocalIdentity(store), recovered)) {
+        throw new LocalCryptoInitializationError('STATE');
+      }
+    }
+
+    function requirePublication(input: {
+      account: string;
+      vaultId: string;
+      publicationBytes: Uint8Array;
+    }) {
+      if (
+        input.account !== context.account ||
+        input.vaultId !== context.vaultId ||
+        !(input.publicationBytes instanceof Uint8Array) ||
+        !bytesEqual(input.publicationBytes, verificationPublication)
+      )
+        throw new LocalCryptoInitializationError('ACCESS');
+    }
+
+    const bootstrap = issueBootstrapCapability({
+      context,
+      publicationDigest,
+      get publication() {
+        lifetime.assertAvailable();
+        return Uint8Array.from(verificationPublication);
+      },
+      bootstrapOperationMetadata: Object.freeze(
+        createBootstrapOperationMetadataStore(
+          (work, expectedDigest) =>
+            lifetime.run(() => {
+              if (expectedDigest !== undefined && expectedDigest !== publicationDigest) {
+                throw new LocalCryptoInitializationError('STATE');
+              }
+              return work(store);
+            }),
+          lifetime.assertAvailable,
+        ),
+      ),
+      async verifyRecoveryKey(input: {
+        readonly account: string;
+        readonly vaultId: string;
+        readonly publicationBytes: Uint8Array;
+        readonly recoveryKey: Uint8Array;
+      }) {
+        return lifetime.run(async () => {
+          requirePublication(input);
+          const key = input.recoveryKey;
+          if (!(key instanceof Uint8Array) || key.length !== 32) {
+            throw new LocalCryptoInitializationError('ACCESS');
+          }
+          const recoveryKey = Uint8Array.from(key);
+          try {
+            await verifyOpenedIdentity(
+              await openAccountVaultWithRecoveryKey(verificationPublication, recoveryKey, context),
+            );
+            return {
+              method: 'account-vault-v1-recovery-open' as const,
+              account: context.account,
+              vaultId: context.vaultId,
+              publicationDigest,
+              recoveryRevision: 1 as const,
+            };
+          } finally {
+            recoveryKey.fill(0);
+          }
+        });
+      },
+      async verifyActivationPassword(input: {
+        readonly account: string;
+        readonly vaultId: string;
+        readonly publicationBytes: Uint8Array;
+        readonly password: string;
+      }) {
+        return lifetime.run(async () => {
+          requirePublication(input);
+          const password = input.password;
+          try {
+            encodeEnvelopePassword(password).fill(0);
+          } catch {
+            throw new LocalCryptoInitializationError('ACCESS');
+          }
+          await verifyOpenedIdentity(
+            await openAccountVaultWithPassword(
+              verificationPublication,
+              password,
+              context,
+              dependencies.argon2,
+            ),
+          );
+          return {
+            method: 'account-vault-v1-password-open' as const,
+            account: context.account,
+            vaultId: context.vaultId,
+            publicationDigest,
+          };
+        });
+      },
+    });
+
     let closing: Promise<void> | undefined;
     return {
       status: 'ready' as const,
       publication,
       storage,
       client,
+      bootstrap,
       close() {
         closing ??= (async () => {
+          await lifetime.drain();
+          verificationPublication.fill(0);
           try {
             await client.stop();
           } finally {
-            await store.close();
-            ownedStores.delete(store);
+            await releaseStore(store);
           }
         })();
         return closing;
       },
     };
   } catch (error) {
-    if (owned) {
-      try {
-        await owned.close();
-        ownedStores.delete(owned);
-      } catch {
-        throw new LocalCryptoInitializationError('UNAVAILABLE');
-      }
-    }
+    if (owned) await releaseStore(owned);
     if (error instanceof LocalCryptoInitializationError) throw error;
     throw new LocalCryptoInitializationError('UNAVAILABLE');
   } finally {

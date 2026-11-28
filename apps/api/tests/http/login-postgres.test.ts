@@ -121,7 +121,7 @@ describe('HTTP login with real Nest, PostgreSQL 18.7 and compiled ESM', () => {
     const read = await fetch(`${base}/v1/session`, { headers });
     expect(read.status).toBe(200);
     await expectKnownLengthResponse(read);
-    expect(await read.json()).toEqual(result.session);
+    expect(await read.json()).toEqual({ ...result.session, credentialRevision: '1' });
     const revoked = await fetch(`${base}/v1/session`, { headers, method: 'DELETE' });
     expect(revoked.status).toBe(204);
     await expectKnownLengthResponse(revoked);

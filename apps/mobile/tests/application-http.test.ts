@@ -174,6 +174,29 @@ describe('application HTTP foundation', () => {
     expect(transport).toHaveBeenCalledTimes(2);
   });
 
+  it('exposes the validated HTTP status to receipt composition', async () => {
+    const transport = vi.fn<HttpTransport>();
+    transport.mockResolvedValueOnce(response('{"status":"committed"}', 200));
+    transport.mockResolvedValueOnce(response('{"status":"unknown"}', 202));
+    const api = client(transport);
+    const options = {
+      path: '/v1/vault/bootstrap/receipt',
+      method: 'POST' as const,
+      expectedStatuses: [200, 202],
+      bearerToken: 'fixture-token',
+      body: { fixture: true },
+    };
+    await expect(api.requestWithStatus(options)).resolves.toEqual({
+      status: 200,
+      body: { status: 'committed' },
+    });
+    await expect(api.requestWithStatus(options)).resolves.toEqual({
+      status: 202,
+      body: { status: 'unknown' },
+    });
+    expect(transport).toHaveBeenCalledTimes(2);
+  });
+
   it('requires a zero-byte body for an expected 204', async () => {
     const transport = vi.fn<HttpTransport>();
     transport.mockResolvedValueOnce(response('', 204, null));

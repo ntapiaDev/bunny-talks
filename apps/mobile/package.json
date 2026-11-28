@@ -12,6 +12,8 @@
   "dependencies": {
     "@bunny-talks/crypto-backup": "workspace:*",
     "@bunny-talks/crypto-engine": "workspace:*",
+    "@bunny-talks/contracts": "workspace:*",
+    "@bunny-talks/validation": "workspace:*",
     "@noble/hashes": "2.4.0",
     "@open-e2ee/signal-protocol-sdk": "14.5.0",
     "@sonnetstationsolutions/expo-argon2": "0.1.1",

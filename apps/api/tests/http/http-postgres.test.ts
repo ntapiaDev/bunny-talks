@@ -76,6 +76,9 @@ describe('real Nest HTTP and PostgreSQL 18.7', () => {
   async function fixture(options: { authorized?: boolean; expired?: boolean } = {}) {
     const accountId = `http-fixture:${randomUUID()}`;
     await client.account.create({ data: { id: accountId } });
+    await client.passwordCredential.create({
+      data: { accountId, verifier: 'fixture-verifier-not-a-password', revision: 1n },
+    });
     const creator = options.expired
       ? new PostgresSessionRepository(client, undefined, () => new Date(Date.now() - 31 * 86400000))
       : repository;
@@ -246,6 +249,7 @@ describe('real Nest HTTP and PostgreSQL 18.7', () => {
         deviceId: f.session.deviceId,
         deviceState: authorized ? 'authorized' : 'pending',
         expiresAt: f.session.expiresAt.toISOString(),
+        credentialRevision: '1',
       });
       const stored = await client.session.findUniqueOrThrow({ where: { id: f.session.id } });
       expect(stored.lastSeenAt.getTime()).toBeGreaterThan(f.session.lastSeenAt.getTime());
@@ -256,10 +260,21 @@ describe('real Nest HTTP and PostgreSQL 18.7', () => {
   it('isolates two accounts and refuses query/body identity selectors', async () => {
     const a = await fixture();
     const b = await fixture();
+    await client.passwordCredential.update({
+      where: { accountId: a.accountId },
+      data: { revision: 9007199254740993n },
+    });
+    await client.passwordCredential.update({
+      where: { accountId: b.accountId },
+      data: { revision: 9007199254740995n },
+    });
     const response = await call('/v1/session', { token: a.token });
-    const text = await response.text();
-    expect(text).not.toContain(b.accountId);
-    expect(text).not.toContain(b.session.id);
+    const body = await response.json();
+    expect(body).toMatchObject({ accountId: a.accountId, credentialRevision: '9007199254740993' });
+    expect(JSON.stringify(body)).not.toContain(b.accountId);
+    expect(JSON.stringify(body)).not.toContain(b.session.id);
+    expect(JSON.stringify(body)).not.toContain('9007199254740995');
+    expect(JSON.stringify(body)).not.toContain('fixture-verifier-not-a-password');
     expect((await call(`/v1/session?accountId=${b.accountId}`, { token: a.token })).status).toBe(
       400,
     );

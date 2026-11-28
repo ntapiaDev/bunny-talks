@@ -69,7 +69,7 @@ const publicOperationIdentity = z.strictObject({
   expectedStorageRevision: databaseRevisionSchema.nullable(),
   expectedCredentialRevision: databaseRevisionSchema,
 });
-const operationError = z.enum([
+export const vaultOperationErrorCodeSchema = z.enum([
   'INVALID_INPUT',
   'INVALID_PUBLICATION',
   'ALREADY_EXISTS',
@@ -90,6 +90,6 @@ export const vaultOperationResultSchema = z.discriminatedUnion('status', [
     transportVersion: z.literal(1),
     status: z.literal('rejected'),
     identity: publicOperationIdentity,
-    code: operationError,
+    code: vaultOperationErrorCodeSchema,
   }),
 ]);

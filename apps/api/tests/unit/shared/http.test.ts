@@ -84,13 +84,16 @@ describe('HTTP components (isolated, without authentication claims)', () => {
     const date = new Date('2026-11-16T00:00:00.000Z');
     expect(
       sessionDto({
-        id: 'session',
-        accountId: 'account',
-        deviceId: 'device',
-        createdAt: date,
-        expiresAt: date,
-        lastSeenAt: date,
-        deviceState: 'pending',
+        session: {
+          id: 'session',
+          accountId: 'account',
+          deviceId: 'device',
+          createdAt: date,
+          expiresAt: date,
+          lastSeenAt: date,
+          deviceState: 'pending',
+        },
+        credentialRevision: '9007199254740993',
       }),
     ).toEqual({
       sessionId: 'session',
@@ -98,6 +101,7 @@ describe('HTTP components (isolated, without authentication claims)', () => {
       deviceId: 'device',
       deviceState: 'pending',
       expiresAt: date.toISOString(),
+      credentialRevision: '9007199254740993',
     });
   });
 });

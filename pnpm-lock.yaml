@@ -87,12 +87,18 @@ importers:
 
   apps/mobile:
     dependencies:
+      '@bunny-talks/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@bunny-talks/crypto-backup':
         specifier: workspace:*
         version: link:../../packages/crypto/backup
       '@bunny-talks/crypto-engine':
         specifier: workspace:*
         version: link:../../packages/crypto/engine
+      '@bunny-talks/validation':
+        specifier: workspace:*
+        version: link:../../packages/validation
       '@noble/hashes':
         specifier: 2.4.0
         version: 2.4.0
@@ -196,6 +202,9 @@ importers:
 
   packages/validation:
     dependencies:
+      '@bunny-talks/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       zod:
         specifier: 4.6.7
         version: 4.6.7

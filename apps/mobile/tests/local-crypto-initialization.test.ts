@@ -13,6 +13,7 @@ import {
 } from '@open-e2ee/signal-protocol-sdk/keys';
 import { inMemoryStore } from '@open-e2ee/signal-protocol-sdk/local/store/memory';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { SessionDto } from '@bunny-talks/contracts';
 import {
   generateRecoveryKey,
   openAccountVaultWithPassword,
@@ -20,14 +21,126 @@ import {
 } from '@bunny-talks/crypto-backup';
 import { decodeRecoveryPayloadV1 } from '@bunny-talks/crypto-backup/experimental';
 import { matchesLocalIdentity, readLocalIdentity } from '@bunny-talks/crypto-engine';
-import { initializeLocalCrypto } from '../src/infrastructure/crypto/local-crypto-initialization';
-import { initializationMetadataKey as key } from '../src/infrastructure/crypto/restricted-signal-store';
+import type { InitialBootstrapContext } from '../src/composition/bootstrap-operation-record';
+import type { BootstrapHttpClient } from '../src/composition/initial-device-bootstrap-workflow';
+import { createInitialDeviceBootstrapWorkflow } from '../src/composition/initial-device-bootstrap-workflow';
+import {
+  createSessionService,
+  createSessionWorkflow,
+} from '../src/composition/session-composition';
+import { createSessionPersistence } from '../src/composition/session-persistence';
+import {
+  createExistingBootstrapMetadataCapability,
+  initializeLocalCrypto,
+  readExistingBootstrapAttempt,
+} from '../src/infrastructure/crypto/local-crypto-initialization';
+import {
+  initialBootstrapOperationMetadataKey,
+  initializationMetadataKey as key,
+} from '../src/infrastructure/crypto/restricted-signal-store';
+import { ApplicationHttpError } from '../src/infrastructure/http/application-http';
 import { context, nodeInitializationFixture, password } from './fixtures/node-local-initialization';
 
 type Fixture = ReturnType<typeof nodeInitializationFixture>;
 type Store = Awaited<ReturnType<Fixture['openFreshStore']>>;
 type Phase = 'reservation' | 'identity' | 'ready';
 type Fault = (phase: Phase, timing: 'before' | 'after', value?: string | null) => void;
+
+const bootstrapContext = {
+  ...context,
+  device: 'd8c49125-e0fb-4a9e-bdc2-09c57ad4382a',
+  sessionId: 'cbbbf3b9-b6e3-41a2-8c6c-bbe37186625f',
+};
+
+async function bootstrapFixture(
+  expected: InitialBootstrapContext,
+  requestWithStatus: BootstrapHttpClient['requestWithStatus'],
+) {
+  const sessionToken = `s1.${expected.sessionId}.${'A'.repeat(43)}`;
+  const identity = {
+    accountId: expected.account,
+    sessionId: expected.sessionId,
+    deviceId: expected.device,
+    expiresAt: '2099-12-16T12:00:00.000Z',
+  };
+  let deviceState: SessionDto['deviceState'] = 'pending';
+  let token: string | null = null;
+  let metadata: string | null = null;
+  const persistence = createSessionPersistence({
+    secret: {
+      async read() {
+        return token;
+      },
+      async write(value) {
+        token = value;
+      },
+    },
+    metadata: {
+      async read() {
+        return metadata;
+      },
+      async write(value) {
+        metadata = value;
+      },
+    },
+  });
+  await persistence.saveLogin({ sessionToken, session: { ...identity, deviceState } });
+  const owner = createSessionWorkflow(
+    createSessionService(async (input) => {
+      expect(input).toMatchObject({ path: '/v1/session', bearerToken: sessionToken });
+      return { ...identity, deviceState, credentialRevision: '17' };
+    }),
+    persistence,
+  );
+  await owner.validateCurrent();
+  const workflow = createInitialDeviceBootstrapWorkflow({
+    randomUuid: () => '77c612cf-753d-455a-9862-69059bab610a',
+    session: owner.bootstrapSession,
+    recoveryBackupConfirmation: {
+      async confirmRecoveryBackup(input) {
+        return { kind: 'user-confirmed-independent-recovery-backup', ...input };
+      },
+    },
+    http: { requestWithStatus },
+  });
+  return {
+    workflow,
+    async setDeviceState(value: SessionDto['deviceState']) {
+      deviceState = value;
+      await owner.validateCurrent();
+    },
+  };
+}
+
+function committedReceipt(body: unknown) {
+  const request = body as {
+    request: {
+      account: string;
+      operationId: string;
+      expectedCredentialRevision: string;
+    };
+    candidateDigest: string;
+  };
+  return {
+    status: 200,
+    body: {
+      transportVersion: 1,
+      status: 'committed',
+      identity: {
+        account: request.request.account,
+        operationId: request.request.operationId,
+        kind: 'initial-publication',
+        expectedStorageRevision: null,
+        expectedCredentialRevision: request.request.expectedCredentialRevision,
+      },
+      cas: {
+        storageRevision: '1',
+        credentialRevision: request.request.expectedCredentialRevision,
+      },
+      publicationDigest: request.candidateDigest,
+    },
+  };
+}
 
 function monitor(store: Store, fault: Fault) {
   const compare = store.compareAndSetMetadata.bind(store);
@@ -180,6 +293,350 @@ describe('local cryptographic initialization with SQLCipher', () => {
     }
   }, 15000);
 
+  it('refuses a real local attempt belonging to another device of the authenticated account', async () => {
+    const derive = vi.fn(fixture.argon2.derive);
+    const ready = await create({ ...fixture, argon2: { derive } });
+    close.push(ready.close);
+    const requestWithStatus = vi.fn().mockRejectedValue(new ApplicationHttpError('timeout'));
+    const { workflow } = await bootstrapFixture(bootstrapContext, requestWithStatus);
+    const input = { context: bootstrapContext, local: ready.bootstrap, password, recoveryKey };
+
+    await expect(workflow.activate(input)).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+    await expect(workflow.replayActivation(input)).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+    await expect(workflow.recoverReceipt(input)).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+    expect(requestWithStatus).not.toHaveBeenCalled();
+    expect(await ready.bootstrap.bootstrapOperationMetadata.read()).toBeNull();
+    expect(derive).toHaveBeenCalledTimes(2);
+  });
+
+  it('refuses mixed capabilities from two real attempts with the same context', async () => {
+    const otherRoot = await mkdtemp(join(directory, 'other-attempt-'));
+    const derive = vi.fn(fixture.argon2.derive);
+    const request = { mode: 'create', password, recoveryKey } as const;
+    const first = await initializeLocalCrypto(bootstrapContext, request, {
+      ...fixture,
+      argon2: { derive },
+    });
+    close.push(first.close);
+    const second = await initializeLocalCrypto(bootstrapContext, request, {
+      ...nodeInitializationFixture(otherRoot),
+      argon2: { derive },
+    });
+    close.push(second.close);
+    const requestWithStatus = vi.fn();
+    const { workflow } = await bootstrapFixture(bootstrapContext, requestWithStatus);
+    const input = { context: bootstrapContext, password, recoveryKey };
+    const mixedJournal = {
+      ...first.bootstrap,
+      bootstrapOperationMetadata: second.bootstrap.bootstrapOperationMetadata,
+    };
+    const mixedVerifier = {
+      ...first.bootstrap,
+      verifyRecoveryKey: second.bootstrap.verifyRecoveryKey,
+    };
+    expect(first.bootstrap.publicationDigest).not.toEqual(second.bootstrap.publicationDigest);
+    for (const local of [mixedJournal, mixedVerifier]) {
+      await expect(workflow.activate({ ...input, local })).rejects.toMatchObject({
+        code: 'INVALID_INPUT',
+      });
+      await expect(workflow.replayActivation({ ...input, local })).rejects.toMatchObject({
+        code: 'INVALID_INPUT',
+      });
+      await expect(workflow.recoverReceipt({ ...input, local })).rejects.toMatchObject({
+        code: 'INVALID_INPUT',
+      });
+    }
+    expect(requestWithStatus).not.toHaveBeenCalled();
+    expect(derive).toHaveBeenCalledTimes(4);
+    expect(await first.bootstrap.bootstrapOperationMetadata.read()).toBeNull();
+    expect(await second.bootstrap.bootstrapOperationMetadata.read()).toBeNull();
+  });
+
+  it('refuses cold context substitution at the capability and persisted attempt boundaries', async () => {
+    const ready = await create();
+    close.push(ready.close);
+    await ready.close();
+    const openExistingStore = vi.fn(fixture.openExistingStore);
+    const requestWithStatus = vi.fn();
+    const { workflow } = await bootstrapFixture(bootstrapContext, requestWithStatus);
+    const cold = createExistingBootstrapMetadataCapability(context, { openExistingStore });
+    await expect(
+      workflow.recoverReceipt({ context: bootstrapContext, local: cold }),
+    ).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+    await expect(
+      workflow.recoverReceipt({
+        context: bootstrapContext,
+        local: { ...cold, context: bootstrapContext },
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+    expect(openExistingStore).not.toHaveBeenCalled();
+
+    // The injected opener returns the real first device's file for the other device.
+    const wrongStore = createExistingBootstrapMetadataCapability(bootstrapContext, {
+      openExistingStore,
+    });
+    await expect(
+      workflow.recoverReceipt({ context: bootstrapContext, local: wrongStore }),
+    ).rejects.toMatchObject({ code: 'CONTEXT' });
+    expect(openExistingStore).toHaveBeenCalledOnce();
+    expect(requestWithStatus).not.toHaveBeenCalled();
+    expect((await readExistingBootstrapAttempt(context, fixture)).operationMetadata).toBeNull();
+  });
+
+  it.each([
+    ['account', { toString: () => context.account }],
+    ['device', { toString: () => context.device }],
+    ['vaultId', { toString: () => context.vaultId }],
+    ['account', 123],
+  ] as const)('refuses invalid type for %s before opening a store', async (field, value) => {
+    // Runtime input deliberately violates the TypeScript contract.
+    const invalid = { ...context, [field]: value } as typeof context;
+    const dependencies = {
+      ...fixture,
+      openFreshStore: vi.fn(fixture.openFreshStore),
+      openExistingStore: vi.fn(fixture.openExistingStore),
+    };
+    await expect(
+      initializeLocalCrypto(invalid, { mode: 'create', password, recoveryKey }, dependencies),
+    ).rejects.toMatchObject({ code: 'CONTEXT' });
+    await expect(readExistingBootstrapAttempt(invalid, dependencies)).rejects.toMatchObject({
+      code: 'CONTEXT',
+    });
+    expect(() => createExistingBootstrapMetadataCapability(invalid, dependencies)).toThrow(
+      'CONTEXT',
+    );
+    expect(dependencies.openFreshStore).not.toHaveBeenCalled();
+    expect(dependencies.openExistingStore).not.toHaveBeenCalled();
+  });
+
+  it('counts real vault opens and SQLCipher journal I/O through activation, replay and cold receipt', async () => {
+    const argon2 = { derive: vi.fn(fixture.argon2.derive) };
+    const warm = { opens: 0, closes: 0, reads: 0, writes: 0 };
+    const cold = { opens: 0, closes: 0, reads: 0, writes: 0 };
+    function instrument(store: Store, counts: typeof warm) {
+      counts.opens++;
+      const read = store.getMetadata.bind(store);
+      vi.spyOn(store, 'getMetadata').mockImplementation(async (name) => {
+        if (name === initialBootstrapOperationMetadataKey) counts.reads++;
+        return read(name);
+      });
+      const write = store.compareAndSetMetadata.bind(store);
+      vi.spyOn(store, 'compareAndSetMetadata').mockImplementation(async (name, previous, next) => {
+        if (name === initialBootstrapOperationMetadataKey) counts.writes++;
+        return write(name, previous, next);
+      });
+      const closeStore = store.close.bind(store);
+      vi.spyOn(store, 'close').mockImplementation(async () => {
+        counts.closes++;
+        await closeStore();
+      });
+      return store;
+    }
+    const ready = await initializeLocalCrypto(
+      bootstrapContext,
+      { mode: 'create', password, recoveryKey },
+      {
+        ...fixture,
+        argon2,
+        async openFreshStore() {
+          return instrument(await fixture.openFreshStore(), warm);
+        },
+      },
+    );
+    close.push(ready.close);
+    expect(warm).toEqual({ opens: 1, closes: 0, reads: 0, writes: 0 });
+    const recoveryProof = await ready.bootstrap.verifyRecoveryKey({
+      account: context.account,
+      vaultId: context.vaultId,
+      publicationBytes: ready.publication,
+      recoveryKey,
+    });
+    expect(recoveryProof.method).toBe('account-vault-v1-recovery-open');
+    expect(argon2.derive).toHaveBeenCalledTimes(2);
+    await expect(
+      ready.bootstrap.verifyActivationPassword({
+        account: 'another-account',
+        vaultId: context.vaultId,
+        publicationBytes: ready.publication,
+        password,
+      }),
+    ).rejects.toMatchObject({ code: 'ACCESS' });
+    const divergentPublication = Uint8Array.from(ready.publication);
+    divergentPublication[0] = (divergentPublication[0] ?? 0) ^ 1;
+    await expect(
+      ready.bootstrap.verifyActivationPassword({
+        account: context.account,
+        vaultId: context.vaultId,
+        publicationBytes: divergentPublication,
+        password,
+      }),
+    ).rejects.toMatchObject({ code: 'ACCESS' });
+    expect(argon2.derive).toHaveBeenCalledTimes(2);
+
+    const sent: unknown[] = [];
+    await expect(
+      ready.bootstrap.verifyActivationPassword({
+        account: context.account,
+        vaultId: context.vaultId,
+        publicationBytes: ready.publication,
+        password: 'synthetic incompatible password',
+      }),
+    ).rejects.toMatchObject({ code: 'ACCESS' });
+    expect(argon2.derive).toHaveBeenCalledTimes(3);
+    const { workflow, setDeviceState } = await bootstrapFixture(bootstrapContext, async (input) => {
+      sent.push(input.body);
+      const body = input.body as { password?: string };
+      if (!input.path.endsWith('/receipt')) {
+        expect(body.password).toBe(password);
+        throw new ApplicationHttpError('timeout');
+      }
+      expect(body).not.toHaveProperty('password');
+      expect(cold.closes).toBe(cold.opens);
+      return committedReceipt(input.body);
+    });
+    const input = {
+      context: bootstrapContext,
+      local: ready.bootstrap,
+      recoveryKey,
+    };
+    await setDeviceState('authorized');
+    await expect(workflow.activate({ ...input, password })).rejects.toMatchObject({
+      code: 'INVALID_STATE',
+    });
+    expect(warm).toEqual({ opens: 1, closes: 0, reads: 0, writes: 0 });
+    expect(argon2.derive).toHaveBeenCalledTimes(3);
+    expect(sent).toHaveLength(0);
+    await setDeviceState('pending');
+    await expect(
+      workflow.activate({ ...input, password: 'synthetic incompatible password' }),
+    ).rejects.toMatchObject({ code: 'ACCESS' });
+    expect(sent).toHaveLength(0);
+    expect(await ready.bootstrap.bootstrapOperationMetadata.read()).toBeNull();
+    expect(argon2.derive).toHaveBeenCalledTimes(4);
+
+    const beforeActivation = { ...warm };
+    await expect(workflow.activate({ ...input, password })).resolves.toEqual({
+      status: 'emission-uncertain',
+    });
+    expect(sent).toHaveLength(1);
+    expect(argon2.derive).toHaveBeenCalledTimes(5);
+    expect(warm).toEqual({ opens: 1, closes: 0, reads: beforeActivation.reads + 3, writes: 2 });
+
+    // The activation may have succeeded although the response was lost.
+    await setDeviceState('authorized');
+    await expect(workflow.replayActivation({ ...input, password })).resolves.toEqual({
+      status: 'emission-uncertain',
+    });
+    expect(sent).toHaveLength(2);
+    expect(argon2.derive).toHaveBeenCalledTimes(6);
+    expect(warm).toEqual({ opens: 1, closes: 0, reads: beforeActivation.reads + 5, writes: 2 });
+    await ready.close();
+    expect(warm.closes).toBe(1);
+
+    const metadata = createExistingBootstrapMetadataCapability(bootstrapContext, {
+      async openExistingStore() {
+        return instrument(await fixture.openExistingStore(), cold);
+      },
+    });
+    const coldInput = {
+      context: bootstrapContext,
+      local: metadata,
+    };
+    await expect(workflow.recoverReceipt(coldInput)).resolves.toEqual({
+      status: 'committed',
+      source: 'server',
+    });
+    expect(cold).toEqual({ opens: 2, closes: 2, reads: 2, writes: 1 });
+    expect(sent).toHaveLength(3);
+    const original = sent[0] as { password: string; request: unknown; candidateDigest: string };
+    expect(sent[1]).toEqual(original);
+    expect(sent[2]).toEqual({
+      request: original.request,
+      candidateDigest: original.candidateDigest,
+    });
+    await expect(workflow.recoverReceipt(coldInput)).resolves.toEqual({
+      status: 'committed',
+      source: 'local-journal',
+    });
+    expect(cold).toEqual({ opens: 3, closes: 3, reads: 3, writes: 1 });
+    expect(sent).toHaveLength(3);
+    expect(argon2.derive).toHaveBeenCalledTimes(6);
+  }, 15000);
+
+  it('does not confirm a cold receipt if the persisted publication changes before CAS', async () => {
+    const derive = vi.fn(fixture.argon2.derive);
+    const ready = await initializeLocalCrypto(
+      bootstrapContext,
+      { mode: 'create', password, recoveryKey },
+      { ...fixture, argon2: { derive } },
+    );
+    close.push(ready.close);
+    let modifiedManifest: string | undefined;
+    const requestWithStatus = vi.fn<BootstrapHttpClient['requestWithStatus']>(async (input) => {
+      if (!input.path.endsWith('/receipt')) throw new ApplicationHttpError('timeout');
+      // This disposable fixture replaces only the publication after the cold reader closed.
+      const store = await fixture.openExistingStore();
+      try {
+        const manifest = await store.getMetadata(key);
+        const publication = fields(manifest).publication!;
+        const changed = `${publication.slice(0, -2)} ${publication.slice(-2)}`;
+        modifiedManifest = JSON.stringify({ ...JSON.parse(manifest!), publication: changed });
+        await store.setMetadata(key, modifiedManifest);
+      } finally {
+        await store.close();
+      }
+      return committedReceipt(input.body);
+    });
+    const { workflow } = await bootstrapFixture(bootstrapContext, requestWithStatus);
+    await expect(
+      workflow.activate({
+        context: bootstrapContext,
+        local: ready.bootstrap,
+        password,
+        recoveryKey,
+      }),
+    ).resolves.toEqual({ status: 'emission-uncertain' });
+    const originalJournal = await ready.bootstrap.bootstrapOperationMetadata.read();
+    expect(originalJournal).toContain('emission-uncertain');
+    await ready.close();
+
+    const differentSession = {
+      ...bootstrapContext,
+      sessionId: '41b90184-edc8-4e1c-8a03-85fe49576149',
+    };
+    const other = await bootstrapFixture(differentSession, requestWithStatus);
+    const originalStore = createExistingBootstrapMetadataCapability(bootstrapContext, fixture);
+    await expect(
+      other.workflow.recoverReceipt({ context: differentSession, local: originalStore }),
+    ).rejects.toMatchObject({ code: 'STATE' });
+    expect(requestWithStatus).toHaveBeenCalledOnce();
+
+    const compareAndSet = vi.fn();
+    const openExistingStore = vi.fn(async () => {
+      const store = await fixture.openExistingStore();
+      const compare = store.compareAndSetMetadata.bind(store);
+      vi.spyOn(store, 'compareAndSetMetadata').mockImplementation(async (...args) => {
+        compareAndSet(...args);
+        return compare(...args);
+      });
+      return store;
+    });
+    const local = createExistingBootstrapMetadataCapability(bootstrapContext, {
+      openExistingStore,
+    });
+    await expect(workflow.recoverReceipt({ context: bootstrapContext, local })).resolves.toEqual({
+      status: 'emission-uncertain',
+    });
+    expect(openExistingStore).toHaveBeenCalledTimes(2);
+    expect(compareAndSet).not.toHaveBeenCalled();
+    expect(derive).toHaveBeenCalledTimes(3);
+    expect(requestWithStatus).toHaveBeenCalledTimes(2);
+    const sent = requestWithStatus.mock.calls.map(([request]) => request.body);
+    expect(sent[0]).toMatchObject(sent[1] as object);
+    expect((await inspect()).raw === modifiedManifest).toBe(true);
+    expect(await local.read()).toBe(originalJournal);
+  });
+
   it.each(['reservation', 'identity', 'ready'] as const)(
     'reopens after SIGKILL immediately after %s and performs only the missing writes',
     async (phase) => {
@@ -308,6 +765,46 @@ describe('local cryptographic initialization with SQLCipher', () => {
     const ready = await create();
     close.push(ready.close);
     expect(ready.status).toBe('ready');
+  });
+
+  it('verifies the exact recovery envelope against the locally imported identity without another KDF', async () => {
+    const derive = vi.fn(fixture.argon2.derive);
+    const ready = await create({ ...fixture, argon2: { derive } });
+    close.push(ready.close);
+    const countAfterCreation = derive.mock.calls.length;
+    const proof = await ready.bootstrap.verifyRecoveryKey({
+      account: context.account,
+      vaultId: context.vaultId,
+      publicationBytes: Uint8Array.from(ready.publication),
+      recoveryKey,
+    });
+    expect(proof).toEqual({
+      method: 'account-vault-v1-recovery-open',
+      account: context.account,
+      vaultId: context.vaultId,
+      publicationDigest: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
+      recoveryRevision: 1,
+    });
+    expect(derive).toHaveBeenCalledTimes(countAfterCreation);
+    await expect(
+      ready.bootstrap.verifyRecoveryKey({
+        account: context.account,
+        vaultId: context.vaultId,
+        publicationBytes: Uint8Array.from(ready.publication),
+        recoveryKey: new Uint8Array(32).fill(9),
+      }),
+    ).rejects.toThrow();
+    const changed = Uint8Array.from(ready.publication);
+    changed[0] = changed[0]! ^ 1;
+    await expect(
+      ready.bootstrap.verifyRecoveryKey({
+        account: context.account,
+        vaultId: context.vaultId,
+        publicationBytes: changed,
+        recoveryKey,
+      }),
+    ).rejects.toThrow();
+    expect(derive).toHaveBeenCalledTimes(countAfterCreation);
   });
 
   it('rejects a present identity and registration-only state without modifying either', async () => {
@@ -474,10 +971,15 @@ describe('local cryptographic initialization with SQLCipher', () => {
     await initial.close();
     const rawStore = await fixture.openExistingStore();
     await rawStore.setLocalRegistrationId(57, 'pni');
-    const protectedKeys = [key, 'registrationId:aci', 'registrationId:pni'];
+    const protectedKeys = [
+      key,
+      initialBootstrapOperationMetadataKey,
+      'registrationId:aci',
+      'registrationId:pni',
+    ];
     const rawBefore = await Promise.all(protectedKeys.map((name) => rawStore.getMetadata(name)));
     const identityBefore = await readLocalIdentity(rawStore);
-    expect(rawBefore[1] === String(identityBefore.registrationId) && rawBefore[2] === '57').toBe(
+    expect(rawBefore[2] === String(identityBefore.registrationId) && rawBefore[3] === '57').toBe(
       true,
     );
     await rawStore.close();
@@ -651,6 +1153,7 @@ describe('local cryptographic initialization with SQLCipher', () => {
       adapters: { storage: peerStore },
       protocol: { contentRecovery: { mode: 'off' } },
     });
+
     close.push(() => peer.stop());
     await client.establishSession(peer.address(), {
       registrationId: otherIdentity.registrationId,
@@ -680,4 +1183,229 @@ describe('local cryptographic initialization with SQLCipher', () => {
     await ready.close();
     expect(fields((await inspect()).raw).status).toBe('ready');
   }, 15000);
+
+  it('limits bootstrap journal access to the dedicated capability and reopens the exact local publication', async () => {
+    const ready = await create();
+    close.push(ready.close);
+    const operation = JSON.stringify({
+      version: 1,
+      account: context.account,
+      device: context.device,
+      vaultId: context.vaultId,
+      state: 'prepared',
+    });
+    expect(
+      await ready.bootstrap.bootstrapOperationMetadata.compareAndSet(
+        null,
+        operation,
+        ready.bootstrap.publicationDigest,
+      ),
+    ).toEqual({
+      acquired: true,
+      observed: operation,
+    });
+    expect(await ready.bootstrap.bootstrapOperationMetadata.read()).toBe(operation);
+    await expect(ready.storage.getMetadata(initialBootstrapOperationMetadataKey)).rejects.toThrow();
+    await expect(
+      ready.storage.setMetadata(initialBootstrapOperationMetadataKey, 'ordinary-write'),
+    ).rejects.toThrow();
+    const publication = Uint8Array.from(ready.publication);
+    await ready.close();
+
+    const reopened = await readExistingBootstrapAttempt(context, fixture);
+    expect(reopened.operationMetadata).toBe(operation);
+    expect(reopened.publicationBytes).toEqual(publication);
+
+    const nextOperation = JSON.stringify({
+      version: 1,
+      account: context.account,
+      device: context.device,
+      vaultId: context.vaultId,
+      state: 'emission-uncertain',
+    });
+    const afterLostResponse = createExistingBootstrapMetadataCapability(context, {
+      async openExistingStore() {
+        const store = await fixture.openExistingStore();
+        const compare = store.compareAndSetMetadata.bind(store);
+        vi.spyOn(store, 'compareAndSetMetadata').mockImplementation(
+          async (name, previous, next) => {
+            await compare(name, previous, next);
+            throw new Error('fixture lost CAS response');
+          },
+        );
+        return store;
+      },
+    });
+    expect(
+      await afterLostResponse.compareAndSet(
+        operation,
+        nextOperation,
+        ready.bootstrap.publicationDigest,
+      ),
+    ).toEqual({
+      acquired: undefined,
+      observed: nextOperation,
+    });
+    expect(await afterLostResponse.read()).toBe(nextOperation);
+  });
+  it('refuses an already owned store without closing it or releasing the legitimate owner', async () => {
+    let owned!: Store;
+    const ready = await create({
+      ...fixture,
+      async openFreshStore() {
+        owned = await fixture.openFreshStore();
+        vi.spyOn(owned, 'close');
+        return owned;
+      },
+    });
+    close.push(ready.close);
+    const duplicate = {
+      ...fixture,
+      async openExistingStore() {
+        return owned;
+      },
+    };
+    const metadata = createExistingBootstrapMetadataCapability(context, duplicate);
+    await expect(readExistingBootstrapAttempt(context, duplicate)).rejects.toMatchObject({
+      code: 'UNAVAILABLE',
+    });
+    await expect(metadata.read()).rejects.toMatchObject({ code: 'UNAVAILABLE' });
+    await expect(
+      metadata.compareAndSet(null, 'unexpected', ready.bootstrap.publicationDigest),
+    ).rejects.toMatchObject({
+      code: 'UNAVAILABLE',
+    });
+    expect(owned.close).not.toHaveBeenCalled();
+    expect(
+      await ready.bootstrap.bootstrapOperationMetadata.compareAndSet(
+        null,
+        'owned-journal',
+        ready.bootstrap.publicationDigest,
+      ),
+    ).toEqual({
+      acquired: true,
+      observed: 'owned-journal',
+    });
+    await expect(metadata.readAttempt()).rejects.toMatchObject({ code: 'UNAVAILABLE' });
+    expect(await ready.bootstrap.bootstrapOperationMetadata.read()).toBe('owned-journal');
+    expect(owned.close).not.toHaveBeenCalled();
+    await ready.close();
+    expect(owned.close).toHaveBeenCalledOnce();
+  });
+
+  it('keeps uncertain ownership after a cold close fails', async () => {
+    const ready = await create();
+    close.push(ready.close);
+    await ready.close();
+    const store = await fixture.openExistingStore();
+    const originalClose = store.close.bind(store);
+    close.push(originalClose);
+    const failedClose = vi
+      .spyOn(store, 'close')
+      .mockRejectedValue(new Error('fixture close failure'));
+    const dependencies = {
+      ...fixture,
+      async openExistingStore() {
+        return store;
+      },
+    };
+    await expect(readExistingBootstrapAttempt(context, dependencies)).rejects.toMatchObject({
+      code: 'UNAVAILABLE',
+    });
+    expect(failedClose).toHaveBeenCalledOnce();
+    const metadata = createExistingBootstrapMetadataCapability(context, dependencies);
+    await expect(metadata.read()).rejects.toMatchObject({ code: 'UNAVAILABLE' });
+    expect(failedClose).toHaveBeenCalledOnce();
+  });
+
+  it('waits for a real password open during close and withholds the verification proof', async () => {
+    const derive = vi.fn(fixture.argon2.derive);
+    let owned!: Store;
+    const ready = await create({
+      ...fixture,
+      argon2: { derive },
+      async openFreshStore() {
+        owned = await fixture.openFreshStore();
+        vi.spyOn(owned, 'close');
+        return owned;
+      },
+    });
+    close.push(ready.close);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    derive.mockImplementationOnce(async (...args) => {
+      await gate;
+      return fixture.argon2.derive(...args);
+    });
+    const proof = ready.bootstrap.verifyActivationPassword({
+      ...context,
+      publicationBytes: ready.publication,
+      password,
+    });
+    const refused = expect(proof).rejects.toMatchObject({ code: 'UNAVAILABLE' });
+    try {
+      await vi.waitFor(() => expect(derive).toHaveBeenCalledTimes(3));
+      const closing = ready.close();
+      await expect(ready.bootstrap.bootstrapOperationMetadata.read()).rejects.toMatchObject({
+        code: 'UNAVAILABLE',
+      });
+      expect(owned.close).not.toHaveBeenCalled();
+      release();
+      await refused;
+      await closing;
+      expect(owned.close).toHaveBeenCalledOnce();
+    } finally {
+      release();
+    }
+  });
+
+  it('waits for journal CAS during close and recovers the durable value only by reopening', async () => {
+    let owned!: Store;
+    const ready = await create({
+      ...fixture,
+      async openFreshStore() {
+        owned = await fixture.openFreshStore();
+        vi.spyOn(owned, 'close');
+        return owned;
+      },
+    });
+    close.push(ready.close);
+    const compare = owned.compareAndSetMetadata.bind(owned);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let written = false;
+    vi.spyOn(owned, 'compareAndSetMetadata').mockImplementation(async (...args) => {
+      const acquired = await compare(...args);
+      written = true;
+      await gate;
+      return acquired;
+    });
+    const writing = ready.bootstrap.bootstrapOperationMetadata.compareAndSet(
+      null,
+      'journal-before-close',
+      ready.bootstrap.publicationDigest,
+    );
+    const refused = expect(writing).rejects.toMatchObject({ code: 'UNAVAILABLE' });
+    try {
+      await vi.waitFor(() => expect(written).toBe(true));
+      const closing = ready.close();
+      expect(owned.close).not.toHaveBeenCalled();
+      release();
+      await refused;
+      await closing;
+      expect(owned.close).toHaveBeenCalledOnce();
+    } finally {
+      release();
+    }
+    const reopened = await readExistingBootstrapAttempt(context, fixture);
+    expect(reopened).toEqual({
+      publicationBytes: ready.publication,
+      operationMetadata: 'journal-before-close',
+    });
+    expect(Object.keys(reopened).sort()).toEqual(['operationMetadata', 'publicationBytes']);
+  });
 });

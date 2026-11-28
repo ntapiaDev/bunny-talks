@@ -24,6 +24,11 @@ type HttpTransportResult =
     }
   | { ok: false; kind: HttpTransportFailure };
 
+export interface ApplicationHttpResponse {
+  readonly status: number;
+  readonly body: unknown;
+}
+
 /**
  * The adapter must use HTTPS with platform TLS and hostname verification, refuse redirects
  * before following them, omit ambient credentials (including cookie storage and authentication
@@ -57,7 +62,7 @@ function readResponse(
   result: HttpTransportResult,
   expectedStatuses: readonly number[],
   maxResponseBytes: number,
-): unknown {
+): ApplicationHttpResponse {
   if (!result || typeof result !== 'object') throw new ApplicationHttpError('response');
   if (result.ok === false) {
     const { kind } = result;
@@ -82,7 +87,7 @@ function readResponse(
   if (!expectedStatuses.includes(status)) throw new ApplicationHttpError('status', status);
   if (status === 204) {
     if (body.byteLength !== 0) throw new ApplicationHttpError('response');
-    return undefined;
+    return { status, body: undefined };
   }
   if (
     typeof contentType !== 'string' ||
@@ -90,7 +95,10 @@ function readResponse(
   )
     throw new ApplicationHttpError('response');
   try {
-    return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(body)) as unknown;
+    return {
+      status,
+      body: JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(body)) as unknown,
+    };
   } catch {
     throw new ApplicationHttpError('response');
   }
@@ -133,98 +141,104 @@ export function createApplicationHttpClient(config: {
   const base = origin.origin;
   const { timeoutMs, maxResponseBytes, transport } = config;
 
-  return {
-    async request(options: {
-      path: string;
-      method: HttpMethod;
-      body?: unknown;
-      bearerToken?: string;
-      expectedStatuses: readonly number[];
-      signal?: AbortSignal;
-    }): Promise<unknown> {
-      const deadline = performance.now() + timeoutMs;
-      if (!options || typeof options !== 'object') throw new ApplicationHttpError('request');
-      const { path, method, body: input, expectedStatuses, signal } = options;
-      const bearerToken = Object.hasOwn(options, 'bearerToken') ? options.bearerToken : undefined;
-      if (
-        typeof path !== 'string' ||
-        !/^\/v1\/[a-z0-9-]+(?:\/[a-z0-9-]+)*$/.test(path) ||
-        !['GET', 'POST', 'DELETE'].includes(method) ||
-        (method !== 'POST' && input !== undefined) ||
-        !Array.isArray(expectedStatuses) ||
-        (bearerToken !== undefined &&
-          (typeof bearerToken !== 'string' || !/^[A-Za-z0-9._~-]{1,512}$/.test(bearerToken))) ||
-        (signal !== undefined &&
-          (typeof signal?.aborted !== 'boolean' ||
-            typeof signal.addEventListener !== 'function' ||
-            typeof signal.removeEventListener !== 'function'))
-      )
-        throw new ApplicationHttpError('request');
-      const statuses = [...expectedStatuses];
-      if (
-        statuses.length === 0 ||
-        statuses.some((status) => !Number.isInteger(status) || status < 200 || status > 299)
-      )
-        throw new ApplicationHttpError('request');
-      if (signal?.aborted) throw new ApplicationHttpError('cancelled');
+  const execute = async (options: {
+    path: string;
+    method: HttpMethod;
+    body?: unknown;
+    bearerToken?: string;
+    expectedStatuses: readonly number[];
+    signal?: AbortSignal;
+  }): Promise<ApplicationHttpResponse> => {
+    const deadline = performance.now() + timeoutMs;
+    if (!options || typeof options !== 'object') throw new ApplicationHttpError('request');
+    const { path, method, body: input, expectedStatuses, signal } = options;
+    const bearerToken = Object.hasOwn(options, 'bearerToken') ? options.bearerToken : undefined;
+    if (
+      typeof path !== 'string' ||
+      !/^\/v1\/[a-z0-9-]+(?:\/[a-z0-9-]+)*$/.test(path) ||
+      !['GET', 'POST', 'DELETE'].includes(method) ||
+      (method !== 'POST' && input !== undefined) ||
+      !Array.isArray(expectedStatuses) ||
+      (bearerToken !== undefined &&
+        (typeof bearerToken !== 'string' || !/^[A-Za-z0-9._~-]{1,512}$/.test(bearerToken))) ||
+      (signal !== undefined &&
+        (typeof signal?.aborted !== 'boolean' ||
+          typeof signal.addEventListener !== 'function' ||
+          typeof signal.removeEventListener !== 'function'))
+    )
+      throw new ApplicationHttpError('request');
+    const statuses = [...expectedStatuses];
+    if (
+      statuses.length === 0 ||
+      statuses.some((status) => !Number.isInteger(status) || status < 200 || status > 299)
+    )
+      throw new ApplicationHttpError('request');
+    if (signal?.aborted) throw new ApplicationHttpError('cancelled');
 
-      const headers: Record<string, string> = { Accept: 'application/json' };
-      let body: string | undefined;
-      if (input !== undefined) {
-        try {
-          body = JSON.stringify(input);
-          if (body === undefined) throw new Error();
-        } catch {
-          throw new ApplicationHttpError('request');
-        }
-        headers['Content-Type'] = 'application/json';
-      }
-      if (bearerToken !== undefined) headers.Authorization = `Bearer ${bearerToken}`;
-      if (signal?.aborted) throw new ApplicationHttpError('cancelled');
-      const remainingMs = deadline - performance.now();
-      if (remainingMs <= 0) throw new ApplicationHttpError('timeout');
-
-      const controller = new AbortController();
-      const send = async (): Promise<HttpTransportResult> => {
-        try {
-          return await transport({
-            url: base + path,
-            method,
-            headers,
-            ...(body === undefined ? {} : { body }),
-            maxResponseBytes,
-            timeoutMs: Math.ceil(remainingMs),
-            signal: controller.signal,
-            redirect: 'error',
-            credentials: 'omit',
-            retry: 'never',
-          });
-        } catch {
-          return { ok: false, kind: 'network' };
-        }
-      };
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      let cancel: (() => void) | undefined;
-      const interrupted = new Promise<never>((_, reject) => {
-        const interrupt = (kind: 'timeout' | 'cancelled') => {
-          reject(new ApplicationHttpError(kind));
-          controller.abort();
-        };
-        cancel = () => interrupt('cancelled');
-        signal?.addEventListener('abort', cancel, { once: true });
-        timer = setTimeout(() => interrupt('timeout'), Math.ceil(remainingMs));
-      });
+    const headers: Record<string, string> = { Accept: 'application/json' };
+    let body: string | undefined;
+    if (input !== undefined) {
       try {
-        const result = await Promise.race([interrupted, send()]);
-        if (performance.now() >= deadline) throw new ApplicationHttpError('timeout');
-        const value = readResponse(result, statuses, maxResponseBytes);
-        if (performance.now() >= deadline) throw new ApplicationHttpError('timeout');
-        return value;
-      } finally {
-        clearTimeout(timer);
-        if (cancel) signal?.removeEventListener('abort', cancel);
-        controller.abort();
+        body = JSON.stringify(input);
+        if (body === undefined) throw new Error();
+      } catch {
+        throw new ApplicationHttpError('request');
       }
+      headers['Content-Type'] = 'application/json';
+    }
+    if (bearerToken !== undefined) headers.Authorization = `Bearer ${bearerToken}`;
+    if (signal?.aborted) throw new ApplicationHttpError('cancelled');
+    const remainingMs = deadline - performance.now();
+    if (remainingMs <= 0) throw new ApplicationHttpError('timeout');
+
+    const controller = new AbortController();
+    const send = async (): Promise<HttpTransportResult> => {
+      try {
+        return await transport({
+          url: base + path,
+          method,
+          headers,
+          ...(body === undefined ? {} : { body }),
+          maxResponseBytes,
+          timeoutMs: Math.ceil(remainingMs),
+          signal: controller.signal,
+          redirect: 'error',
+          credentials: 'omit',
+          retry: 'never',
+        });
+      } catch {
+        return { ok: false, kind: 'network' };
+      }
+    };
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let cancel: (() => void) | undefined;
+    const interrupted = new Promise<never>((_, reject) => {
+      const interrupt = (kind: 'timeout' | 'cancelled') => {
+        reject(new ApplicationHttpError(kind));
+        controller.abort();
+      };
+      cancel = () => interrupt('cancelled');
+      signal?.addEventListener('abort', cancel, { once: true });
+      timer = setTimeout(() => interrupt('timeout'), Math.ceil(remainingMs));
+    });
+    try {
+      const result = await Promise.race([interrupted, send()]);
+      if (performance.now() >= deadline) throw new ApplicationHttpError('timeout');
+      const response = readResponse(result, statuses, maxResponseBytes);
+      if (performance.now() >= deadline) throw new ApplicationHttpError('timeout');
+      return response;
+    } finally {
+      clearTimeout(timer);
+      if (cancel) signal?.removeEventListener('abort', cancel);
+      controller.abort();
+    }
+  };
+  return {
+    async request(options: Parameters<typeof execute>[0]): Promise<unknown> {
+      return (await execute(options)).body;
+    },
+    requestWithStatus(options: Parameters<typeof execute>[0]): Promise<ApplicationHttpResponse> {
+      return execute(options);
     },
   };
 }

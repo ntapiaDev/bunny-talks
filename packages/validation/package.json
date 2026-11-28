@@ -15,6 +15,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@bunny-talks/contracts": "workspace:*",
     "zod": "4.6.7"
   }
 }

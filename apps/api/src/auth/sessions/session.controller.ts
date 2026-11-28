@@ -1,15 +1,15 @@
 import { Controller, Delete, Get, HttpCode, Inject, Req } from '@nestjs/common';
 import type { Request } from 'express';
+import type { SessionDto } from '@bunny-talks/contracts';
 import { authenticatedSession } from './session.guard.js';
-import type { SessionDto } from './session-http.service.js';
-import { sessionDto, SessionHttpService } from './session-http.service.js';
+import { SessionHttpService } from './session-http.service.js';
 
 @Controller('v1/session')
 export class SessionController {
   public constructor(@Inject(SessionHttpService) private readonly sessions: SessionHttpService) {}
   @Get()
-  public read(@Req() request: Request): SessionDto {
-    return sessionDto(authenticatedSession(request).session);
+  public read(@Req() request: Request): Promise<SessionDto> {
+    return this.sessions.read(authenticatedSession(request).token);
   }
   @Delete()
   @HttpCode(204)

@@ -1,6 +1,8 @@
 # Initialisation cryptographique locale — qualification Android 3B
 
-**Verdict : prêt pour revue** dans le périmètre testé. La campagne finale sur l’APK corrigé passe pour les capacités Expo ajoutées en 3A : ouverture, garde SQLite, provisionnement SecureStore, transfert de garde, reprise native et préservation sur les refus sacrificiels testés. Elle réutilise les preuves Node et Android B1 pour le coffre et le protocole, avec un seul contrôle d’intégration nominal.
+**Verdict : accepté par revue indépendante** dans le périmètre testé, sur la révision `8ed8a3717bbef759db94f60bb4361a0087382bbd`. L’acceptation couvre la conception et la qualification Node, la protection des métadonnées réservées, l’adaptateur Expo et sa déclaration directe FileSystem, la qualification différentielle Android Release, les 45 tests ciblés finaux, trois reprises après arrêt forcé, six refus sacrificiels et l’empreinte de l’APK final. La campagne passe pour les capacités Expo ajoutées en 3A : ouverture, garde SQLite, provisionnement SecureStore, transfert de garde, reprise native et préservation sur les refus sacrificiels testés. Elle réutilise les preuves Node et Android B1 pour le coffre et le protocole, avec un seul contrôle d’intégration nominal.
+
+Le scénario nominal confirme la persistance et la réouverture de la session locale. Il ne compare pas exhaustivement l’état de ratchet. Cette acceptation reste expérimentale et limitée aux preuves décrites ici ; elle ne valide pas une aptitude à la production.
 
 ## Périmètre et environnement
 

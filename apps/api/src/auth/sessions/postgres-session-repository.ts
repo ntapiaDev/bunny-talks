@@ -29,6 +29,10 @@ export interface SessionState {
   readonly lastSeenAt: Date;
   readonly deviceState: 'pending' | 'authorized';
 }
+export interface SessionCredentialSnapshot {
+  readonly session: SessionState;
+  readonly credentialRevision: string;
+}
 function state(row: Session, authorizedAt: Date | null): SessionState {
   return {
     id: row.id,
@@ -221,6 +225,20 @@ export class PostgresSessionRepository {
   }
   public async read(token: unknown): Promise<SessionState> {
     return this.authenticated(token, async (_tx, row, authorizedAt) => state(row, authorizedAt));
+  }
+  /** Reads the current credential revision only for this authenticated account. */
+  public async readWithCredentialRevision(token: unknown): Promise<SessionCredentialSnapshot> {
+    return this.authenticated(token, async (tx, row, authorizedAt) => {
+      const credential = await tx.passwordCredential.findUnique({
+        where: { accountId: row.accountId },
+        select: { revision: true },
+      });
+      if (!credential) throw new SessionError('UNAVAILABLE');
+      return {
+        session: state(row, authorizedAt),
+        credentialRevision: credential.revision.toString(),
+      };
+    });
   }
   public async listActive(token: unknown): Promise<SessionState[]> {
     return this.authenticated(token, async (tx, caller, _authorizedAt, now) => {

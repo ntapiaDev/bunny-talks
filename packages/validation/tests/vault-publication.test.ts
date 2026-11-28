@@ -4,6 +4,7 @@ import {
   initialVaultPublicationSchema,
   ordinaryPasswordChangeSchema,
   publicationDigestSchema,
+  vaultOperationErrorCodeSchema,
   vaultOperationResultSchema,
   vaultReadStateSchema,
 } from '../src/index.js';
@@ -109,14 +110,17 @@ it('validates read states and each public operation result without exposing inte
     vaultOperationResultSchema.safeParse({ transportVersion: 1, status: 'unknown' }).success,
   ).toBe(true);
   expect(vaultOperationResultSchema.safeParse(committed).success).toBe(true);
-  expect(
-    vaultOperationResultSchema.safeParse({
-      transportVersion: 1,
-      status: 'rejected',
-      identity,
-      code: 'VERSION_CONFLICT',
-    }).success,
-  ).toBe(true);
+  for (const code of vaultOperationErrorCodeSchema.options) {
+    expect(
+      vaultOperationResultSchema.safeParse({
+        transportVersion: 1,
+        status: 'rejected',
+        identity,
+        code,
+      }).success,
+    ).toBe(true);
+  }
+  expect(vaultOperationErrorCodeSchema.safeParse('UNKNOWN').success).toBe(false);
   expect(
     vaultOperationResultSchema.safeParse({
       ...committed,

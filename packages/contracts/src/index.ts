@@ -11,3 +11,4 @@ export type {
   VaultReadState,
   VaultTransportVersion,
 } from './vault-publication.js';
+export type { LoginResponse, SessionDto, SessionIdentityDto } from './session.js';

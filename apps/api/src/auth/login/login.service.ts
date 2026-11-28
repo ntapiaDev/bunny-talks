@@ -3,7 +3,7 @@ import { canonicalizeLoginEmail } from '@bunny-talks/validation';
 import { AuthenticationError } from '../authentication-error.js';
 import { PasswordVerifierError } from '../password-verifier.js';
 import type { PostgresSessionRepository } from '../sessions/postgres-session-repository.js';
-import { sessionDto } from '../sessions/session-http.service.js';
+import { sessionIdentityDto } from '../sessions/session-http.service.js';
 import { SessionError } from '../sessions/session-token.js';
 import { VerifiedLogin } from '../verified-login.js';
 import type { LoginConfig } from './login-config.js';
@@ -40,7 +40,7 @@ export class LoginService {
           lease.id,
           config.maximumRecordsPerAccount,
         );
-        return { sessionToken: created.token, session: sessionDto(created.session) };
+        return { sessionToken: created.token, session: sessionIdentityDto(created.session) };
       } finally {
         await lease.release();
       }

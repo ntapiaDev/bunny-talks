@@ -22,7 +22,7 @@ Toutes les routes acceptent **zéro paramètre de requête et zéro corps**, y c
 | `GET /v1/session`    | Bearer opaque vérifié dans PostgreSQL        | `200`, DTO ci-dessous |
 | `DELETE /v1/session` | Même Bearer, revalidé lors de la mutation    | `204`, aucun corps    |
 
-Le DTO contient exactement :
+Le DTO partagé de session contient exactement :
 
 ```json
 {
@@ -30,9 +30,12 @@ Le DTO contient exactement :
   "sessionId": "uuid-de-la-session",
   "deviceId": "uuid-de-l-appareil",
   "deviceState": "pending",
-  "expiresAt": "2026-12-16T12:00:00.000Z"
+  "expiresAt": "2026-12-16T12:00:00.000Z",
+  "credentialRevision": "9007199254740993"
 }
 ```
+
+`credentialRevision` est la révision PostgreSQL du credential du compte déduit du Bearer authentifié. Elle est sérialisée directement depuis `BigInt` en chaîne décimale canonique, sans perte de précision ni valeur par défaut. Le contrôleur la lit uniquement pour `GET /v1/session`, après validation, et la revalidation/relecture protégée par le verrou de compte. Aucun identifiant de compte client ne participe à cette sélection. Une session invalide, expirée ou révoquée reçoit toujours le `401` générique ; aucun motif interne n’est ajouté. La réponse de login demeure inchangée et expose déjà les identifiants de session et appareil.
 
 `deviceState` vaut `pending` ou `authorized`. Cette dernière valeur est un état serveur informatif, **pas une preuve de possession de l’identité E2EE**. Une session `pending` peut consulter son état et se révoquer, sans accès au coffre. `GET` et le passage du guard pour `DELETE` appellent `validate` : mise à jour de `lastSeenAt`, jamais de l’expiration absolue. La politique 4.3B reste 30 jours absolus et 7 jours d’inactivité, persistés par session. Un échec HTTP après validation peut donc avoir actualisé l’activité, sans avoir réussi la révocation.
 
